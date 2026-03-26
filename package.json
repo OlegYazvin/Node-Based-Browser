@@ -1,0 +1,43 @@
+{
+  "name": "research-graph-browser",
+  "productName": "Nodely Browser",
+  "version": "0.1.0",
+  "description": "A Blink-based browser built for node-first research workflows.",
+  "private": true,
+  "type": "module",
+  "main": ".vite/build/main.js",
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@xyflow/react": "12.10.1",
+    "electron-squirrel-startup": "1.0.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zustand": "5.0.8"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.1",
+    "@electron-forge/maker-deb": "7.11.1",
+    "@electron-forge/maker-rpm": "7.11.1",
+    "@electron-forge/maker-zip": "7.11.1",
+    "@electron-forge/plugin-auto-unpack-natives": "7.11.1",
+    "@electron-forge/plugin-vite": "7.11.1",
+    "@playwright/test": "1.56.1",
+    "@types/node": "24.7.2",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.1.0",
+    "electron": "41.0.4",
+    "playwright": "1.56.1",
+    "typescript": "5.9.3",
+    "vite": "7.1.12",
+    "vitest": "4.1.2"
+  }
+}
