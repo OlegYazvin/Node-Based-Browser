@@ -1,0 +1,15 @@
+diff --git a/js/xpconnect/src/xpcpublic.h b/js/xpconnect/src/xpcpublic.h
+index 60f26a9..67b4d71 100644
+--- a/js/xpconnect/src/xpcpublic.h
++++ b/js/xpconnect/src/xpcpublic.h
+@@ -840,7 +840,8 @@ nsCString GetFunctionName(JSContext* cx, JS::Handle<JSObject*> obj);
+ 
+ // We need an exact page size only if we run the binary in automation.
+-#if (defined(XP_DARWIN) && defined(__aarch64__)) || defined(__loongarch__)
+-const size_t kAutomationPageSize = 16384;
++#if (defined(XP_DARWIN) && defined(__aarch64__)) || \
++    (defined(XP_LINUX) && defined(__aarch64__)) || defined(__loongarch__)
++const size_t kAutomationPageSize = 16384;
+ #else
+ const size_t kAutomationPageSize = 4096;
+ #endif

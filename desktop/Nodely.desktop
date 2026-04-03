@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Nodely
+Comment=Launch Nodely Browser
+TryExec=/home/olegy/Documents/Projects/Node-Based\ Browser/scripts/launch-nodely.sh
+Exec=/home/olegy/Documents/Projects/Node-Based\ Browser/scripts/launch-nodely.sh
+Path=/home/olegy/Documents/Projects/Node-Based Browser
+Icon=/home/olegy/Documents/Projects/Node-Based\ Browser/desktop/nodely-icon.svg
+Terminal=false
+StartupNotify=true
+Categories=Network;WebBrowser;
+Keywords=browser;research;nodely;graph;

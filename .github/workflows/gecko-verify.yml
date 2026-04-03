@@ -1,0 +1,96 @@
+name: Gecko Verify
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/gecko-verify.yml"
+      - "gecko/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tests/gecko/**"
+  pull_request:
+    paths:
+      - ".github/workflows/gecko-verify.yml"
+      - "gecko/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tests/gecko/**"
+  workflow_dispatch:
+
+jobs:
+  gecko-smoke-linux:
+    name: Gecko smoke verify (Linux)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc \
+            g++ \
+            make \
+            nasm \
+            pkg-config \
+            libgtk-3-dev \
+            libdbus-glib-1-dev \
+            libxt-dev \
+            libx11-xcb-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libffi-dev
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Bootstrap Gecko ESR checkout
+        run: npm run gecko:bootstrap -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+
+      - name: Write Gecko mozconfig
+        run: npm run gecko:mozconfig -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+
+      - name: Build Gecko overlay target
+        working-directory: ${{ runner.temp }}/firefox-esr
+        env:
+          MOZCONFIG: mozconfig.nodely
+          NODEJS: node
+        run: python3.12 ./mach build faster
+
+      - name: Refresh artifact-build Nodely branding
+        run: npm run gecko:refresh-branding -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+
+      - name: Run Nodely Gecko smoke verification
+        run: npm run gecko:smoke -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+
+      - name: Package Gecko build
+        working-directory: ${{ runner.temp }}/firefox-esr
+        env:
+          MOZCONFIG: mozconfig.nodely
+          NODEJS: node
+        run: python3.12 ./mach package
+
+      - name: Stage release artifacts
+        run: npm run gecko:stage-release -- --checkout-dir "$RUNNER_TEMP/firefox-esr" --platform linux --arch x64 --channel ci
+
+      - name: Upload staged Gecko artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gecko-release-artifacts-linux
+          path: gecko/release-artifacts
+          if-no-files-found: error

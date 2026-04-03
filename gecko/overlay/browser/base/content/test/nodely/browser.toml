@@ -1,0 +1,6 @@
+[DEFAULT]
+prefs = [
+  "nodely.shell.enabled=false",
+]
+
+["browser_nodely_shell.js"]

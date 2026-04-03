@@ -1,0 +1,1119 @@
+:root[nodely-active="true"] #TabsToolbar,
+:root[nodely-active="true"] #nav-bar,
+:root[nodely-active="true"] #PersonalToolbar,
+:root[nodely-active="true"] #FindToolbar,
+:root[nodely-active="true"] findbar,
+:root[nodely-active="true"] #sidebar-main,
+:root[nodely-active="true"] #sidebar-box,
+:root[nodely-active="true"] #sidebar-splitter,
+:root[nodely-active="true"] #sidebar-launcher-splitter,
+:root[nodely-active="true"] #vertical-tabs {
+  display: none !important;
+}
+
+:root[nodely-active="true"] #browser {
+  position: fixed !important;
+  inset:
+    calc(var(--nodely-topbar-height, 52px) + var(--nodely-composer-height, 0px) + var(--nodely-pagebar-height, 0px))
+    0 0 0 !important;
+  display: grid !important;
+  grid-template-columns: var(--nodely-graph-width, 0px) minmax(0, 1fr) !important;
+  margin: 0 !important;
+}
+
+:root[nodely-active="true"] #tabbrowser-tabbox {
+  grid-column: 2 !important;
+  min-inline-size: 0 !important;
+  margin-inline-start: 0 !important;
+}
+
+:root[nodely-active="true"] #sidebar-main,
+:root[nodely-active="true"] #sidebar-box,
+:root[nodely-active="true"] #sidebar-splitter,
+:root[nodely-active="true"] #sidebar-launcher-splitter,
+:root[nodely-active="true"] #vertical-tabs {
+  visibility: collapse !important;
+  inline-size: 0 !important;
+  min-inline-size: 0 !important;
+  max-inline-size: 0 !important;
+  block-size: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+:root[nodely-active="true"] #tabbrowser-tabpanels,
+:root[nodely-active="true"] #appcontent {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+:root[nodely-view="focus"] #tabbrowser-tabbox,
+:root[nodely-view="focus"] #tabbrowser-tabpanels,
+:root[nodely-view="focus"] #appcontent {
+  margin-inline-start: 0 !important;
+}
+
+:root[nodely-browser-surface="overlay"] #browser,
+:root[nodely-browser-surface="overlay"] #tabbrowser-tabbox,
+:root[nodely-browser-surface="overlay"] #tabbrowser-tabpanels,
+:root[nodely-browser-surface="canvas"] #browser,
+:root[nodely-browser-surface="canvas"] #tabbrowser-tabbox,
+:root[nodely-browser-surface="canvas"] #tabbrowser-tabpanels,
+:root[nodely-browser-surface="overlay"] #appcontent {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+:root[nodely-browser-surface="canvas"] #appcontent {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+:root[nodely-empty-workspace="true"] #browser,
+:root[nodely-empty-workspace="true"] #tabbrowser-tabbox,
+:root[nodely-empty-workspace="true"] #tabbrowser-tabpanels,
+:root[nodely-empty-workspace="true"] #appcontent {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.nodely-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 2147482000;
+  pointer-events: none;
+  display: block;
+  isolation: isolate;
+  font-family:
+    "SF Pro Text",
+    "Segoe UI",
+    "Noto Sans",
+    system-ui,
+    sans-serif;
+  color: #203246;
+}
+
+:root[nodely-empty-workspace="true"] .nodely-shell {
+  background: linear-gradient(180deg, #eff4fa, #e3ebf4);
+}
+
+.nodely-shell__topbar,
+.nodely-shell__composer,
+.nodely-shell__pagebar,
+.nodely-shell__drawer,
+.nodely-shell__graph,
+.nodely-shell__artifact-surface,
+.nodely-shell__prompt-stack {
+  pointer-events: auto;
+}
+
+.nodely-shell [hidden],
+.nodely-graph-surface [hidden] {
+  display: none !important;
+}
+
+.nodely-shell__topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 40;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 16px;
+  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(232, 239, 247, 0.98));
+  border-bottom: 1px solid rgba(102, 124, 149, 0.26);
+  box-shadow: 0 12px 24px rgba(35, 62, 93, 0.08);
+}
+
+.nodely-shell__brand strong {
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.nodely-shell__topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nodely-shell__topbar-primary,
+.nodely-shell__topbar-utilities {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nodely-shell__topbar-utilities {
+  margin-left: 8px;
+}
+
+.nodely-shell__button,
+.nodely-shell__icon-button,
+.nodely-shell__drawer-pill,
+.nodely-shell__primary,
+.nodely-shell__segmented button {
+  appearance: none;
+  border: 1px solid rgba(92, 112, 135, 0.28);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(233, 240, 247, 0.98));
+  color: #203246;
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease, color 120ms ease;
+}
+
+.nodely-shell__button,
+.nodely-shell__primary,
+.nodely-shell__drawer-pill {
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.nodely-shell__button {
+  position: relative;
+}
+
+.nodely-shell__button--utility {
+  padding-inline: 8px;
+}
+
+.nodely-shell__button--surface {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.nodely-shell__button--surface svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nodely-shell__button:hover,
+.nodely-shell__icon-button:hover,
+.nodely-shell__drawer-pill:hover,
+.nodely-shell__primary:hover,
+.nodely-shell__segmented button:hover {
+  border-color: rgba(29, 115, 201, 0.42);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(224, 236, 248, 0.99));
+}
+
+.nodely-shell__button.is-active,
+.nodely-shell__icon-button.is-active,
+.nodely-shell__segmented button.is-active {
+  color: #0b5cad;
+  border-color: rgba(29, 115, 201, 0.48);
+  background: linear-gradient(180deg, rgba(223, 239, 255, 1), rgba(203, 227, 249, 1));
+}
+
+.nodely-shell__icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.nodely-shell__icon-button svg,
+.nodely-shell__drawer-pill svg {
+  width: 16px;
+  height: 16px;
+}
+
+.nodely-shell__segmented {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid rgba(92, 112, 135, 0.24);
+  border-radius: 12px;
+  background: rgba(244, 248, 253, 0.94);
+}
+
+.nodely-shell__segmented button {
+  border: none;
+  background: transparent;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.nodely-shell__search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+  font-size: 11px;
+  color: #57697d;
+}
+
+.nodely-shell__search select,
+.nodely-shell__drawer-input,
+.nodely-shell__input {
+  appearance: none;
+  border: 1px solid rgba(92, 112, 135, 0.24);
+  background: rgba(255, 255, 255, 0.98);
+  color: #203246;
+  border-radius: 10px;
+  font-size: 12px;
+  padding: 7px 10px;
+  min-height: 32px;
+}
+
+.nodely-shell__composer {
+  position: fixed;
+  inset: 52px 0 auto 0;
+  z-index: 35;
+  padding: 10px 16px;
+  background: #f3f7fc;
+  border-bottom: 1px solid rgba(102, 124, 149, 0.2);
+}
+
+.nodely-shell__composer-form,
+.nodely-shell__address-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nodely-shell__page-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.nodely-shell__page-actions-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.nodely-shell__page-surface-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nodely-shell__composer-form .nodely-shell__input,
+.nodely-shell__address-form .nodely-shell__input {
+  flex: 1;
+}
+
+.nodely-shell__pagebar {
+  position: fixed;
+  inset: calc(var(--nodely-topbar-height, 52px) + var(--nodely-composer-height, 0px)) 0 auto 0;
+  z-index: 34;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px 8px;
+  background: #f7fbff;
+  border-bottom: 1px solid rgba(102, 124, 149, 0.2);
+  box-shadow: 0 10px 22px rgba(35, 62, 93, 0.06);
+}
+
+.nodely-shell__pagebar[hidden],
+.nodely-shell__composer[hidden] {
+  display: none !important;
+}
+
+.nodely-shell__nav-group {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.nodely-shell__permissions-button {
+  position: relative;
+}
+
+.nodely-shell__icon-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffffff;
+  background: #0b5cad;
+  box-shadow: 0 0 0 2px rgba(248, 251, 255, 0.96);
+}
+
+.nodely-shell__button-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffffff;
+  background: #0b5cad;
+  box-shadow: 0 0 0 2px rgba(248, 251, 255, 0.96);
+}
+
+.nodely-shell__address-input {
+  min-width: 0;
+}
+
+.nodely-shell__tree-strip {
+  display: grid;
+  gap: 8px;
+}
+
+.nodely-shell__surface-close {
+  flex: 0 0 auto;
+  min-width: 84px;
+}
+
+.nodely-shell__inline-panel {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(92, 112, 135, 0.16);
+  background: rgba(245, 249, 254, 0.96);
+}
+
+.nodely-shell__inline-panel-heading strong {
+  display: block;
+  font-size: 12px;
+}
+
+.nodely-shell__inline-panel-heading span {
+  font-size: 11px;
+  color: #5f7286;
+}
+
+.nodely-shell__inline-actions,
+.nodely-shell__inline-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nodely-shell__inline-chip {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #4c6278;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(92, 112, 135, 0.14);
+}
+
+.nodely-shell__find-form {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.nodely-shell__find-input {
+  min-width: 0;
+}
+
+.nodely-shell__tree-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nodely-shell__tree-header strong {
+  display: block;
+  font-size: 12px;
+}
+
+.nodely-shell__tree-header span {
+  font-size: 11px;
+  color: #5f7286;
+}
+
+.nodely-shell__tabs {
+  display: flex;
+  gap: 6px;
+  overflow: auto hidden;
+  padding-bottom: 2px;
+}
+
+.nodely-shell__tab {
+  appearance: none;
+  min-width: 112px;
+  max-width: 164px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(92, 112, 135, 0.26);
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.nodely-shell__tab strong,
+.nodely-shell__tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodely-shell__tab strong {
+  font-size: 11.5px;
+}
+
+.nodely-shell__tab span {
+  font-size: 10.5px;
+  color: #5f7286;
+}
+
+.nodely-shell__tab.is-active {
+  border-color: rgba(29, 115, 201, 0.46);
+  box-shadow: 0 0 0 1px rgba(29, 115, 201, 0.12) inset;
+}
+
+.nodely-shell__tab--research { background: #edf5ff; }
+.nodely-shell__tab--social { background: #fff2e3; }
+.nodely-shell__tab--commercial { background: #edf8ec; }
+.nodely-shell__tab--general { background: #eef2f7; }
+
+.nodely-shell__focus-hint {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(92, 112, 135, 0.18);
+  background: rgba(242, 248, 255, 0.94);
+}
+
+.nodely-shell__focus-hint strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.nodely-shell__focus-hint p {
+  margin: 0;
+  font-size: 11.5px;
+  color: #5b6d81;
+}
+
+.nodely-shell__artifact-bar,
+.nodely-shell__artifact-summary,
+.nodely-shell__artifact-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nodely-shell__artifact-bar {
+  min-width: 0;
+  flex: 1;
+  justify-content: space-between;
+}
+
+.nodely-shell__artifact-summary strong {
+  display: block;
+  font-size: 12px;
+}
+
+.nodely-shell__artifact-summary span:last-child {
+  font-size: 11px;
+  color: #5f7286;
+}
+
+.nodely-shell__artifact-glyph {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(230, 238, 247, 0.92);
+  color: #305a8e;
+}
+
+.nodely-shell__artifact-glyph svg {
+  width: 15px;
+  height: 15px;
+}
+
+.nodely-shell__graph {
+  position: fixed;
+  inset: calc(var(--nodely-topbar-height, 52px) + var(--nodely-composer-height, 0px) + var(--nodely-pagebar-height, 0px)) auto 0 0;
+  width: var(--nodely-graph-width, 340px);
+  display: block;
+  z-index: 10;
+  background:
+    radial-gradient(circle at top left, rgba(79, 192, 255, 0.14), transparent 42%),
+    linear-gradient(180deg, #f3f8fd, #e6eef7);
+  border-inline-end: 1px solid rgba(102, 124, 149, 0.2);
+  overflow: hidden;
+}
+
+:root[nodely-view="split"] .nodely-shell__split-handle {
+  display: block;
+}
+
+:root[nodely-view="focus"][nodely-surface-mode="page"] .nodely-shell__graph {
+  display: none;
+}
+
+.nodely-shell__split-handle {
+  position: fixed;
+  top: calc(var(--nodely-topbar-height, 52px) + var(--nodely-composer-height, 0px) + var(--nodely-pagebar-height, 0px));
+  bottom: 0;
+  left: calc(var(--nodely-graph-width, 340px) - 4px);
+  width: 8px;
+  z-index: 16;
+  display: none;
+  cursor: ew-resize;
+  background: linear-gradient(180deg, rgba(29, 115, 201, 0.04), rgba(29, 115, 201, 0.12));
+  border-inline: 1px solid rgba(29, 115, 201, 0.12);
+}
+
+.nodely-shell__split-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 56px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: rgba(29, 115, 201, 0.26);
+}
+
+.nodely-shell__artifact-surface {
+  position: fixed;
+  inset: calc(var(--nodely-topbar-height, 52px) + var(--nodely-composer-height, 0px) + var(--nodely-pagebar-height, 0px)) 0 0 var(--nodely-graph-width, 0px);
+  z-index: 20;
+  padding: 18px 22px;
+  background:
+    radial-gradient(circle at top left, rgba(79, 192, 255, 0.12), transparent 36%),
+    linear-gradient(180deg, rgba(244, 249, 255, 0.98), rgba(230, 237, 246, 0.98));
+}
+
+:root[nodely-view="focus"] .nodely-shell__artifact-surface {
+  inset-inline-start: 0;
+}
+
+.nodely-shell__artifact-card {
+  max-width: 820px;
+  padding: 20px 22px;
+  border-radius: 20px;
+  border: 1px solid rgba(92, 112, 135, 0.18);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 32px rgba(27, 41, 56, 0.12);
+  display: grid;
+  gap: 16px;
+}
+
+.nodely-shell__artifact-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nodely-shell__artifact-card-heading strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.nodely-shell__artifact-card-heading span {
+  font-size: 12px;
+  color: #5f7286;
+}
+
+.nodely-shell__artifact-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0b5cad;
+  background: rgba(223, 239, 255, 0.92);
+}
+
+.nodely-shell__artifact-card-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nodely-shell__artifact-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nodely-shell__artifact-details {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 10px 14px;
+  margin: 0;
+}
+
+.nodely-shell__artifact-details dt {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #52667c;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.nodely-shell__artifact-details dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 12px;
+  color: #203246;
+  word-break: break-word;
+}
+
+.nodely-graph-surface {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background:
+    radial-gradient(circle at top left, rgba(79, 192, 255, 0.12), transparent 42%),
+    linear-gradient(180deg, #f3f8fd, #e6eef7);
+}
+
+.nodely-graph-surface__stage,
+.nodely-graph-surface__edges,
+.nodely-graph-surface__nodes {
+  position: absolute;
+  inset: 0;
+}
+
+.nodely-graph-surface__stage {
+  z-index: 0;
+  cursor: grab;
+  touch-action: none;
+  background:
+    radial-gradient(circle at top left, rgba(79, 192, 255, 0.12), transparent 42%),
+    linear-gradient(180deg, #f3f8fd, #e6eef7);
+}
+
+.nodely-graph-surface__edges {
+  z-index: 0;
+}
+
+.nodely-graph-surface__nodes {
+  z-index: 1;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.nodely-graph-surface__empty {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+
+.nodely-graph-surface__empty-card {
+  width: min(480px, calc(100% - 32px));
+  padding: 28px 30px;
+  border-radius: 24px;
+  border: 1px solid rgba(92, 112, 135, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(77, 176, 255, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(236, 242, 249, 0.96));
+  box-shadow: 0 12px 26px rgba(27, 41, 56, 0.12);
+  text-align: center;
+  color: #203246;
+}
+
+.nodely-graph-surface__empty-card strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.nodely-graph-surface__empty-card p {
+  margin: 10px 0 18px;
+  font-size: 13px;
+  color: #5d6f83;
+}
+
+.nodely-graph-node {
+  position: absolute;
+  width: 142px;
+  height: 126px;
+  box-sizing: border-box;
+  transform-origin: top left;
+  will-change: transform;
+  border-radius: 20px;
+  border: 1px solid var(--node-border);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--node-fill) 88%, white), var(--node-fill));
+  box-shadow: 0 10px 18px rgba(27, 41, 56, 0.1);
+  padding: 10px 10px 12px;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+  color: #203246;
+}
+
+.nodely-graph-node--artifact {
+  width: 96px;
+  height: 52px;
+  border-radius: 16px;
+  padding: 8px 8px 9px;
+  gap: 3px;
+  text-align: left;
+  justify-items: start;
+}
+
+.nodely-graph-node--artifact.nodely-graph-node--selected {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 44%, white), 0 8px 14px rgba(27, 41, 56, 0.1);
+}
+
+.nodely-graph-node--selected {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 44%, white), 0 10px 18px rgba(27, 41, 56, 0.1);
+}
+
+.nodely-graph-node--root {
+  border-width: 2px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 28%, white), 0 0 0 6px color-mix(in srgb, var(--node-accent) 12%, transparent), 0 12px 22px rgba(27, 41, 56, 0.12);
+}
+
+.nodely-graph-node__origin {
+  justify-self: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--node-accent);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.nodely-graph-node__favicon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: inline-grid;
+  place-items: center;
+  justify-self: center;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--node-accent);
+  font-weight: 700;
+}
+
+.nodely-graph-node__favicon img {
+  width: 20px;
+  height: 20px;
+}
+
+.nodely-graph-node__title {
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.nodely-graph-node__meta {
+  font-size: 11px;
+  color: #5d6f83;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodely-graph-node__artifact-glyph {
+  width: 22px;
+  height: 22px;
+  border-radius: 9px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--node-accent);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.nodely-graph-node__artifact-title {
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodely-graph-node__artifact-meta {
+  width: 100%;
+  font-size: 9.5px;
+  color: #5d6f83;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.nodely-graph-surface__minimap {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 176px;
+  height: 132px;
+  border-radius: 14px;
+  overflow: hidden;
+  z-index: 24;
+  isolation: isolate;
+  border: 1px solid rgba(92, 112, 135, 0.22);
+  background: rgba(253, 255, 255, 0.97);
+  box-shadow: 0 10px 22px rgba(29, 44, 61, 0.14);
+  pointer-events: auto;
+}
+
+.nodely-graph-surface__minimap-toolbar {
+  position: absolute;
+  top: 148px;
+  left: 8px;
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(92, 112, 135, 0.22);
+  background: rgba(251, 253, 255, 0.96);
+  box-shadow: 0 8px 16px rgba(29, 44, 61, 0.12);
+  pointer-events: auto;
+}
+
+.nodely-graph-surface__minimap-button {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(92, 112, 135, 0.2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(234, 241, 248, 0.99));
+  color: #203246;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.nodely-graph-surface__minimap-button:hover {
+  border-color: rgba(29, 115, 201, 0.42);
+  color: #0b5cad;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(223, 236, 248, 1));
+}
+
+.nodely-graph-surface__minimap-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.nodely-graph-surface__minimap-backdrop {
+  fill: rgba(255, 255, 255, 0.94);
+  stroke: rgba(92, 112, 135, 0.24);
+}
+
+.nodely-graph-surface__minimap-edge {
+  stroke: rgba(88, 115, 148, 0.44);
+  stroke-width: 1.3;
+}
+
+.nodely-graph-surface__minimap-viewport {
+  fill: rgba(79, 192, 255, 0.08);
+  stroke: rgba(29, 115, 201, 0.82);
+  stroke-width: 1.4;
+}
+
+.nodely-shell__drawer {
+  position: fixed;
+  top: 60px;
+  right: 10px;
+  z-index: 50;
+  width: 320px;
+  max-height: calc(100vh - 70px);
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid rgba(92, 112, 135, 0.2);
+  background: rgba(251, 253, 255, 0.98);
+  box-shadow: 0 22px 36px rgba(27, 41, 56, 0.18);
+  padding: 10px;
+}
+
+.nodely-shell__drawer-header {
+  padding: 6px 6px 10px;
+  font-size: 12px;
+}
+
+.nodely-shell__drawer-body {
+  display: grid;
+  gap: 8px;
+}
+
+.nodely-shell__drawer-section {
+  display: grid;
+  gap: 8px;
+}
+
+.nodely-shell__drawer-section-title {
+  font-size: 11px;
+  color: #536679;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 4px 0;
+}
+
+.nodely-shell__drawer-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(92, 112, 135, 0.18);
+}
+
+.nodely-shell__drawer-row--research { background: #edf5ff; }
+.nodely-shell__drawer-row--social { background: #fff2e3; }
+.nodely-shell__drawer-row--commercial { background: #edf8ec; }
+.nodely-shell__drawer-row--general { background: #eef2f7; }
+
+.nodely-shell__drawer-row--tree {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  background: rgba(248, 251, 255, 0.95);
+}
+
+.nodely-shell__drawer-row--stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.nodely-shell__drawer-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.nodely-shell__drawer-link {
+  appearance: none;
+  border: none;
+  background: transparent;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  padding: 0;
+}
+
+.nodely-shell__drawer-link strong {
+  font-size: 11.5px;
+}
+
+.nodely-shell__drawer-link span,
+.nodely-shell__drawer-empty {
+  font-size: 11px;
+  color: #5f7286;
+}
+
+.nodely-shell__drawer-pill.is-danger {
+  color: #9b2132;
+}
+
+.nodely-shell__prompt-stack {
+  position: fixed;
+  top: 60px;
+  right: 342px;
+  z-index: 55;
+  width: min(320px, calc(100vw - 380px));
+  display: grid;
+  gap: 8px;
+}
+
+.nodely-shell__prompt-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(92, 112, 135, 0.18);
+  background: rgba(252, 253, 255, 0.98);
+  box-shadow: 0 18px 28px rgba(27, 41, 56, 0.16);
+}
+
+.nodely-shell__prompt-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.nodely-shell__prompt-card-glyph {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  color: #b15d16;
+  background: rgba(255, 243, 225, 0.98);
+}
+
+.nodely-shell__prompt-card-glyph svg {
+  width: 15px;
+  height: 15px;
+}
+
+.nodely-shell__prompt-card-header strong {
+  display: block;
+  font-size: 12px;
+}
+
+.nodely-shell__prompt-card-header span,
+.nodely-shell__prompt-card-copy {
+  font-size: 11px;
+  color: #5f7286;
+}
+
+.nodely-shell__prompt-card-copy {
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  :root[nodely-active="true"] #tabbrowser-tabbox,
+  :root[nodely-active="true"] #tabbrowser-tabpanels,
+  :root[nodely-active="true"] #appcontent {
+    margin-inline-start: 0 !important;
+  }
+
+  .nodely-shell__graph {
+    display: none;
+  }
+
+  .nodely-shell__artifact-surface {
+    inset-inline-start: 0;
+  }
+
+  .nodely-shell__drawer {
+    width: min(92vw, 320px);
+  }
+
+  .nodely-shell__prompt-stack {
+    right: 10px;
+    width: min(92vw, 320px);
+  }
+}
