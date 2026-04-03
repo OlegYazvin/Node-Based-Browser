@@ -56,6 +56,7 @@ npm run gecko:doctor -- --checkout-dir ../Nodely-Gecko/firefox-esr
 npm run gecko:mozconfig -- --checkout-dir ../Nodely-Gecko/firefox-esr
 npm run gecko:refresh-branding -- --checkout-dir ../Nodely-Gecko/firefox-esr
 npm run gecko:smoke -- --checkout-dir ../Nodely-Gecko/firefox-esr
+npm run installers
 ```
 
 ## Release Artifacts
@@ -65,6 +66,16 @@ The user-facing staged artifacts live in [gecko/release-artifacts](./gecko/relea
 - stage exactly one packaged artifact per platform, architecture, and channel
 - keep auxiliary Gecko build outputs outside the user-facing staging area
 - use [gecko/RELEASE.md](./gecko/RELEASE.md) for release flow details
+
+## Installers
+
+The final user-downloadable installers live in [Installer](./Installer).
+
+- `npm run installers` builds the installer for the current platform from the staged Gecko package in `gecko/release-artifacts`.
+- `npm run installers:sync -- --platform <platform> --arch <arch>` copies a finished installer from `out/make/<platform>/<arch>` into `Installer/` and refreshes `Installer/manifest.json`.
+- Linux uses a self-contained `.run` installer so the downloaded file is enough to install and launch Nodely on common desktop distributions.
+- Windows and macOS installers are built from native packaged Gecko outputs and should be produced on native runners through [`.github/workflows/installers.yml`](./.github/workflows/installers.yml).
+- `Installer/` should only contain installers that were actually built and synced for this version.
 
 ## Project Status
 

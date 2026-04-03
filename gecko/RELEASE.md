@@ -52,6 +52,7 @@ Back in the repo root:
 ```bash
 npm run gecko:smoke -- --checkout-dir ../Nodely-Gecko/firefox-esr
 npm run gecko:stage-release -- --checkout-dir ../Nodely-Gecko/firefox-esr --platform linux --arch arm64 --channel local
+npm run installers -- --platform linux --arch arm64 --channel local
 ```
 
 ## Runtime Verification
@@ -102,6 +103,34 @@ The staging manifest lives at:
 
 - `gecko/release-artifacts/manifest.json`
 
+## Installer Assembly
+
+After a packaged Gecko artifact is staged, build the user-facing installer from it:
+
+```bash
+npm run installers -- --platform <platform> --arch <arch> --channel <channel>
+```
+
+That writes the platform installer into:
+
+- `out/make/<platform>/<arch>/`
+
+And syncs the human-downloadable file into:
+
+- `Installer/`
+
+The installer manifest lives at:
+
+- `Installer/manifest.json`
+
+Use:
+
+```bash
+npm run installers:sync -- --platform <platform> --arch <arch>
+```
+
+when the native installer was built on another machine or CI runner and has already been copied into `out/make/<platform>/<arch>/`.
+
 ## CI Expectations
 
 The Gecko CI workflow should:
@@ -120,3 +149,7 @@ The workflow added in:
 - `.github/workflows/gecko-verify.yml`
 
 is the current starting point for that path.
+
+Cross-platform installer builds should use:
+
+- `.github/workflows/installers.yml`

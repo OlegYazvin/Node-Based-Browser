@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-04-03T22:48:39.155Z",
+  "installers": [
+    {
+      "version": "0.1.0",
+      "platform": "linux",
+      "arch": "arm64",
+      "variant": "generic",
+      "distribution": "generic",
+      "compatibility": [
+        "Ubuntu",
+        "Debian",
+        "Fedora",
+        "openSUSE",
+        "other common desktop Linux distros"
+      ],
+      "path": "linux/Nodely-Browser-0.1.0-linux-arm64.run",
+      "fileName": "Nodely-Browser-0.1.0-linux-arm64.run",
+      "source": "out/make/linux/arm64/Nodely-Browser-0.1.0-linux-arm64.run",
+      "size": 66590769,
+      "syncedAt": "2026-04-03T22:48:39.155Z"
+    }
+  ]
+}

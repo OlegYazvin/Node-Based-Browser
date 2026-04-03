@@ -1,0 +1,192 @@
+name: Build Installers
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/installers.yml"
+      - "desktop/**"
+      - "gecko/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-native-installers:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux installer (x64)
+            os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - label: Windows installer (x64)
+            os: windows-latest
+            platform: win32
+            arch: x64
+          - label: macOS installer (Intel)
+            os: macos-13
+            platform: darwin
+            arch: x64
+          - label: macOS installer (Apple Silicon)
+            os: macos-14
+            platform: darwin
+            arch: arm64
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux build prerequisites
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc \
+            g++ \
+            make \
+            nasm \
+            pkg-config \
+            libgtk-3-dev \
+            libdbus-glib-1-dev \
+            libxt-dev \
+            libx11-xcb-dev \
+            libasound2-dev \
+            libpulse-dev \
+            libffi-dev
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Bootstrap Gecko ESR checkout
+        run: npm run gecko:bootstrap -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+
+      - name: Write Gecko mozconfig
+        run: npm run gecko:mozconfig -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+
+      - name: Build Gecko overlay target
+        working-directory: ${{ runner.temp }}/firefox-esr
+        env:
+          MOZCONFIG: mozconfig.nodely
+          NODEJS: node
+        run: python ./mach build faster
+
+      - name: Refresh artifact-build Nodely branding
+        run: npm run gecko:refresh-branding -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+
+      - name: Run Nodely Gecko smoke verification
+        if: matrix.platform == 'linux'
+        run: npm run gecko:smoke -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+
+      - name: Package Gecko build
+        working-directory: ${{ runner.temp }}/firefox-esr
+        env:
+          MOZCONFIG: mozconfig.nodely
+          NODEJS: node
+        run: python ./mach package
+
+      - name: Stage Gecko release artifact
+        run: >
+          npm run gecko:stage-release -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+          --platform ${{ matrix.platform }}
+          --arch ${{ matrix.arch }}
+          --channel ci
+
+      - name: Build platform installer
+        run: >
+          npm run installers -- --platform ${{ matrix.platform }}
+          --arch ${{ matrix.arch }}
+          --channel ci
+          --no-sync
+
+      - name: Upload installer output
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-output-${{ matrix.platform }}-${{ matrix.arch }}
+          path: out/make
+          if-no-files-found: error
+
+  assemble-installer-directory:
+    name: Assemble Installer Directory
+    needs:
+      - build-native-installers
+    if: always()
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Download installer outputs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: installer-output-*
+          path: out/make
+          merge-multiple: true
+
+      - name: Reset Installer directory
+        run: |
+          rm -rf Installer
+          mkdir -p Installer
+
+      - name: Sync finished installers into Installer
+        run: |
+          found_any=0
+
+          for target in linux:x64 win32:x64 darwin:x64 darwin:arm64; do
+            platform="${target%%:*}"
+            arch="${target##*:}"
+
+            if [[ -d "out/make/$platform/$arch" ]]; then
+              found_any=1
+              npm run installers:sync -- --platform "$platform" --arch "$arch"
+            fi
+          done
+
+          if [[ "$found_any" -ne 1 ]]; then
+            echo "No installer outputs were downloaded from build jobs." >&2
+            exit 1
+          fi
+
+      - name: Upload assembled Installer directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: Installer
+          path: Installer
+          if-no-files-found: error

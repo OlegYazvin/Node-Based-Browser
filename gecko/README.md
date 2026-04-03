@@ -47,6 +47,7 @@ npm run gecko:mozconfig -- --checkout-dir ../Nodely-Gecko/firefox-esr
 npm run gecko:refresh-branding -- --checkout-dir ../Nodely-Gecko/firefox-esr
 npm run gecko:smoke -- --checkout-dir ../Nodely-Gecko/firefox-esr
 npm run gecko:stage-release -- --checkout-dir ../Nodely-Gecko/firefox-esr --platform linux --arch arm64 --channel local
+npm run installers -- --platform linux --arch arm64 --channel local
 ```
 
 Useful bootstrap flags:
@@ -117,6 +118,16 @@ For runtime verification without relying on the local browser-chrome harness:
 cd /home/olegy/Documents/Projects/Node-Based\ Browser
 npm run gecko:smoke -- --checkout-dir ../Nodely-Gecko/firefox-esr
 ```
+
+For user-facing installers after a packaged build is staged:
+
+```bash
+npm run installers -- --platform linux --arch arm64 --channel local
+```
+
+Cross-platform installer refreshes should use:
+
+- `../.github/workflows/installers.yml`
 
 ## Important Note
 
