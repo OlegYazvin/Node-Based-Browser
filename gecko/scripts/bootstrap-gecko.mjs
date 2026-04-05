@@ -26,7 +26,7 @@ Options:
 function parseArguments(argv) {
   const options = {
     checkoutDir: path.resolve(repositoryRoot, "..", "Nodely-Gecko", "firefox-esr"),
-    ref: "mozilla-esr140",
+    ref: "esr140",
     remote: "https://github.com/mozilla-firefox/firefox.git",
     sync: true,
     patches: true
@@ -83,13 +83,42 @@ function isGitCheckout(targetPath) {
   return spawnSync("git", ["-C", targetPath, "rev-parse", "--is-inside-work-tree"]).status === 0;
 }
 
+function candidateRefs(ref) {
+  const candidates = [ref];
+
+  if (ref.startsWith("mozilla-")) {
+    candidates.push(ref.replace(/^mozilla-/, ""));
+  } else if (/^esr\d+$/u.test(ref)) {
+    candidates.push(`mozilla-${ref}`);
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function resolveRemoteRef(remote, ref) {
+  for (const candidate of candidateRefs(ref)) {
+    const remoteCheck = spawnSync("git", ["ls-remote", "--heads", remote, candidate], {
+      cwd: repositoryRoot,
+      encoding: "utf8"
+    });
+
+    if (remoteCheck.status === 0 && remoteCheck.stdout.trim()) {
+      return candidate;
+    }
+  }
+
+  return ref;
+}
+
 function bootstrapCheckout({ checkoutDir, ref, remote, sync, patches }) {
+  const resolvedRef = resolveRemoteRef(remote, ref);
+
   if (!pathExists(checkoutDir)) {
-    run("git", ["clone", "--depth", "1", "--branch", ref, remote, checkoutDir]);
+    run("git", ["clone", "--depth", "1", "--branch", resolvedRef, remote, checkoutDir]);
   } else if (isGitCheckout(checkoutDir)) {
-    run("git", ["-C", checkoutDir, "fetch", "origin", ref, "--depth", "1"]);
-    run("git", ["-C", checkoutDir, "checkout", ref]);
-    run("git", ["-C", checkoutDir, "pull", "--ff-only", "origin", ref]);
+    run("git", ["-C", checkoutDir, "fetch", "origin", resolvedRef, "--depth", "1"]);
+    run("git", ["-C", checkoutDir, "checkout", resolvedRef]);
+    run("git", ["-C", checkoutDir, "pull", "--ff-only", "origin", resolvedRef]);
   } else {
     throw new Error(`Target path exists but is not a git checkout: ${checkoutDir}`);
   }

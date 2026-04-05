@@ -53,7 +53,7 @@ npm run installers -- --platform linux --arch arm64 --channel local
 Useful bootstrap flags:
 
 ```bash
-npm run gecko:bootstrap -- --ref mozilla-esr140
+npm run gecko:bootstrap -- --ref esr140
 npm run gecko:bootstrap -- --checkout-dir ../Nodely-Gecko/firefox-esr
 npm run gecko:bootstrap -- --remote https://github.com/mozilla-firefox/firefox.git
 ```
