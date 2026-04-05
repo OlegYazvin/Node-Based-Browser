@@ -273,6 +273,22 @@ export function stagedInstallerRelativePath(platform, fileName) {
   return fileName;
 }
 
+export function parseInstallerTarget(target) {
+  if (typeof target !== "string" || !target.includes(":")) {
+    throw new Error(`Expected installer target in <platform>:<arch> form, received: ${target}`);
+  }
+
+  const [rawPlatform, rawArch] = target.split(":");
+  const platform = normalizePlatform(rawPlatform);
+  const arch = normalizeArch(rawArch);
+
+  if (!platform || !arch) {
+    throw new Error(`Invalid installer target: ${target}`);
+  }
+
+  return { platform, arch };
+}
+
 export async function listInstallerOutputs(platform, arch, makeDirectory = outMakeDirectory) {
   const platformDirectory = path.join(makeDirectory, normalizePlatform(platform), normalizeArch(arch));
 
@@ -415,6 +431,44 @@ async function writeInstallerReadme(targetDirectory, manifest) {
   await writeFile(readmePath, renderInstallerReadme(manifest), "utf8");
 }
 
+async function writeInstallerState(targetDirectory, installers) {
+  const nextManifest = {
+    generatedAt: new Date().toISOString(),
+    installers: installers.sort((left, right) => left.path.localeCompare(right.path))
+  };
+
+  await writeFile(path.join(targetDirectory, "manifest.json"), `${JSON.stringify(nextManifest, null, 2)}\n`, "utf8");
+  await writeInstallerReadme(targetDirectory, nextManifest);
+  return nextManifest;
+}
+
+function matchesInstallerTarget(entry, targets) {
+  return targets.some((target) => entry.platform === target.platform && entry.arch === target.arch);
+}
+
+export async function pruneInstallers({
+  targets,
+  targetDirectory = installerDirectory
+}) {
+  await ensureDirectory(targetDirectory);
+  const manifest = await readInstallerManifest(targetDirectory);
+  const normalizedTargets = targets.map((target) =>
+    typeof target === "string" ? parseInstallerTarget(target) : {
+      platform: normalizePlatform(target.platform),
+      arch: normalizeArch(target.arch)
+    }
+  );
+
+  const removedEntries = manifest.installers.filter((entry) => matchesInstallerTarget(entry, normalizedTargets));
+
+  for (const entry of removedEntries) {
+    await rm(path.join(targetDirectory, entry.path), { force: true });
+  }
+
+  const nextInstallers = manifest.installers.filter((entry) => !matchesInstallerTarget(entry, normalizedTargets));
+  return writeInstallerState(targetDirectory, nextInstallers);
+}
+
 export async function syncInstallers({
   platform,
   arch,
@@ -474,12 +528,5 @@ export async function syncInstallers({
     });
   }
 
-  const nextManifest = {
-    generatedAt: new Date().toISOString(),
-    installers: nextInstallers.sort((left, right) => left.path.localeCompare(right.path))
-  };
-
-  await writeFile(path.join(targetDirectory, "manifest.json"), `${JSON.stringify(nextManifest, null, 2)}\n`, "utf8");
-  await writeInstallerReadme(targetDirectory, nextManifest);
-  return nextManifest;
+  return writeInstallerState(targetDirectory, nextInstallers);
 }

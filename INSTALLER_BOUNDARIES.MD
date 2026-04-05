@@ -19,8 +19,8 @@ Do not add end-user installer sync logic here.
 This layer turns real packaged browser artifacts into the downloadables in `Installer/`.
 
 - `scripts/build-installers.mjs` builds Linux installer formats from a staged Gecko package and copies native Windows/macOS installers from staged Gecko outputs.
-- `scripts/installers-lib.mjs` syncs finished installers into `Installer/`, writes `Installer/manifest.json`, and regenerates `Installer/README.MD`.
-- `.github/workflows/installers.yml` is the native CI path for Windows/macOS packaging and for assembling a truthful `Installer/` artifact.
+- `scripts/installers-lib.mjs` syncs finished installers into `Installer/`, prunes managed slices, writes `Installer/manifest.json`, and regenerates `Installer/README.MD`.
+- `.github/workflows/installers.yml` is the native CI path for Windows/macOS packaging and for assembling and promoting a truthful `Installer/` directory.
 
 Change this layer when you are changing installer formats, installer sync behavior, support-matrix docs, or the `Installer/` assembly flow.
 
@@ -32,11 +32,13 @@ Do not add browser-build logic here.
 2. Stage that browser artifact into `gecko/release-artifacts/`.
 3. Build or copy the installer from that staged artifact.
 4. Sync the resulting installer into `Installer/`.
-5. Commit only the installer files and manifests that were actually produced.
+5. Prune only the managed installer slices that the CI workflow owns.
+6. Commit only the installer files and manifests that were actually produced.
 
 ## Ground rules
 
 - Do not hand-edit `Installer/README.MD`; regenerate it through the installer sync path.
+- Do not wipe unrelated installer slices during CI promotion; only replace the platform/architecture targets the workflow owns.
 - Do not claim Windows, macOS, or Linux architecture support unless the corresponding installer file exists in `Installer/`.
 - Keep `gecko/release-artifacts/manifest.json` and `Installer/manifest.json` truthful and independent.
 - If a task changes both layers, make the boundary explicit in the commit and keep the responsibilities separate in code.

@@ -131,6 +131,14 @@ npm run installers:sync -- --platform <platform> --arch <arch>
 
 when the native installer was built on another machine or CI runner and has already been copied into `out/make/<platform>/<arch>/`.
 
+Use:
+
+```bash
+npm run installers:prune -- --target <platform:arch>
+```
+
+before a CI promotion refresh when a workflow-managed installer slice should be cleared and rebuilt from fresh native outputs.
+
 ## CI Expectations
 
 The Gecko CI workflow should:
@@ -153,3 +161,5 @@ is the current starting point for that path.
 Cross-platform installer builds should use:
 
 - `.github/workflows/installers.yml`
+
+That workflow now auto-promotes successful installer refreshes back into `Installer/` on the branch it runs on.

@@ -15,6 +15,7 @@
     "gecko:smoke": "node gecko/scripts/run-nodely-smoke.mjs",
     "gecko:stage-release": "node gecko/scripts/stage-release-artifacts.mjs",
     "installers": "node scripts/build-installers.mjs",
+    "installers:prune": "node scripts/prune-installers.mjs",
     "installers:sync": "node scripts/sync-installers.mjs",
     "lint": "tsc --noEmit",
     "test": "vitest run",

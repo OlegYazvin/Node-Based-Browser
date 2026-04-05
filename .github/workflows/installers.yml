@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-native-installers:
@@ -48,6 +48,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -146,6 +149,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -163,10 +169,17 @@ jobs:
           path: out/make
           merge-multiple: true
 
-      - name: Reset Installer directory
+      - name: Ensure Installer directory exists
         run: |
-          rm -rf Installer
           mkdir -p Installer
+
+      - name: Prune managed installer slices before sync
+        run: >
+          npm run installers:prune --
+          --target linux:x64
+          --target win32:x64
+          --target darwin:x64
+          --target darwin:arm64
 
       - name: Sync finished installers into Installer
         run: |
@@ -186,6 +199,19 @@ jobs:
             echo "No installer outputs were downloaded from build jobs." >&2
             exit 1
           fi
+
+      - name: Commit promoted installers
+        run: |
+          if [[ -z "$(git status --porcelain -- Installer)" ]]; then
+            echo "No Installer changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Installer
+          git commit -m "chore: promote generated installers"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Upload assembled Installer directory
         uses: actions/upload-artifact@v4

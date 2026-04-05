@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { renderInstallerReadme, syncInstallers } from "../../scripts/installers-lib.mjs";
+import { pruneInstallers, renderInstallerReadme, syncInstallers } from "../../scripts/installers-lib.mjs";
 
 describe("installers-lib", () => {
   it("renders a support matrix from the installer manifest", () => {
@@ -108,6 +108,69 @@ describe("installers-lib", () => {
 
       const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
       expect(readme).toContain("Nodely-Browser-0.1.0-linux-arm64.run");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("prunes only the targeted installer slices and preserves unrelated entries", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-prune-installers-"));
+    const targetDirectory = path.join(tempDirectory, "Installer");
+
+    try {
+      await mkdir(path.join(targetDirectory, "linux"), { recursive: true });
+      await mkdir(path.join(targetDirectory, "windows"), { recursive: true });
+      await writeFile(path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-linux-arm64.run"), "arm", "utf8");
+      await writeFile(path.join(targetDirectory, "windows", "Nodely-Browser-0.1.0-win32-x64.exe"), "win", "utf8");
+      await writeFile(
+        path.join(targetDirectory, "manifest.json"),
+        `${JSON.stringify(
+          {
+            generatedAt: "2026-04-05T00:00:00.000Z",
+            installers: [
+              {
+                version: "0.1.0",
+                platform: "linux",
+                arch: "arm64",
+                variant: "generic",
+                distribution: "generic",
+                compatibility: ["Ubuntu"],
+                path: "linux/Nodely-Browser-0.1.0-linux-arm64.run",
+                fileName: "Nodely-Browser-0.1.0-linux-arm64.run",
+                source: "out/make/linux/arm64/Nodely-Browser-0.1.0-linux-arm64.run",
+                size: 3,
+                syncedAt: "2026-04-05T00:00:00.000Z"
+              },
+              {
+                version: "0.1.0",
+                platform: "win32",
+                arch: "x64",
+                variant: "installer",
+                distribution: "windows",
+                compatibility: ["Windows 10", "Windows 11"],
+                path: "windows/Nodely-Browser-0.1.0-win32-x64.exe",
+                fileName: "Nodely-Browser-0.1.0-win32-x64.exe",
+                source: "out/make/win32/x64/Nodely-Browser-0.1.0-win32-x64.exe",
+                size: 3,
+                syncedAt: "2026-04-05T00:00:00.000Z"
+              }
+            ]
+          },
+          null,
+          2
+        )}\n`,
+        "utf8"
+      );
+
+      const manifest = await pruneInstallers({
+        targets: ["win32:x64"],
+        targetDirectory
+      });
+
+      expect(manifest.installers).toHaveLength(1);
+      expect(manifest.installers[0].platform).toBe("linux");
+      await access(path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-linux-arm64.run"));
+      await expect(access(path.join(targetDirectory, "windows", "Nodely-Browser-0.1.0-win32-x64.exe"))).rejects.toThrow();
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }
