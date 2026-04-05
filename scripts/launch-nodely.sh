@@ -11,6 +11,53 @@ legacy_binary_default="$checkout_dir/obj-nodely/dist/bin/firefox"
 binary="${NODELY_BROWSER_BINARY:-${NODELY_FIREFOX_BINARY:-}}"
 profile_dir="${NODELY_PROFILE_DIR:-$HOME/.local/share/nodely/gecko-profile}"
 
+ensure_linux_desktop_integration() {
+  [[ "$(uname -s)" == "Linux" ]] || return 0
+
+  local applications_dir="$HOME/.local/share/applications"
+  local icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
+  local desktop_file="$applications_dir/nodely.desktop"
+  local icon_file="$icon_dir/nodely.svg"
+
+  mkdir -p "$applications_dir" "$icon_dir"
+
+  if [[ -f "$repo_root/desktop/nodely-icon.svg" ]]; then
+    cp "$repo_root/desktop/nodely-icon.svg" "$icon_file" 2>/dev/null || true
+  fi
+
+  cat >"$desktop_file" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Nodely
+Comment=Launch Nodely Browser
+TryExec=$script_dir/launch-nodely.sh
+Exec=$script_dir/launch-nodely.sh %u
+Path=$repo_root
+Icon=nodely
+Terminal=false
+StartupNotify=true
+StartupWMClass=nodely
+X-GNOME-WMClass=nodely
+Categories=Network;WebBrowser;
+Keywords=browser;research;nodely;graph;
+EOF
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$applications_dir" >/dev/null 2>&1 || true
+  fi
+
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+  fi
+
+  if command -v kbuildsycoca6 >/dev/null 2>&1; then
+    kbuildsycoca6 >/dev/null 2>&1 || true
+  elif command -v kbuildsycoca5 >/dev/null 2>&1; then
+    kbuildsycoca5 >/dev/null 2>&1 || true
+  fi
+}
+
 if [[ -x "$repo_root/.tools/node/bin/node" ]]; then
   "$repo_root/.tools/node/bin/node" \
     "$repo_root/gecko/scripts/refresh-artifact-branding.mjs" \
@@ -40,7 +87,12 @@ if [[ ! -x "$binary" ]]; then
   exit 1
 fi
 
+if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
+  exec "$binary" "$1"
+fi
+
 mkdir -p "$profile_dir"
+ensure_linux_desktop_integration
 
 cat >"$profile_dir/user.js" <<'EOF'
 user_pref("browser.startup.page", 0);
@@ -55,6 +107,7 @@ EOF
 
 exec env \
   MOZ_ENABLE_WAYLAND="${MOZ_ENABLE_WAYLAND:-1}" \
+  MOZ_DESKTOP_FILE_NAME="${MOZ_DESKTOP_FILE_NAME:-nodely.desktop}" \
   MOZ_APP_REMOTINGNAME="${MOZ_APP_REMOTINGNAME:-nodely}" \
   "$binary" \
   -new-instance \

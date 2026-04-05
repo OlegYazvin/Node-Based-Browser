@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { chmod, cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 
@@ -8,6 +10,7 @@ import {
   currentArch,
   currentPlatform,
   ensureCleanDirectory,
+  ensureDirectory,
   normalizeArch,
   normalizePlatform,
   outMakeDirectory,
@@ -15,6 +18,36 @@ import {
   resolveGeckoReleaseArtifact,
   syncInstallers
 } from "./installers-lib.mjs";
+
+const systemDesktopFileName = "nodely-browser.desktop";
+const systemIconName = "nodely-browser";
+const systemInstallRoot = "/opt/nodely-browser/app";
+const flatpakAppId = "io.nodely.Browser";
+const flatpakRuntime = "org.freedesktop.Platform";
+const flatpakSdk = "org.freedesktop.Sdk";
+const flatpakRuntimeBranch = "24.08";
+const flatpakAppBranch = "stable";
+const flatpakRuntimeRepo = "https://dl.flathub.org/repo/flathub.flatpakrepo";
+
+const nativeInstallerExtensions = {
+  win32: [".exe"],
+  darwin: [".dmg", ".pkg"]
+};
+
+const flatpakArchNames = {
+  x64: "x86_64",
+  arm64: "aarch64"
+};
+
+const rpmArchNames = {
+  x64: "x86_64",
+  arm64: "aarch64"
+};
+
+const debArchNames = {
+  x64: "amd64",
+  arm64: "arm64"
+};
 
 function usage() {
   console.log(`Usage: node scripts/build-installers.mjs [options]
@@ -78,10 +111,17 @@ function linuxRunFileName(version, arch) {
   return `Nodely-Browser-${version}-linux-${arch}.run`;
 }
 
-const nativeInstallerExtensions = {
-  win32: [".exe"],
-  darwin: [".dmg", ".pkg"]
-};
+function linuxFlatpakFileName(version, arch) {
+  return `Nodely-Browser-${version}-linux-${arch}.flatpak`;
+}
+
+function linuxDebFileName(version, distribution, arch) {
+  return `Nodely-Browser-${version}-${distribution}-${arch}.deb`;
+}
+
+function linuxRpmFileName(version, arch) {
+  return `Nodely-Browser-${version}-fedora-${arch}.rpm`;
+}
 
 function linuxExtractFlags(filePath) {
   if (filePath.endsWith(".tar.xz")) {
@@ -97,6 +137,110 @@ function linuxExtractFlags(filePath) {
   }
 
   throw new Error(`Unsupported Linux package input: ${filePath}`);
+}
+
+function tarballExtractArgument(filePath) {
+  return `-${linuxExtractFlags(filePath)}f`;
+}
+
+function packageReleaseVersion(version) {
+  return `${version}-1`;
+}
+
+function buildDesktopEntry({ name, exec, icon }) {
+  return `[Desktop Entry]
+Version=1.0
+Type=Application
+Name=${name}
+Comment=Node-based Gecko browser for research workflows
+TryExec=${exec}
+Exec=${exec} %u
+Icon=${icon}
+Terminal=false
+StartupNotify=true
+StartupWMClass=nodely
+X-GNOME-WMClass=nodely
+Categories=Network;WebBrowser;
+Keywords=browser;research;nodely;graph;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+`;
+}
+
+function buildSystemWrapper({ installRoot, desktopFileName }) {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
+mkdir -p "$profile_dir"
+cat >"$profile_dir/user.js" <<'PREFS'
+user_pref("browser.startup.page", 0);
+user_pref("browser.startup.homepage", "about:blank");
+user_pref("startup.homepage_welcome_url", "");
+user_pref("startup.homepage_welcome_url.additional", "");
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.newtabpage.enabled", false);
+user_pref("nodely.shell.enabled", true);
+PREFS
+exec env \\
+  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \\
+  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \\
+  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \\
+  "${installRoot}/nodely" \\
+  -new-instance \\
+  -no-remote \\
+  -profile "$profile_dir" \\
+  "$@"
+`;
+}
+
+function buildFlatpakWrapper() {
+  return `#!/usr/bin/env bash
+set -euo pipefail
+profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
+mkdir -p "$profile_dir"
+cat >"$profile_dir/user.js" <<'PREFS'
+user_pref("browser.startup.page", 0);
+user_pref("browser.startup.homepage", "about:blank");
+user_pref("startup.homepage_welcome_url", "");
+user_pref("startup.homepage_welcome_url.additional", "");
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.newtabpage.enabled", false);
+user_pref("nodely.shell.enabled", true);
+PREFS
+exec env \\
+  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \\
+  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \\
+  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \\
+  /app/lib/nodely/nodely \\
+  -new-instance \\
+  -no-remote \\
+  -profile "$profile_dir" \\
+  "$@"
+`;
+}
+
+function buildFlatpakMetainfo(version) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>${flatpakAppId}</id>
+  <name>Nodely Browser</name>
+  <summary>Node-based Gecko browser for research workflows</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+  <description>
+    <p>Nodely Browser is a node-based Gecko browser focused on graph-first research workflows.</p>
+  </description>
+  <launchable type="desktop-id">${flatpakAppId}.desktop</launchable>
+  <categories>
+    <category>Network</category>
+    <category>WebBrowser</category>
+  </categories>
+  <releases>
+    <release version="${version}" date="${new Date().toISOString().slice(0, 10)}"/>
+  </releases>
+</component>
+`;
 }
 
 function buildLinuxRunStub({ extractFlags, iconSvg }) {
@@ -179,37 +323,19 @@ rm -rf "$install_root"
 mv "$bundle_dir" "$install_root"
 
 cat >"$wrapper_path" <<WRAPPER
-#!/usr/bin/env bash
-set -euo pipefail
-profile_dir="\\\${NODELY_PROFILE_DIR:-$profile_dir}"
-mkdir -p "\\\$profile_dir"
-cat >"\\\$profile_dir/user.js" <<'PREFS'
-user_pref("browser.startup.page", 0);
-user_pref("browser.startup.homepage", "about:blank");
-user_pref("startup.homepage_welcome_url", "");
-user_pref("startup.homepage_welcome_url.additional", "");
-user_pref("browser.startup.homepage_override.mstone", "ignore");
-user_pref("browser.aboutwelcome.enabled", false);
-user_pref("browser.newtabpage.enabled", false);
-user_pref("nodely.shell.enabled", true);
-PREFS
-exec env MOZ_ENABLE_WAYLAND="\\\${MOZ_ENABLE_WAYLAND:-1}" MOZ_APP_REMOTINGNAME="\\\${MOZ_APP_REMOTINGNAME:-nodely}" "$install_root/nodely" -new-instance -no-remote -profile "\\\$profile_dir" "\\\$@"
+${buildSystemWrapper({
+  installRoot: '$install_root',
+  desktopFileName: systemDesktopFileName
+}).trim()}
 WRAPPER
 chmod +x "$wrapper_path"
 
 cat >"$desktop_path" <<DESKTOP
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Nodely Browser
-Comment=Node-based Gecko browser for research workflows
-TryExec=$wrapper_path
-Exec=$wrapper_path
-Icon=$icon_path
-Terminal=false
-StartupNotify=true
-Categories=Network;WebBrowser;
-Keywords=browser;research;nodely;graph;
+${buildDesktopEntry({
+  name: "Nodely Browser",
+  exec: "$wrapper_path",
+  icon: "$icon_path"
+}).trim()}
 DESKTOP
 
 cat >"$icon_path" <<'ICON'
@@ -244,22 +370,454 @@ __NODELY_ARCHIVE_BELOW__
 `;
 }
 
-async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory, arch }) {
-  const outputDirectory = path.join(outDirectory, "linux", arch);
-  await ensureCleanDirectory(outputDirectory);
+function debControl({ version, arch, distribution }) {
+  const distributionLabel = distribution === "ubuntu" ? "Ubuntu" : "Debian";
+  return `Package: nodely-browser
+Version: ${packageReleaseVersion(version)}
+Section: web
+Priority: optional
+Architecture: ${debArchNames[arch] ?? arch}
+Maintainer: Nodely Browser <noreply@nodely.invalid>
+Depends: libasound2, libdbus-glib-1-2, libgtk-3-0, libpulse0, libx11-xcb1, libxt6, libffi8 | libffi7
+Homepage: https://nodely.invalid/
+Description: Nodely Browser for ${distributionLabel}
+ Node-based Gecko browser for research workflows packaged for ${distributionLabel}.
+`;
+}
 
-  const iconSvgPath = path.join(repositoryRoot, "desktop", "nodely-icon.svg");
-  const iconSvg = (await readFile(iconSvgPath, "utf8")).trim();
-  const extractFlags = linuxExtractFlags(sourceArtifactPath);
+function desktopDatabaseScript() {
+  return `#!/usr/bin/env bash
+set -e
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || true
+fi
+`;
+}
+
+function rpmChangelogDate() {
+  const date = new Date();
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${weekdays[date.getUTCDay()]} ${months[date.getUTCMonth()]} ${String(date.getUTCDate()).padStart(2, "0")} ${date.getUTCFullYear()}`;
+}
+
+function rpmSpec({ version, arch }) {
+  return `%global debug_package %{nil}
+%global _debugsource_packages 0
+Name:           nodely-browser
+Version:        ${version}
+Release:        1
+Summary:        Node-based Gecko browser for research workflows
+License:        MPL-2.0
+BuildArch:      ${rpmArchNames[arch] ?? arch}
+Source0:        nodely-browser-system.tar.gz
+
+%description
+Nodely Browser is a node-based Gecko browser for research workflows.
+
+%prep
+%setup -q -c -T
+tar -xzf %{SOURCE0}
+
+%install
+rm -rf %{buildroot}
+mkdir -p %{buildroot}
+cp -a opt usr %{buildroot}/
+
+%post
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || :
+fi
+
+%postun
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache /usr/share/icons/hicolor >/dev/null 2>&1 || :
+fi
+
+%files
+/opt/nodely-browser
+/usr/bin/nodely-browser
+/usr/share/applications/nodely-browser.desktop
+/usr/share/icons/hicolor/scalable/apps/nodely-browser.svg
+
+%changelog
+* ${rpmChangelogDate()} Nodely Browser <noreply@nodely.invalid> - ${version}-1
+- Package the Gecko-based Nodely Browser bundle
+`;
+}
+
+async function runCommand(command, args, options = {}) {
+  const { cwd = repositoryRoot, env = process.env } = options;
+
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      reject(
+        new Error(
+          `${command} ${args.join(" ")} failed with exit code ${code}\n${stderr || stdout || "(no output)"}`
+        )
+      );
+    });
+  });
+}
+
+async function commandSucceeds(command, args, options = {}) {
+  try {
+    await runCommand(command, args, options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function podmanUnshare(args, options = {}) {
+  return runCommand("podman", ["unshare", ...args], options);
+}
+
+async function extractLinuxArtifact(sourceArtifactPath, destinationDirectory) {
+  await ensureDirectory(destinationDirectory);
+  await runCommand("tar", [tarballExtractArgument(sourceArtifactPath), sourceArtifactPath, "-C", destinationDirectory]);
+}
+
+async function prepareSystemPayload({ sourceArtifactPath, temporaryDirectory, iconSvg }) {
+  const extractedDirectory = path.join(temporaryDirectory, "extracted");
+  const payloadRoot = path.join(temporaryDirectory, "payload-root");
+  const appDestination = path.join(payloadRoot, "opt", "nodely-browser", "app");
+  const wrapperPath = path.join(payloadRoot, "usr", "bin", "nodely-browser");
+  const desktopPath = path.join(payloadRoot, "usr", "share", "applications", systemDesktopFileName);
+  const iconPath = path.join(payloadRoot, "usr", "share", "icons", "hicolor", "scalable", "apps", `${systemIconName}.svg`);
+
+  await extractLinuxArtifact(sourceArtifactPath, extractedDirectory);
+  await ensureDirectory(path.dirname(appDestination));
+  await cp(path.join(extractedDirectory, "nodely"), appDestination, { recursive: true });
+  await ensureDirectory(path.dirname(wrapperPath));
+  await ensureDirectory(path.dirname(desktopPath));
+  await ensureDirectory(path.dirname(iconPath));
+
+  await writeFile(wrapperPath, buildSystemWrapper({ installRoot: systemInstallRoot, desktopFileName: systemDesktopFileName }), "utf8");
+  await chmod(wrapperPath, 0o755);
+  await writeFile(
+    desktopPath,
+    buildDesktopEntry({
+      name: "Nodely Browser",
+      exec: "nodely-browser",
+      icon: systemIconName
+    }),
+    "utf8"
+  );
+  await runCommand("desktop-file-validate", [desktopPath]);
+  await writeFile(iconPath, `${iconSvg.trim()}\n`, "utf8");
+
+  return payloadRoot;
+}
+
+async function buildLinuxRunInstaller({ version, sourceArtifactPath, outputDirectory, arch, iconSvg }) {
   const installerPath = path.join(outputDirectory, linuxRunFileName(version, arch));
-  const stub = buildLinuxRunStub({ extractFlags, iconSvg });
+  const stub = buildLinuxRunStub({ extractFlags: linuxExtractFlags(sourceArtifactPath), iconSvg: iconSvg.trim() });
   const payload = await readFile(sourceArtifactPath);
 
   await writeFile(installerPath, stub, "utf8");
   await writeFile(installerPath, payload, { flag: "a" });
   await chmod(installerPath, 0o755);
+  return installerPath;
+}
 
-  return [installerPath];
+async function buildDebInstaller({ version, outputDirectory, arch, distribution, payloadRoot }) {
+  const packageDirectory = await mkdtemp(path.join(os.tmpdir(), `nodely-${distribution}-deb-`));
+  const rootDirectory = path.join(packageDirectory, "root");
+  const finalPath = path.join(outputDirectory, linuxDebFileName(version, distribution, arch));
+  const controlArchivePath = path.join(packageDirectory, "control.tar.gz");
+  const dataArchivePath = path.join(packageDirectory, "data.tar.xz");
+  const debianBinaryPath = path.join(packageDirectory, "debian-binary");
+
+  try {
+    await cp(payloadRoot, rootDirectory, { recursive: true });
+    await ensureDirectory(path.join(rootDirectory, "DEBIAN"));
+
+    const controlPath = path.join(rootDirectory, "DEBIAN", "control");
+    const postinstPath = path.join(rootDirectory, "DEBIAN", "postinst");
+    const postrmPath = path.join(rootDirectory, "DEBIAN", "postrm");
+
+    await writeFile(controlPath, debControl({ version, arch, distribution }), "utf8");
+    await writeFile(postinstPath, desktopDatabaseScript(), "utf8");
+    await writeFile(postrmPath, desktopDatabaseScript(), "utf8");
+    await chmod(postinstPath, 0o755);
+    await chmod(postrmPath, 0o755);
+    await writeFile(debianBinaryPath, "2.0\n", "utf8");
+
+    await runCommand("tar", [
+      "--owner=0",
+      "--group=0",
+      "--numeric-owner",
+      "-czf",
+      controlArchivePath,
+      "-C",
+      path.join(rootDirectory, "DEBIAN"),
+      "."
+    ]);
+    await runCommand("tar", [
+      "--owner=0",
+      "--group=0",
+      "--numeric-owner",
+      "--exclude=DEBIAN",
+      "-cJf",
+      dataArchivePath,
+      "-C",
+      rootDirectory,
+      "."
+    ]);
+    await rm(finalPath, { force: true });
+    await runCommand("ar", ["r", finalPath, debianBinaryPath, controlArchivePath, dataArchivePath]);
+    return finalPath;
+  } finally {
+    await rm(packageDirectory, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function buildRpmInstaller({ version, outputDirectory, arch, payloadRoot }) {
+  const rpmDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-fedora-rpm-"));
+  const rpmbuildRoot = path.join(rpmDirectory, "rpmbuild");
+  const sourcesDirectory = path.join(rpmbuildRoot, "SOURCES");
+  const specsDirectory = path.join(rpmbuildRoot, "SPECS");
+  const sourceTarballPath = path.join(sourcesDirectory, "nodely-browser-system.tar.gz");
+  const specPath = path.join(specsDirectory, "nodely-browser.spec");
+  const finalPath = path.join(outputDirectory, linuxRpmFileName(version, arch));
+
+  try {
+    await ensureDirectory(sourcesDirectory);
+    await ensureDirectory(specsDirectory);
+    await runCommand("tar", ["-czf", sourceTarballPath, "-C", payloadRoot, "."]);
+    await writeFile(specPath, rpmSpec({ version, arch }), "utf8");
+
+    await runCommand("podman", [
+      "run",
+      "--rm",
+      "-v",
+      `${rpmDirectory}:/workspace:Z`,
+      "-v",
+      `${outputDirectory}:/out:Z`,
+      "quay.io/fedora/fedora:43",
+      "sh",
+      "-lc",
+      [
+        "dnf -y install rpm-build >/dev/null",
+        "rpmbuild --define '_topdir /workspace/rpmbuild' -bb /workspace/rpmbuild/SPECS/nodely-browser.spec",
+        `cp "$(find /workspace/rpmbuild/RPMS -name '*.rpm' -print -quit)" /out/${path.basename(finalPath)}`,
+        "status=$?",
+        "exit $status"
+      ].join("; ")
+    ]);
+    await podmanUnshare(["chown", "-R", "0:0", outputDirectory]);
+    return finalPath;
+  } finally {
+    await podmanUnshare(["rm", "-rf", rpmDirectory]).catch(() => {});
+    await rm(rpmDirectory, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function ensureFlatpakSdkInstalled() {
+  const runtimeRef = `${flatpakRuntime}//${flatpakRuntimeBranch}`;
+  const sdkRef = `${flatpakSdk}//${flatpakRuntimeBranch}`;
+
+  if (!(await commandSucceeds("flatpak", ["info", "--user", runtimeRef]))) {
+    await runCommand("flatpak", ["install", "--user", "-y", "flathub", runtimeRef]);
+  }
+
+  if (!(await commandSucceeds("flatpak", ["info", "--user", sdkRef]))) {
+    await runCommand("flatpak", ["install", "--user", "-y", "flathub", sdkRef]);
+  }
+}
+
+async function buildFlatpakInstaller({ version, outputDirectory, arch, payloadRoot, iconSvg }) {
+  const flatpakDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-flatpak-"));
+  const buildDirectory = path.join(flatpakDirectory, "build");
+  const repoDirectory = path.join(flatpakDirectory, "repo");
+  const filesDirectory = path.join(buildDirectory, "files");
+  const appRoot = path.join(filesDirectory, "lib", "nodely");
+  const wrapperPath = path.join(filesDirectory, "bin", "nodely-browser");
+  const desktopPath = path.join(filesDirectory, "share", "applications", `${flatpakAppId}.desktop`);
+  const iconPath = path.join(filesDirectory, "share", "icons", "hicolor", "scalable", "apps", `${flatpakAppId}.svg`);
+  const metainfoPath = path.join(filesDirectory, "share", "metainfo", `${flatpakAppId}.metainfo.xml`);
+  const finalPath = path.join(outputDirectory, linuxFlatpakFileName(version, arch));
+  const flatpakArch = flatpakArchNames[arch] ?? arch;
+
+  try {
+    await ensureFlatpakSdkInstalled();
+    await rm(buildDirectory, { recursive: true, force: true });
+    await rm(repoDirectory, { recursive: true, force: true });
+
+    await runCommand("flatpak", [
+      "build-init",
+      "--arch",
+      flatpakArch,
+      buildDirectory,
+      flatpakAppId,
+      flatpakSdk,
+      flatpakRuntime,
+      flatpakRuntimeBranch
+    ]);
+
+    await ensureDirectory(path.dirname(appRoot));
+    await ensureDirectory(path.dirname(wrapperPath));
+    await ensureDirectory(path.dirname(desktopPath));
+    await ensureDirectory(path.dirname(iconPath));
+    await ensureDirectory(path.dirname(metainfoPath));
+
+    await cp(path.join(payloadRoot, "opt", "nodely-browser", "app"), appRoot, { recursive: true });
+    await writeFile(wrapperPath, buildFlatpakWrapper(), "utf8");
+    await chmod(wrapperPath, 0o755);
+    await writeFile(
+      desktopPath,
+      buildDesktopEntry({
+        name: "Nodely Browser",
+        exec: "nodely-browser",
+        icon: flatpakAppId
+      }),
+      "utf8"
+    );
+    await runCommand("desktop-file-validate", [desktopPath]);
+    await writeFile(iconPath, `${iconSvg.trim()}\n`, "utf8");
+    await writeFile(metainfoPath, buildFlatpakMetainfo(version), "utf8");
+
+    await runCommand("flatpak", [
+      "build-finish",
+      "--command=nodely-browser",
+      "--share=network",
+      "--share=ipc",
+      "--socket=wayland",
+      "--socket=fallback-x11",
+      "--socket=pulseaudio",
+      "--device=dri",
+      "--filesystem=home",
+      "--env=MOZ_ENABLE_WAYLAND=1",
+      "--env=MOZ_APP_REMOTINGNAME=nodely",
+      `--env=MOZ_DESKTOP_FILE_NAME=${flatpakAppId}.desktop`,
+      buildDirectory
+    ]);
+
+    await runCommand("flatpak", [
+      "build-export",
+      "--arch",
+      flatpakArch,
+      repoDirectory,
+      buildDirectory,
+      flatpakAppBranch
+    ]);
+
+    await runCommand("flatpak", [
+      "build-bundle",
+      "--arch",
+      flatpakArch,
+      "--runtime-repo",
+      flatpakRuntimeRepo,
+      repoDirectory,
+      finalPath,
+      flatpakAppId,
+      flatpakAppBranch
+    ]);
+
+    return finalPath;
+  } finally {
+    await rm(flatpakDirectory, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory, arch }) {
+  const outputDirectory = path.join(outDirectory, "linux", arch);
+  const iconSvgPath = path.join(repositoryRoot, "desktop", "nodely-icon.svg");
+  const iconSvg = await readFile(iconSvgPath, "utf8");
+  const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-linux-installers-"));
+  const outputs = [];
+
+  await ensureCleanDirectory(outputDirectory);
+
+  try {
+    const payloadRoot = await prepareSystemPayload({
+      sourceArtifactPath,
+      temporaryDirectory,
+      iconSvg
+    });
+
+    outputs.push(
+      await buildLinuxRunInstaller({
+        version,
+        sourceArtifactPath,
+        outputDirectory,
+        arch,
+        iconSvg
+      })
+    );
+    outputs.push(
+      await buildDebInstaller({
+        version,
+        outputDirectory,
+        arch,
+        distribution: "debian",
+        payloadRoot
+      })
+    );
+    outputs.push(
+      await buildDebInstaller({
+        version,
+        outputDirectory,
+        arch,
+        distribution: "ubuntu",
+        payloadRoot
+      })
+    );
+    outputs.push(
+      await buildRpmInstaller({
+        version,
+        outputDirectory,
+        arch,
+        payloadRoot
+      })
+    );
+    outputs.push(
+      await buildFlatpakInstaller({
+        version,
+        outputDirectory,
+        arch,
+        payloadRoot,
+        iconSvg
+      })
+    );
+  } finally {
+    await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {});
+  }
+
+  return outputs;
 }
 
 async function copyNativeInstaller({ platform, arch, sourceArtifactPath, outDirectory }) {
@@ -277,9 +835,7 @@ async function copyNativeInstaller({ platform, arch, sourceArtifactPath, outDire
   const outputDirectory = path.join(outDirectory, platform, arch);
   await ensureCleanDirectory(outputDirectory);
   const destinationPath = path.join(outputDirectory, path.basename(sourceArtifactPath));
-  await mkdir(outputDirectory, { recursive: true });
-  await rm(destinationPath, { force: true });
-  await writeFile(destinationPath, await readFile(sourceArtifactPath));
+  await cp(sourceArtifactPath, destinationPath);
   return [destinationPath];
 }
 

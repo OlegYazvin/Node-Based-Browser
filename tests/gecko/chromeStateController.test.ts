@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { ChromeStateController } from "../../gecko/overlay/browser/base/content/nodely/chrome-state-controller.mjs";
 import {
   applyNodeNavigation,
+  createChildNode,
   createEmptyWorkspace,
   createRootNode,
-  findNode
+  findNode,
+  upsertArtifactNode
 } from "../../gecko/overlay/browser/base/content/nodely/domain.mjs";
 
 function makeRuntimeManager() {
@@ -13,10 +15,12 @@ function makeRuntimeManager() {
     callbacks: {},
     attach: vi.fn(),
     tabForNode: vi.fn((_nodeId?: string) => null as { id: string } | null),
+    currentUrlForNode: vi.fn((_nodeId?: string) => null as string | null),
     loadNode: vi.fn(),
     ensureRuntime: vi.fn(),
     selectNode: vi.fn(),
-    adoptOpenedTab: vi.fn()
+    adoptOpenedTab: vi.fn(),
+    closeNodeRuntime: vi.fn()
   };
 }
 
@@ -266,7 +270,7 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(childNode?.id, foreignTab);
   });
 
-  it("does not try to spin up a browser runtime when selecting an artifact node", async () => {
+  it("reopens the owning page runtime when selecting an artifact node", async () => {
     let workspace = createRootNode(createEmptyWorkspace());
     const rootId = workspace.selectedNodeId as string;
     workspace = applyNodeNavigation(workspace, rootId, {
@@ -288,6 +292,9 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
       listFavorites: vi.fn(async () => [])
     };
     const runtimeManager = makeRuntimeManager();
+    runtimeManager.currentUrlForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? "https://example.com/" : null
+    );
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
@@ -317,7 +324,10 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     await controller.selectNode(artifactNode.id);
 
     expect(findNode(workspace, workspace.selectedNodeId)?.id).toBe(artifactNode.id);
-    expect(runtimeManager.loadNode).not.toHaveBeenCalled();
+    expect(runtimeManager.loadNode).toHaveBeenCalledWith(
+      expect.objectContaining({ id: rootId, url: "https://example.com/" }),
+      "https://example.com/"
+    );
     expect(runtimeManager.ensureRuntime).not.toHaveBeenCalled();
   });
 
@@ -481,6 +491,9 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     runtimeManager.tabForNode.mockImplementation((nodeId?: string) =>
       nodeId === rootId ? { id: "tab-1" } : null
     );
+    runtimeManager.currentUrlForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? "https://example.com/" : null
+    );
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
@@ -499,6 +512,259 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     expect(workspace.selectedNodeId).toBe(rootId);
     expect(runtimeManager.selectNode).toHaveBeenCalledWith(rootId);
     expect(runtimeManager.loadNode).not.toHaveBeenCalled();
+  });
+
+  it("reloads an existing mapped runtime when it no longer matches the node url", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/",
+      input: "https://example.com",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    runtimeManager.tabForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? { id: "tab-1" } : null
+    );
+    runtimeManager.currentUrlForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? "https://elsewhere.example/" : null
+    );
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.loadNode.mockClear();
+    runtimeManager.selectNode.mockClear();
+
+    await controller.selectNode(rootId);
+
+    expect(runtimeManager.loadNode).toHaveBeenCalledWith(
+      expect.objectContaining({ id: rootId, url: "https://example.com/" }),
+      "https://example.com/"
+    );
+    expect(runtimeManager.selectNode).not.toHaveBeenCalled();
+  });
+
+  it("keeps transient OAuth tabs out of the graph and returns focus to the opener node when they close", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://www.linkedin.com/",
+      input: "https://www.linkedin.com",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    controller.handleTransientAuthChanged({
+      open: true,
+      kind: "tab",
+      parentNodeId: rootId,
+      url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=abc123"
+    });
+
+    expect(workspace.nodes).toHaveLength(1);
+    expect(controller.getState().chrome.transientAuth).toEqual(
+      expect.objectContaining({
+        kind: "tab",
+        parentNodeId: rootId
+      })
+    );
+
+    controller.handleTransientAuthChanged({
+      open: false,
+      kind: "tab",
+      parentNodeId: rootId,
+      url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=abc123"
+    });
+
+    expect(controller.getState().chrome.transientAuth).toBeNull();
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(rootId);
+  });
+
+  it("kills a middle page node, promotes its only page child, removes direct artifacts, and closes the removed runtime", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/root",
+      input: "https://example.com/root",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = createChildNode(workspace, rootId, "manual");
+    const middleId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, middleId, {
+      kind: "url",
+      url: "https://example.com/middle",
+      input: "https://example.com/middle",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = createChildNode(workspace, middleId, "manual");
+    const leafId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, leafId, {
+      kind: "url",
+      url: "https://example.com/leaf",
+      input: "https://example.com/leaf",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = upsertArtifactNode(workspace, middleId, "download", {
+      transferId: "download-1",
+      fileName: "paper.pdf"
+    });
+    const artifactId = workspace.nodes.find((node: { kind: string }) => node.kind === "download")?.id as string;
+    workspace = {
+      ...workspace,
+      selectedNodeId: middleId
+    };
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [
+        {
+          id: "page:default:middle",
+          kind: "page",
+          workspaceId: "default",
+          nodeId: middleId
+        }
+      ]),
+      removeNodeFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    runtimeManager.tabForNode.mockImplementation((nodeId?: string) =>
+      nodeId === leafId ? { id: "leaf-tab" } : nodeId === middleId ? { id: "middle-tab" } : null
+    );
+    runtimeManager.currentUrlForNode.mockImplementation((nodeId?: string) =>
+      nodeId === leafId
+        ? "https://example.com/leaf"
+        : nodeId === middleId
+          ? "https://example.com/middle"
+          : null
+    );
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.selectNode.mockClear();
+    runtimeManager.closeNodeRuntime.mockClear();
+
+    await controller.killNode(middleId);
+
+    expect(findNode(workspace, middleId)).toBeNull();
+    expect(findNode(workspace, artifactId)).toBeNull();
+    expect(findNode(workspace, leafId)?.parentId).toBe(rootId);
+    expect(workspace.selectedNodeId).toBe(leafId);
+    expect(favoritesStore.removeNodeFavorites).toHaveBeenCalledWith(
+      workspace.id,
+      expect.arrayContaining([middleId, artifactId])
+    );
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(leafId);
+    expect(runtimeManager.closeNodeRuntime).toHaveBeenCalledWith(middleId);
+  });
+
+  it("kills an artifact node and returns selection to its owning page", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/root",
+      input: "https://example.com/root",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = upsertArtifactNode(workspace, rootId, "download", {
+      transferId: "download-2",
+      fileName: "notes.pdf"
+    }, {
+      selectArtifact: true
+    });
+    const artifactId = workspace.selectedNodeId as string;
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => []),
+      removeNodeFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    runtimeManager.tabForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? { id: "root-tab" } : null
+    );
+    runtimeManager.currentUrlForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? "https://example.com/root" : null
+    );
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.selectNode.mockClear();
+
+    await controller.killNode(artifactId);
+
+    expect(findNode(workspace, artifactId)).toBeNull();
+    expect(workspace.selectedNodeId).toBe(rootId);
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(rootId);
+    expect(favoritesStore.removeNodeFavorites).toHaveBeenCalledWith(
+      workspace.id,
+      expect.arrayContaining([artifactId])
+    );
   });
 
   it("keeps the current page selected when creating a background child node", async () => {

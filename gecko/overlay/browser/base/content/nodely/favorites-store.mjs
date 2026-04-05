@@ -1,4 +1,10 @@
-import { removeFavorite, removeTreeFavorites, sortFavorites, toggleFavorite } from "./domain.mjs";
+import {
+  removeFavorite,
+  removeNodeFavorites,
+  removeTreeFavorites,
+  sortFavorites,
+  toggleFavorite
+} from "./domain.mjs";
 
 let inMemoryFavorites = [];
 
@@ -49,5 +55,9 @@ export class FavoritesStore {
 
   async removeTreeFavorites(workspaceId, rootId, nodeIds) {
     return this.saveFavorites(removeTreeFavorites(await this.listFavorites(), workspaceId, rootId, nodeIds));
+  }
+
+  async removeNodeFavorites(workspaceId, nodeIds) {
+    return this.saveFavorites(removeNodeFavorites(await this.listFavorites(), workspaceId, nodeIds));
   }
 }

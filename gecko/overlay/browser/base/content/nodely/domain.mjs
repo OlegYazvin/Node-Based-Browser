@@ -635,6 +635,80 @@ function reindexWorkspaceSlots(workspace) {
   };
 }
 
+function rebuildEdges(workspace, nodes) {
+  const existingEdgeByPair = new Map(
+    (workspace?.edges ?? []).map((edge) => [`${edge.source}::${edge.target}`, edge])
+  );
+  const timestamp = now();
+
+  return nodes
+    .filter((node) => node.parentId !== null)
+    .map((node) => {
+      const key = `${node.parentId}::${node.id}`;
+      return (
+        existingEdgeByPair.get(key) ?? {
+          id: makeId(),
+          source: node.parentId,
+          target: node.id,
+          createdAt: timestamp
+        }
+      );
+    });
+}
+
+function recomputeNodeDepths(nodes) {
+  const clones = nodes.map((node) => ({ ...node }));
+  const nodeById = new Map(clones.map((node) => [node.id, node]));
+  const childrenByParentId = new Map();
+
+  for (const node of clones) {
+    if (node.parentId === null) {
+      continue;
+    }
+
+    if (!childrenByParentId.has(node.parentId)) {
+      childrenByParentId.set(node.parentId, []);
+    }
+
+    childrenByParentId.get(node.parentId).push(node);
+  }
+
+  const assignDepth = (node, depth) => {
+    node.depth = depth;
+
+    const children = sortNodesForSlots(childrenByParentId.get(node.id) ?? []);
+    for (const child of children) {
+      assignDepth(child, depth + 1);
+    }
+  };
+
+  for (const rootNode of sortNodesForSlots(clones.filter((node) => node.parentId === null))) {
+    assignDepth(rootNode, 0);
+  }
+
+  return clones.map((node) => nodeById.get(node.id) ?? node);
+}
+
+function resolveExistingSelection(nodes, preferredNodeId) {
+  if (preferredNodeId && nodes.some((node) => node.id === preferredNodeId)) {
+    return preferredNodeId;
+  }
+
+  return sortNodesForSlots(nodes.filter((node) => node.parentId === null))[0]?.id ?? null;
+}
+
+function applyStructuralWorkspaceUpdate(workspace, nodes, selectedNodeId) {
+  const nextNodes = recomputeNodeDepths(nodes);
+
+  return reindexWorkspaceSlots({
+    ...workspace,
+    updatedAt: now(),
+    selectedNodeId: resolveExistingSelection(nextNodes, selectedNodeId),
+    nodes: nextNodes,
+    edges: rebuildEdges(workspace, nextNodes)
+  });
+}
+
 export function renameTree(workspace, rootId, title) {
   const rootNode = findNode(workspace, rootId);
 
@@ -658,19 +732,89 @@ export function removeTree(workspace, rootId) {
   }
 
   const nextNodes = workspace.nodes.filter((node) => !removedNodeIds.has(node.id));
-  const nextEdges = workspace.edges.filter((edge) => !removedNodeIds.has(edge.source) && !removedNodeIds.has(edge.target));
   const nextSelectedNodeId =
     workspace.selectedNodeId && removedNodeIds.has(workspace.selectedNodeId)
       ? sortNodesForSlots(nextNodes.filter((node) => node.parentId === null))[0]?.id ?? null
       : workspace.selectedNodeId;
 
-  return reindexWorkspaceSlots({
-    ...workspace,
-    updatedAt: now(),
-    selectedNodeId: nextSelectedNodeId,
-    nodes: nextNodes,
-    edges: nextEdges
-  });
+  return applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId);
+}
+
+export function killNode(workspace, nodeId) {
+  const node = findNode(workspace, nodeId);
+
+  if (!node || node.parentId === null) {
+    return {
+      workspace,
+      removedNodeIds: []
+    };
+  }
+
+  if (isArtifactNode(node)) {
+    const removedNodeIds = [node.id];
+    const owningPageNode = findOwningPageNode(workspace, node);
+    const nextSelectedNodeId =
+      workspace.selectedNodeId && removedNodeIds.includes(workspace.selectedNodeId)
+        ? owningPageNode?.id ?? workspace.selectedNodeId
+        : workspace.selectedNodeId;
+    const nextNodes = workspace.nodes.filter((candidate) => candidate.id !== node.id);
+
+    return {
+      workspace: applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId),
+      removedNodeIds
+    };
+  }
+
+  const pageChildren = sortNodesForSlots(findPageChildren(workspace, node.id));
+  const artifactChildren = sortNodesForSlots(findArtifactChildren(workspace, node.id));
+  const removedNodeIds = [node.id, ...artifactChildren.map((childNode) => childNode.id)];
+  const removedNodeIdSet = new Set(removedNodeIds);
+  const siblingPageNodes = sortNodesForSlots(findPageChildren(workspace, node.parentId));
+  const insertionIndex = Math.max(
+    0,
+    siblingPageNodes.findIndex((siblingNode) => siblingNode.id === node.id)
+  );
+  const remainingSiblings = siblingPageNodes.filter((siblingNode) => siblingNode.id !== node.id);
+  const promotedChildren = [
+    ...remainingSiblings.slice(0, insertionIndex),
+    ...pageChildren,
+    ...remainingSiblings.slice(insertionIndex)
+  ];
+  const parentSlotByNodeId = new Map(
+    promotedChildren.map((childNode, index) => [childNode.id, index])
+  );
+  const promotedChildIdSet = new Set(pageChildren.map((childNode) => childNode.id));
+  const nextNodes = workspace.nodes
+    .filter((candidate) => !removedNodeIdSet.has(candidate.id))
+    .map((candidate) => {
+      const nextNode =
+        promotedChildIdSet.has(candidate.id)
+          ? {
+              ...candidate,
+              parentId: node.parentId
+            }
+          : candidate;
+
+      if (nextNode.parentId === node.parentId && parentSlotByNodeId.has(nextNode.id)) {
+        return {
+          ...nextNode,
+          slotIndex: parentSlotByNodeId.get(nextNode.id)
+        };
+      }
+
+      return nextNode;
+    });
+  const fallbackSelection =
+    pageChildren.length === 1 ? pageChildren[0]?.id ?? node.parentId : node.parentId;
+  const nextSelectedNodeId =
+    workspace.selectedNodeId && removedNodeIdSet.has(workspace.selectedNodeId)
+      ? fallbackSelection
+      : workspace.selectedNodeId;
+
+  return {
+    workspace: applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId),
+    removedNodeIds
+  };
 }
 
 export function selectNode(workspace, nodeId) {
@@ -1376,6 +1520,18 @@ export function removeTreeFavorites(entries, workspaceId, rootId, nodeIds) {
 
       return !(entry.nodeId && removedNodeIds.has(entry.nodeId));
     })
+  );
+}
+
+export function removeNodeFavorites(entries, workspaceId, nodeIds) {
+  const removedNodeIdSet = new Set(nodeIds);
+
+  return sortFavorites(
+    entries.filter(
+      (entry) =>
+        entry.workspaceId !== workspaceId ||
+        !(entry.nodeId && removedNodeIdSet.has(entry.nodeId))
+    )
   );
 }
 

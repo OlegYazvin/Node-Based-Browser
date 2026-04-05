@@ -9,6 +9,7 @@ export const repositoryRoot = path.resolve(scriptDirectory, "..");
 export const geckoReleaseDirectory = path.join(repositoryRoot, "gecko", "release-artifacts");
 export const installerDirectory = path.join(repositoryRoot, "Installer");
 export const outMakeDirectory = path.join(repositoryRoot, "out", "make");
+export const installerReadmeName = "README.MD";
 
 const platformAliases = {
   linux: "linux",
@@ -26,11 +27,48 @@ const archAliases = {
 };
 
 const linuxVariantCompatibility = {
-  generic: ["Ubuntu", "Debian", "Fedora", "openSUSE", "other common desktop Linux distros"],
+  generic: ["Ubuntu", "Debian", "Fedora", "Linux Mint", "other common desktop Linux distros"],
+  flatpak: ["Linux Mint", "Fedora", "Ubuntu", "Debian", "other Flatpak-enabled Linux distros"],
+  debian: ["Debian"],
+  ubuntu: ["Ubuntu"],
+  fedora: ["Fedora"],
   deb: ["Ubuntu", "Debian", "Linux Mint", "Pop!_OS", "other Debian-family Linux distros"],
   rpm: ["Fedora", "RHEL", "Rocky Linux", "openSUSE", "other RPM-family Linux distros"],
   appimage: ["Most common desktop Linux distributions with FUSE/AppImage support"]
 };
+
+const installerSupportSections = [
+  {
+    platform: "win32",
+    arch: "x64",
+    title: "Windows 10 and 11",
+    description: "Use this on Intel/AMD Windows 10 or Windows 11 PCs."
+  },
+  {
+    platform: "darwin",
+    arch: "x64",
+    title: "macOS Intel",
+    description: "Use this on Intel Macs."
+  },
+  {
+    platform: "darwin",
+    arch: "arm64",
+    title: "macOS Apple Silicon",
+    description: "Use this on Apple Silicon Macs."
+  },
+  {
+    platform: "linux",
+    arch: "x64",
+    title: "Linux x64",
+    description: "Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/AMD processors."
+  },
+  {
+    platform: "linux",
+    arch: "arm64",
+    title: "Linux arm64",
+    description: "Use this only on ARM64 Linux hardware."
+  }
+];
 
 export function normalizePlatform(platform) {
   return platformAliases[platform] ?? platform;
@@ -127,11 +165,12 @@ export async function readInstallerManifest(targetDirectory = installerDirectory
   }
 }
 
-export function classifyInstallerFile(fileName, platform) {
+export function classifyInstallerFile(fileName, platform, arch = null) {
   const extension = path.extname(fileName).toLowerCase();
+  const lowerFileName = fileName.toLowerCase();
 
   if (platform === "linux") {
-    if (fileName.toLowerCase().endsWith(".appimage")) {
+    if (lowerFileName.endsWith(".appimage")) {
       return {
         variant: "appimage",
         distribution: "generic",
@@ -139,15 +178,47 @@ export function classifyInstallerFile(fileName, platform) {
       };
     }
 
+    if (extension === ".flatpak") {
+      return {
+        variant: "flatpak",
+        distribution: "flatpak",
+        compatibility: linuxVariantCompatibility.flatpak
+      };
+    }
+
     if (extension === ".deb") {
+      if (lowerFileName.includes("ubuntu")) {
+        return {
+          variant: "deb",
+          distribution: "ubuntu",
+          compatibility: linuxVariantCompatibility.ubuntu
+        };
+      }
+
+      if (lowerFileName.includes("debian")) {
+        return {
+          variant: "deb",
+          distribution: "debian",
+          compatibility: linuxVariantCompatibility.debian
+        };
+      }
+
       return {
         variant: "deb",
-        distribution: "debian",
+        distribution: "debian-family",
         compatibility: linuxVariantCompatibility.deb
       };
     }
 
     if (extension === ".rpm") {
+      if (lowerFileName.includes("fedora")) {
+        return {
+          variant: "rpm",
+          distribution: "fedora",
+          compatibility: linuxVariantCompatibility.fedora
+        };
+      }
+
       return {
         variant: "rpm",
         distribution: "rpm",
@@ -173,10 +244,13 @@ export function classifyInstallerFile(fileName, platform) {
   }
 
   if (platform === "darwin" && (extension === ".dmg" || extension === ".pkg")) {
+    const compatibility =
+      arch === "x64" ? ["macOS Intel"] : arch === "arm64" ? ["macOS Apple Silicon"] : ["macOS"];
+
     return {
       variant: extension.slice(1),
       distribution: "macos",
-      compatibility: ["macOS"]
+      compatibility
     };
   }
 
@@ -212,6 +286,135 @@ export async function listInstallerOutputs(platform, arch, makeDirectory = outMa
     .map((entry) => path.join(platformDirectory, entry.name));
 }
 
+function installerDisplayType(entry) {
+  if (entry.platform === "linux") {
+    if (entry.variant === "generic") {
+      return "Self-extracting installer (`.run`)";
+    }
+
+    if (entry.variant === "flatpak") {
+      return "Flatpak bundle";
+    }
+
+    if (entry.variant === "rpm") {
+      return entry.distribution === "fedora" ? "Fedora RPM package" : "RPM package";
+    }
+
+    if (entry.variant === "deb") {
+      if (entry.distribution === "ubuntu") {
+        return "Ubuntu DEB package";
+      }
+
+      if (entry.distribution === "debian") {
+        return "Debian DEB package";
+      }
+
+      return "DEB package";
+    }
+  }
+
+  if (entry.platform === "win32") {
+    return "Windows installer (`.exe`)";
+  }
+
+  if (entry.platform === "darwin") {
+    return entry.variant === "pkg" ? "macOS package installer (`.pkg`)" : "macOS disk image (`.dmg`)";
+  }
+
+  return entry.variant;
+}
+
+function installerSupportText(entry) {
+  const systems = Array.isArray(entry.compatibility) && entry.compatibility.length ? entry.compatibility.join(", ") : "Supported systems";
+
+  if (entry.platform === "linux") {
+    return `${systems}; ${entry.arch} only`;
+  }
+
+  if (entry.platform === "win32") {
+    return `${systems}; x64 only`;
+  }
+
+  return systems;
+}
+
+function installerLinkPath(relativePath) {
+  return relativePath.replaceAll("\\", "/");
+}
+
+export function renderInstallerReadme(manifest) {
+  const installers = [...(manifest.installers ?? [])].sort((left, right) => {
+    const platformOrder = ["win32", "darwin", "linux"];
+    const archOrder = ["x64", "arm64"];
+    const leftPlatformIndex = platformOrder.indexOf(left.platform);
+    const rightPlatformIndex = platformOrder.indexOf(right.platform);
+
+    if (leftPlatformIndex !== rightPlatformIndex) {
+      return leftPlatformIndex - rightPlatformIndex;
+    }
+
+    const leftArchIndex = archOrder.indexOf(left.arch);
+    const rightArchIndex = archOrder.indexOf(right.arch);
+
+    if (leftArchIndex !== rightArchIndex) {
+      return leftArchIndex - rightArchIndex;
+    }
+
+    return left.fileName.localeCompare(right.fileName);
+  });
+
+  const sections = installerSupportSections
+    .map((section) => {
+      const sectionInstallers = installers.filter(
+        (entry) => entry.platform === section.platform && entry.arch === section.arch
+      );
+
+      const lines = [`## ${section.title}`, "", section.description, ""];
+
+      if (!sectionInstallers.length) {
+        lines.push("No installers are currently staged in this repo for this target.", "");
+        return lines.join("\n");
+      }
+
+      lines.push("| File | Type | Supported systems |");
+      lines.push("| --- | --- | --- |");
+
+      for (const entry of sectionInstallers) {
+        const linkPath = installerLinkPath(entry.path);
+        lines.push(
+          `| [${entry.fileName}](./${linkPath}) | ${installerDisplayType(entry)} | ${installerSupportText(entry)} |`
+        );
+      }
+
+      lines.push("");
+      return lines.join("\n");
+    })
+    .join("\n");
+
+  const generatedAt = manifest.generatedAt ? new Date(manifest.generatedAt).toISOString() : "unknown";
+
+  return `# Nodely Installer Guide
+
+This directory contains the installers that actually exist in this repo right now. \`Installer/manifest.json\` is the machine-readable source of truth, and this file is regenerated from that manifest.
+
+## Quick guide
+
+- Use **Linux x64** on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs.
+- Use **Linux arm64** only on ARM64 Linux hardware.
+- Windows and macOS installers are produced on native GitHub Actions runners and only show up here after a real native build has been promoted into this directory.
+- If a section below says no installers are staged, there is nothing in this repo for that target today.
+- First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
+
+Generated from \`Installer/manifest.json\` at ${generatedAt}.
+
+${sections}`.trimEnd() + "\n";
+}
+
+async function writeInstallerReadme(targetDirectory, manifest) {
+  const readmePath = path.join(targetDirectory, installerReadmeName);
+  await writeFile(readmePath, renderInstallerReadme(manifest), "utf8");
+}
+
 export async function syncInstallers({
   platform,
   arch,
@@ -231,37 +434,23 @@ export async function syncInstallers({
 
   await ensureDirectory(targetDirectory);
   const manifest = await readInstallerManifest(targetDirectory);
-  const nextInstallers = [...manifest.installers];
+  const nextInstallers = manifest.installers.filter(
+    (entry) => !(entry.platform === normalizedPlatform && entry.arch === normalizedArch)
+  );
+
+  for (const entry of manifest.installers) {
+    if (entry.platform === normalizedPlatform && entry.arch === normalizedArch) {
+      await rm(path.join(targetDirectory, entry.path), { force: true });
+    }
+  }
 
   for (const outputPath of outputs) {
     const fileName = path.basename(outputPath);
-    const classification = classifyInstallerFile(fileName, normalizedPlatform);
+    const classification = classifyInstallerFile(fileName, normalizedPlatform, normalizedArch);
 
     if (!classification) {
       continue;
     }
-
-    const existingEntries = nextInstallers.filter(
-      (entry) =>
-        entry.platform === normalizedPlatform &&
-        entry.arch === normalizedArch &&
-        entry.variant === classification.variant
-    );
-
-    for (const entry of existingEntries) {
-      await rm(path.join(targetDirectory, entry.path), { force: true });
-    }
-
-    const filteredInstallers = nextInstallers.filter(
-      (entry) =>
-        !(
-          entry.platform === normalizedPlatform &&
-          entry.arch === normalizedArch &&
-          entry.variant === classification.variant
-        )
-    );
-    nextInstallers.length = 0;
-    nextInstallers.push(...filteredInstallers);
 
     const relativeDestination = stagedInstallerRelativePath(normalizedPlatform, fileName);
     const destinationPath = path.join(targetDirectory, relativeDestination);
@@ -291,5 +480,6 @@ export async function syncInstallers({
   };
 
   await writeFile(path.join(targetDirectory, "manifest.json"), `${JSON.stringify(nextManifest, null, 2)}\n`, "utf8");
+  await writeInstallerReadme(targetDirectory, nextManifest);
   return nextManifest;
 }

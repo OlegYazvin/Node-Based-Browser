@@ -1,6 +1,55 @@
 {
-  "generatedAt": "2026-04-03T22:48:39.155Z",
+  "generatedAt": "2026-04-05T14:14:43.586Z",
   "installers": [
+    {
+      "version": "0.1.0",
+      "platform": "linux",
+      "arch": "arm64",
+      "variant": "deb",
+      "distribution": "debian",
+      "compatibility": [
+        "Debian"
+      ],
+      "path": "linux/Nodely-Browser-0.1.0-debian-arm64.deb",
+      "fileName": "Nodely-Browser-0.1.0-debian-arm64.deb",
+      "source": "out/make/linux/arm64/Nodely-Browser-0.1.0-debian-arm64.deb",
+      "size": 68544040,
+      "syncedAt": "2026-04-05T14:14:43.567Z"
+    },
+    {
+      "version": "0.1.0",
+      "platform": "linux",
+      "arch": "arm64",
+      "variant": "rpm",
+      "distribution": "fedora",
+      "compatibility": [
+        "Fedora"
+      ],
+      "path": "linux/Nodely-Browser-0.1.0-fedora-arm64.rpm",
+      "fileName": "Nodely-Browser-0.1.0-fedora-arm64.rpm",
+      "source": "out/make/linux/arm64/Nodely-Browser-0.1.0-fedora-arm64.rpm",
+      "size": 76941064,
+      "syncedAt": "2026-04-05T14:14:43.569Z"
+    },
+    {
+      "version": "0.1.0",
+      "platform": "linux",
+      "arch": "arm64",
+      "variant": "flatpak",
+      "distribution": "flatpak",
+      "compatibility": [
+        "Linux Mint",
+        "Fedora",
+        "Ubuntu",
+        "Debian",
+        "other Flatpak-enabled Linux distros"
+      ],
+      "path": "linux/Nodely-Browser-0.1.0-linux-arm64.flatpak",
+      "fileName": "Nodely-Browser-0.1.0-linux-arm64.flatpak",
+      "source": "out/make/linux/arm64/Nodely-Browser-0.1.0-linux-arm64.flatpak",
+      "size": 67600592,
+      "syncedAt": "2026-04-05T14:14:43.584Z"
+    },
     {
       "version": "0.1.0",
       "platform": "linux",
@@ -11,14 +60,29 @@
         "Ubuntu",
         "Debian",
         "Fedora",
-        "openSUSE",
+        "Linux Mint",
         "other common desktop Linux distros"
       ],
       "path": "linux/Nodely-Browser-0.1.0-linux-arm64.run",
       "fileName": "Nodely-Browser-0.1.0-linux-arm64.run",
       "source": "out/make/linux/arm64/Nodely-Browser-0.1.0-linux-arm64.run",
-      "size": 66590769,
-      "syncedAt": "2026-04-03T22:48:39.155Z"
+      "size": 66591056,
+      "syncedAt": "2026-04-05T14:14:43.585Z"
+    },
+    {
+      "version": "0.1.0",
+      "platform": "linux",
+      "arch": "arm64",
+      "variant": "deb",
+      "distribution": "ubuntu",
+      "compatibility": [
+        "Ubuntu"
+      ],
+      "path": "linux/Nodely-Browser-0.1.0-ubuntu-arm64.deb",
+      "fileName": "Nodely-Browser-0.1.0-ubuntu-arm64.deb",
+      "source": "out/make/linux/arm64/Nodely-Browser-0.1.0-ubuntu-arm64.deb",
+      "size": 68543634,
+      "syncedAt": "2026-04-05T14:14:43.586Z"
     }
   ]
 }

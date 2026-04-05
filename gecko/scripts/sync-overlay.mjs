@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -50,6 +50,15 @@ function parseArguments(argv) {
 
 function ensureDirectory(targetDirectory) {
   mkdirSync(targetDirectory, { recursive: true });
+}
+
+function removeFileIfPresent(targetPath) {
+  if (!existsSync(targetPath)) {
+    return;
+  }
+
+  rmSync(targetPath, { force: true });
+  console.log(`removed stale file: ${path.relative(repositoryRoot, targetPath)}`);
 }
 
 function copyDirectory(sourceDirectory, targetDirectory) {
@@ -188,7 +197,10 @@ function ensureJarManifestPatched(checkoutDir) {
 
   patchFile(jarManifestPath, "browser/base/jar.mn nodely files", (contents) => {
     if (contents.includes("content/browser/nodely/nodely-bootstrap.mjs")) {
-      return contents;
+      return contents.replace(
+        "        content/browser/nodely/window-context.mjs        (content/nodely/window-context.mjs)\n",
+        ""
+      );
     }
 
     const insertionPoint = "        content/browser/contentTheme.js                     (content/contentTheme.js)\n";
@@ -299,6 +311,7 @@ function syncOverlay({ checkoutDir }) {
   }
 
   copyDirectory(overlayRoot, checkoutDir);
+  removeFileIfPresent(path.join(checkoutDir, "browser", "base", "content", "nodely", "window-context.mjs"));
   ensureBrowserXhtmlPatched(checkoutDir);
   ensureJarManifestPatched(checkoutDir);
   ensureBrowserBaseMozbuildPatched(checkoutDir);

@@ -10,6 +10,7 @@ import {
   findRoots,
   isFreshRootNode,
   isArtifactNode,
+  killNode as removeNodeFromWorkspace,
   relayoutWorkspace,
   removeTree,
   renameTree,
@@ -52,7 +53,10 @@ export class ChromeStateController extends EventTarget {
     };
     this.runtimeManager.callbacks.onNodeMetaChanged = (nodeId, metadata) => this.handleNodeMetaChanged(nodeId, metadata);
     this.runtimeManager.callbacks.onNodeSelected = (nodeId) => this.handleRuntimeNodeSelected(nodeId);
+    this.runtimeManager.callbacks.onForeignOpenPending = (details) => this.handleForeignOpenPending(details);
+    this.runtimeManager.callbacks.onForeignOpenCancelled = (details) => this.handleForeignOpenCancelled(details);
     this.runtimeManager.callbacks.onForeignTabOpen = (tab, details) => this.handleForeignTabOpen(tab, details);
+    this.runtimeManager.callbacks.onTransientAuthChanged = (details) => this.handleTransientAuthChanged(details);
   }
 
   trace(stage, details = {}) {
@@ -298,6 +302,21 @@ export class ChromeStateController extends EventTarget {
     });
   }
 
+  handleForeignOpenPending(details) {
+    this.trace("foreign-open-pending", {
+      kind: details?.kind ?? "tab",
+      parentNodeId: details?.parentNodeId ?? null,
+      background: details?.background === true
+    });
+  }
+
+  handleForeignOpenCancelled(details) {
+    this.trace("foreign-open-cancelled", {
+      kind: details?.kind ?? "tab",
+      parentNodeId: details?.parentNodeId ?? null
+    });
+  }
+
   async updateNodePosition(nodeId, position) {
     const nextWorkspace = {
       ...this.workspace,
@@ -328,6 +347,41 @@ export class ChromeStateController extends EventTarget {
     await this.favoritesStore.removeTreeFavorites(this.workspace.id, rootId, treeNodeIds);
     this.favorites = await this.favoritesStore.listFavorites();
     await this.persistWorkspace(removeTree(this.workspace, rootId));
+  }
+
+  async killNode(nodeId = this.workspace?.selectedNodeId) {
+    const node = findNode(this.workspace, nodeId);
+
+    if (!node) {
+      return;
+    }
+
+    if (node.parentId === null) {
+      await this.deleteTree(node.id);
+      return;
+    }
+
+    const { workspace: nextWorkspace, removedNodeIds } = removeNodeFromWorkspace(this.workspace, node.id);
+
+    if (!removedNodeIds.length) {
+      return;
+    }
+
+    this.favorites = await this.favoritesStore.removeNodeFavorites(this.workspace.id, removedNodeIds);
+    const persistedWorkspace = await this.persistWorkspace(relayoutWorkspace(nextWorkspace));
+    const selectedNode = findNode(persistedWorkspace, persistedWorkspace.selectedNodeId);
+
+    if (persistedWorkspace.prefs.surfaceMode === "page" && selectedNode && !isArtifactNode(selectedNode)) {
+      await this.ensureNodeRuntime(selectedNode);
+    }
+
+    await this.refreshSelectedPermissions(persistedWorkspace, selectedNode);
+    this.runtimeManager.closeNodeRuntime(node.id);
+    this.trace("kill-node", {
+      nodeId: node.id,
+      removedNodeIds,
+      selectedNodeId: persistedWorkspace.selectedNodeId
+    });
   }
 
   async togglePageFavorite() {
@@ -460,8 +514,10 @@ export class ChromeStateController extends EventTarget {
       return nextWorkspace;
     }
 
-    if (surfaceMode === "page" && ensureRuntime && !fromRuntime && !isArtifactNode(selectedNode)) {
-      await this.ensureNodeRuntime(selectedNode);
+    const runtimeTarget = resolveRuntimeTarget(nextWorkspace, selectedNode);
+
+    if (surfaceMode === "page" && ensureRuntime && !fromRuntime && runtimeTarget) {
+      await this.ensureNodeRuntime(runtimeTarget);
     }
 
     await this.refreshSelectedPermissions(nextWorkspace, selectedNode);
@@ -474,6 +530,18 @@ export class ChromeStateController extends EventTarget {
     }
 
     if (this.runtimeManager.tabForNode(node.id)) {
+      const currentUrl = this.runtimeManager.currentUrlForNode?.(node.id) ?? null;
+
+      if (node.url && !urlsMatchForRuntime(currentUrl, node.url)) {
+        this.runtimeManager.loadNode(node, node.url);
+        this.trace("ensure-runtime:reload-existing", {
+          nodeId: node.id,
+          currentUrl,
+          url: node.url
+        });
+        return;
+      }
+
       this.runtimeManager.selectNode(node.id);
       this.trace("ensure-runtime:select-existing", {
         nodeId: node.id
@@ -655,6 +723,18 @@ export class ChromeStateController extends EventTarget {
     this.emitStateChange();
   }
 
+  handleTransientAuthChanged(transientAuth) {
+    this.chrome = {
+      ...this.chrome,
+      transientAuth: transientAuth?.open ? transientAuth : null
+    };
+    this.emitStateChange();
+
+    if (!transientAuth?.open && transientAuth?.parentNodeId) {
+      this.runtimeManager.selectNode(transientAuth.parentNodeId);
+    }
+  }
+
   handleExternalProtocolChanged(externalProtocol) {
     this.chrome = {
       ...this.chrome,
@@ -809,6 +889,7 @@ function createChromeState() {
       closedWindows: [],
       lastSessionWindows: []
     },
+    transientAuth: null,
     authPrompt: null,
     externalProtocol: null
   };
@@ -854,6 +935,28 @@ function hasMeaningfulNodeMetadataChange(node, metadata) {
   }
 
   return false;
+}
+
+function resolveRuntimeTarget(workspace, selectedNode) {
+  return isArtifactNode(selectedNode) ? findOwningPageNode(workspace, selectedNode) : selectedNode;
+}
+
+function normalizeUrlForRuntime(url) {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return String(url);
+  }
+}
+
+function urlsMatchForRuntime(left, right) {
+  return normalizeUrlForRuntime(left) === normalizeUrlForRuntime(right);
 }
 
 function normalizedUrl(url) {

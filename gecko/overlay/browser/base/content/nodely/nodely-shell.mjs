@@ -169,7 +169,9 @@ export class NodelyShell extends HTMLElement {
     this.treesDrawer.addEventListener("submit", (event) => this.handleTreesSubmit(event));
     this.artifactSurface.addEventListener("click", (event) => this.handleArtifactSurfaceClick(event));
     this.promptStack.addEventListener("click", (event) => this.handlePromptStackClick(event));
-    this.graph.addEventListener("nodely-select-node", (event) => this.controller?.selectNode(event.detail.nodeId));
+    this.graph.addEventListener("nodely-select-node", (event) => {
+      void this.openNodeFromGraph(event.detail.nodeId);
+    });
     this.graph.addEventListener("nodely-node-moved", (event) => this.controller?.updateNodePosition(event.detail.nodeId, event.detail.position));
     this.graph.addEventListener("nodely-viewport-change", (event) => this.controller?.setViewport(event.detail.viewport));
     this.graph.addEventListener("nodely-open-composer", () => {
@@ -267,6 +269,22 @@ export class NodelyShell extends HTMLElement {
     this.printSheetOpen = true;
     this.render();
     return true;
+  }
+
+  async openNodeFromGraph(nodeId) {
+    if (!nodeId || !this.controller) {
+      return;
+    }
+
+    const workspace = this.state.workspace;
+
+    if (workspace?.prefs.surfaceMode === "canvas") {
+      this.closeInlinePanels();
+      this.drawer = null;
+      await this.controller.setSurfaceMode("page");
+    }
+
+    await this.controller.selectNode(nodeId);
   }
 
   dismissTransientUi() {
@@ -458,6 +476,17 @@ export class NodelyShell extends HTMLElement {
       title: "Return to the canvas",
       html: `${iconCanvas()}<span>Canvas</span>`
     });
+    const selectedNodeActions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__inline-actions");
+    selectedNodeActions.append(closeSurfaceButton);
+
+    if (selectedNode.parentId !== null) {
+      selectedNodeActions.append(
+        createActionButton(this.ownerDocument, "Kill Node", "nodely-shell__drawer-pill is-danger", {
+          action: "kill-node",
+          dataset: { nodeId: selectedNode.id }
+        })
+      );
+    }
 
     if (isArtifactNode(selectedNode)) {
       const artifactBar = createHtmlElement(this.ownerDocument, "div", "nodely-shell__artifact-bar");
@@ -488,7 +517,7 @@ export class NodelyShell extends HTMLElement {
       );
 
       artifactBar.append(artifactSummary, artifactActions);
-      pageActionsHeader.append(artifactBar, closeSurfaceButton);
+      pageActionsHeader.append(artifactBar, selectedNodeActions);
       pageActions.append(pageActionsHeader);
     } else {
       const surfaceMain = createHtmlElement(this.ownerDocument, "div", "nodely-shell__page-surface-main");
@@ -565,7 +594,7 @@ export class NodelyShell extends HTMLElement {
       );
 
       surfaceMain.append(navGroup, addressForm);
-      pageActionsHeader.append(surfaceMain, closeSurfaceButton);
+      pageActionsHeader.append(surfaceMain, selectedNodeActions);
       pageActions.append(pageActionsHeader);
 
       if (this.permissionsPanelOpen) {
@@ -750,6 +779,10 @@ export class NodelyShell extends HTMLElement {
       createActionButton(this.ownerDocument, parentPage ? "Open Source Page" : "Source Missing", "nodely-shell__button", {
         action: "show-artifact-source",
         disabled: !parentPage
+      }),
+      createActionButton(this.ownerDocument, "Kill Node", "nodely-shell__drawer-pill is-danger", {
+        action: "kill-node",
+        dataset: { nodeId: selectedNode.id }
       })
     );
 
@@ -1027,15 +1060,41 @@ export class NodelyShell extends HTMLElement {
   renderPromptStack() {
     this.promptStack.replaceChildren();
 
+    const transientAuth = this.state.chrome?.transientAuth ?? null;
     const authPrompt = this.state.chrome?.authPrompt ?? null;
     const externalProtocol = this.state.chrome?.externalProtocol ?? null;
 
-    if (!authPrompt && !externalProtocol) {
+    if (!transientAuth && !authPrompt && !externalProtocol) {
       this.promptStack.hidden = true;
       return;
     }
 
     this.promptStack.hidden = false;
+
+    if (transientAuth) {
+      this.promptStack.append(
+        createPromptCard(this.ownerDocument, {
+          title: "Authentication Flow",
+          body:
+            transientAuth.url ??
+            transientAuth.title ??
+            "A sign-in popup is open for the current page.",
+          secondary:
+            transientAuth.parentNodeId != null
+              ? "Nodely is keeping this auth flow out of the graph and will return you to the opener node."
+              : "Nodely is keeping this auth flow out of the graph.",
+          action:
+            transientAuth.parentNodeId != null
+              ? {
+                  label: "Show Node",
+                  action: "show-node",
+                  dataset: { nodeId: transientAuth.parentNodeId }
+                }
+              : null,
+          icon: iconWarning()
+        })
+      );
+    }
 
     if (authPrompt) {
       this.promptStack.append(
@@ -1396,6 +1455,11 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if (action === "kill-node") {
+      this.controller?.killNode(button.dataset.nodeId);
+      return;
+    }
+
     if (action === "set-view") {
       this.controller?.setViewMode(button.dataset.view);
       return;
@@ -1408,7 +1472,7 @@ export class NodelyShell extends HTMLElement {
     }
 
     if (action === "select-node") {
-      this.controller?.selectNode(button.dataset.nodeId);
+      void this.openNodeFromGraph(button.dataset.nodeId);
       return;
     }
 
@@ -1558,6 +1622,9 @@ export class NodelyShell extends HTMLElement {
         break;
       case "show-artifact-source":
         this.controller?.showSelectedArtifactSource();
+        break;
+      case "kill-node":
+        this.controller?.killNode(button.dataset.nodeId);
         break;
       default:
         break;

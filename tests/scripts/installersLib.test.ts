@@ -1,0 +1,115 @@
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import { renderInstallerReadme, syncInstallers } from "../../scripts/installers-lib.mjs";
+
+describe("installers-lib", () => {
+  it("renders a support matrix from the installer manifest", () => {
+    const readme = renderInstallerReadme({
+      generatedAt: "2026-04-05T00:00:00.000Z",
+      installers: [
+        {
+          version: "0.1.0",
+          platform: "linux",
+          arch: "arm64",
+          variant: "generic",
+          distribution: "generic",
+          compatibility: ["Ubuntu", "Debian"],
+          path: "linux/Nodely-Browser-0.1.0-linux-arm64.run",
+          fileName: "Nodely-Browser-0.1.0-linux-arm64.run",
+          source: "out/make/linux/arm64/Nodely-Browser-0.1.0-linux-arm64.run",
+          size: 7,
+          syncedAt: "2026-04-05T00:00:00.000Z"
+        },
+        {
+          version: "0.1.0",
+          platform: "darwin",
+          arch: "arm64",
+          variant: "dmg",
+          distribution: "macos",
+          compatibility: ["macOS Apple Silicon"],
+          path: "macos/Nodely-Browser-0.1.0-macos-arm64.dmg",
+          fileName: "Nodely-Browser-0.1.0-macos-arm64.dmg",
+          source: "out/make/darwin/arm64/Nodely-Browser-0.1.0-macos-arm64.dmg",
+          size: 9,
+          syncedAt: "2026-04-05T00:00:00.000Z"
+        }
+      ]
+    });
+
+    expect(readme).toContain("## Windows 10 and 11");
+    expect(readme).toContain("No installers are currently staged in this repo for this target.");
+    expect(readme).toContain("[Nodely-Browser-0.1.0-linux-arm64.run](./linux/Nodely-Browser-0.1.0-linux-arm64.run)");
+    expect(readme).toContain("Ubuntu, Debian; arm64 only");
+    expect(readme).toContain("macOS Apple Silicon");
+  });
+
+  it("replaces stale installer entries for the synced platform and architecture", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-installers-lib-"));
+    const makeDirectory = path.join(tempDirectory, "out", "make");
+    const targetDirectory = path.join(tempDirectory, "Installer");
+
+    try {
+      await mkdir(path.join(makeDirectory, "linux", "arm64"), { recursive: true });
+      await writeFile(
+        path.join(makeDirectory, "linux", "arm64", "Nodely-Browser-0.1.0-linux-arm64.run"),
+        "payload",
+        "utf8"
+      );
+
+      await mkdir(path.join(targetDirectory, "linux"), { recursive: true });
+      await writeFile(
+        path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-debian-arm64.deb"),
+        "stale",
+        "utf8"
+      );
+      await writeFile(
+        path.join(targetDirectory, "manifest.json"),
+        `${JSON.stringify(
+          {
+            generatedAt: "2026-04-04T00:00:00.000Z",
+            installers: [
+              {
+                version: "0.1.0",
+                platform: "linux",
+                arch: "arm64",
+                variant: "deb",
+                distribution: "debian",
+                compatibility: ["Debian"],
+                path: "linux/Nodely-Browser-0.1.0-debian-arm64.deb",
+                fileName: "Nodely-Browser-0.1.0-debian-arm64.deb",
+                source: "out/make/linux/arm64/Nodely-Browser-0.1.0-debian-arm64.deb",
+                size: 5,
+                syncedAt: "2026-04-04T00:00:00.000Z"
+              }
+            ]
+          },
+          null,
+          2
+        )}\n`,
+        "utf8"
+      );
+
+      const manifest = await syncInstallers({
+        platform: "linux",
+        arch: "arm64",
+        makeDirectory,
+        targetDirectory
+      });
+
+      expect(manifest.installers).toHaveLength(1);
+      expect(manifest.installers[0].fileName).toBe("Nodely-Browser-0.1.0-linux-arm64.run");
+      await expect(
+        access(path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-debian-arm64.deb"))
+      ).rejects.toThrow();
+
+      const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
+      expect(readme).toContain("Nodely-Browser-0.1.0-linux-arm64.run");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+});

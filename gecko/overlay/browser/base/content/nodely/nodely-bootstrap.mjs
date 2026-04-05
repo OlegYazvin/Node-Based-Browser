@@ -1,7 +1,7 @@
 import { BrowserBasicsBridge } from "./browser-basics-bridge.mjs";
 import { ChromeStateController } from "./chrome-state-controller.mjs";
 import { FavoritesStore } from "./favorites-store.mjs";
-import { NodeRuntimeManager } from "./node-runtime-manager.mjs";
+import { describeNodelyShellEligibility, NodeRuntimeManager } from "./node-runtime-manager.mjs";
 import "./nodely-shell.mjs";
 import { WorkspaceStore } from "./workspace-store.mjs";
 
@@ -87,11 +87,24 @@ function shellEnabledPref() {
 
 function shouldEnableNodelyShell() {
   if (!shellEnabledPref()) {
+    document.documentElement?.setAttribute("nodely-bootstrap-reason", "pref-disabled");
+    return false;
+  }
+
+  const eligibility = describeNodelyShellEligibility(window, document);
+  document.documentElement?.setAttribute("nodely-bootstrap-reason", eligibility.reason);
+
+  if (!eligibility.enabled) {
     return false;
   }
 
   if ((typeof Cu !== "undefined" && Cu?.isInAutomation) || marionetteEnabled()) {
-    return testingEnabled();
+    const enabledForTests = testingEnabled();
+    document.documentElement?.setAttribute(
+      "nodely-bootstrap-reason",
+      enabledForTests ? "automation-testing" : "automation-disabled"
+    );
+    return enabledForTests;
   }
 
   return true;

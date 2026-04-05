@@ -1,6 +1,18 @@
 #!/usr/bin/env node
 
-import { access, constants, copyFile, lstat, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import {
+  access,
+  chmod,
+  constants,
+  copyFile,
+  lstat,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -8,8 +20,10 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(geckoRoot, "..");
+const nodelyIconSvgPath = path.join(repositoryRoot, "desktop", "nodely-icon.svg");
 
 const NODELY_APP_ID = "{a75f9f03-78b1-4c8a-a2c7-f12d45088b29}";
+const RASTER_ICON_SIZES = [16, 32, 48, 64, 128, 256];
 
 function usage() {
   console.log(`Usage: node gecko/scripts/refresh-artifact-branding.mjs [options]
@@ -54,6 +68,46 @@ async function exists(targetPath) {
   }
 }
 
+async function removeIfPresent(targetPath) {
+  if (!(await exists(targetPath))) {
+    return false;
+  }
+
+  await rm(targetPath, {
+    force: true,
+    recursive: true
+  });
+  return true;
+}
+
+async function run(command, args, { cwd = repositoryRoot, stdio = "ignore" } = {}) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio
+    });
+
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`${command} ${args.join(" ")} failed with exit code ${code ?? 1}`));
+    });
+  });
+}
+
+async function commandExists(command) {
+  try {
+    await run("bash", ["-lc", `command -v ${command}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function ensureAlias(directory, aliasName, sourceName) {
   const sourcePath = path.join(directory, sourceName);
 
@@ -79,6 +133,58 @@ async function ensureAlias(directory, aliasName, sourceName) {
     await copyFile(sourcePath, aliasPath);
   }
 
+  return true;
+}
+
+function nodelyVersionWrapper(targetName) {
+  return `#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(cd -- "$(dirname -- "\${BASH_SOURCE[0]}")" && pwd)
+target="$script_dir/${targetName}"
+
+if [[ "\${1:-}" == "--version" || "\${1:-}" == "-v" ]]; then
+  version="$("$target" --version 2>/dev/null || true)"
+
+  if [[ -n "$version" ]]; then
+    printf '%s\\n' "$version" | sed 's/^Mozilla Firefox /Nodely /'
+    exit 0
+  fi
+fi
+
+exec "$target" "$@"
+`;
+}
+
+async function ensureVersionWrapper(directory, wrapperName, targetName) {
+  const targetPath = path.join(directory, targetName);
+
+  if (!(await exists(targetPath))) {
+    return false;
+  }
+
+  const wrapperPath = path.join(directory, wrapperName);
+  const nextContents = nodelyVersionWrapper(targetName);
+  const existingContents =
+    (await exists(wrapperPath)) && !(await lstat(wrapperPath)).isDirectory()
+      ? await readFile(wrapperPath, "utf8").catch(() => null)
+      : null;
+
+  if (existingContents === nextContents) {
+    await chmod(wrapperPath, 0o755).catch(() => {});
+    return false;
+  }
+
+  await rm(wrapperPath, {
+    force: true,
+    recursive: true
+  }).catch(() => {});
+  await writeFile(wrapperPath, nextContents, {
+    encoding: "utf8",
+    mode: 0o755
+  });
+  await chmod(wrapperPath, 0o755).catch(() => {});
   return true;
 }
 
@@ -115,10 +221,189 @@ async function patchIfPresent(filePath) {
   return true;
 }
 
+async function renderSvgIcon(svgPath, outputPath, size) {
+  await run("magick", [
+    "-background",
+    "none",
+    svgPath,
+    "-resize",
+    `${size}x${size}`,
+    "-gravity",
+    "center",
+    "-extent",
+    `${size}x${size}`,
+    outputPath
+  ]);
+}
+
+async function refreshRasterIconTargets(svgPath, targets) {
+  const magickAvailable = await commandExists("magick");
+
+  if (!magickAvailable) {
+    return {
+      updated: 0,
+      skipped: targets.length
+    };
+  }
+
+  let updated = 0;
+
+  for (const { outputPath, size } of targets) {
+    await renderSvgIcon(svgPath, outputPath, size);
+    updated += 1;
+  }
+
+  return {
+    updated,
+    skipped: 0
+  };
+}
+
+async function refreshIconBranding(checkoutDir) {
+  if (!(await exists(nodelyIconSvgPath))) {
+    return {
+      updated: 0,
+      skipped: 0
+    };
+  }
+
+  const targets = [
+    ...RASTER_ICON_SIZES.map((size) => ({
+      outputPath: path.join(checkoutDir, "browser", "branding", "unofficial", `default${size}.png`),
+      size
+    })),
+    ...RASTER_ICON_SIZES.filter((size) => size <= 128).map((size) => ({
+      outputPath: path.join(
+        checkoutDir,
+        "obj-nodely",
+        "dist",
+        "bin",
+        "browser",
+        "chrome",
+        "icons",
+        "default",
+        `default${size}.png`
+      ),
+      size
+    })),
+    ...RASTER_ICON_SIZES.filter((size) => size <= 128).map((size) => ({
+      outputPath: path.join(
+        checkoutDir,
+        "obj-nodely",
+        "dist",
+        "bin",
+        "browser",
+        "chrome",
+        "browser",
+        "content",
+        "branding",
+        `icon${size}.png`
+      ),
+      size
+    })),
+    ...RASTER_ICON_SIZES.filter((size) => size <= 128).map((size) => ({
+      outputPath: path.join(
+        checkoutDir,
+        "obj-nodely",
+        "dist",
+        "nodely",
+        "browser",
+        "chrome",
+        "icons",
+        "default",
+        `default${size}.png`
+      ),
+      size
+    }))
+  ].filter(({ outputPath }) => outputPath && true);
+
+  const existingTargets = [];
+
+  for (const target of targets) {
+    if (await exists(path.dirname(target.outputPath))) {
+      existingTargets.push(target);
+    }
+  }
+
+  return refreshRasterIconTargets(nodelyIconSvgPath, existingTargets);
+}
+
+async function pruneSupersededFirefoxArtifacts(checkoutDir) {
+  const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
+  const nodelyDirectory = path.join(distDirectory, "nodely");
+  const removedPaths = [];
+
+  if (!(await exists(distDirectory))) {
+    return removedPaths;
+  }
+
+  if (await exists(nodelyDirectory)) {
+    const firefoxDirectory = path.join(distDirectory, "firefox");
+
+    if (await removeIfPresent(firefoxDirectory)) {
+      removedPaths.push(firefoxDirectory);
+    }
+  }
+
+  const distEntries = await readdir(distDirectory).catch(() => []);
+
+  for (const entry of distEntries) {
+    if (!entry.startsWith("firefox-")) {
+      continue;
+    }
+
+    const nodelyEntry = `nodely-${entry.slice("firefox-".length)}`;
+    const nodelyPath = path.join(distDirectory, nodelyEntry);
+    const firefoxPath = path.join(distDirectory, entry);
+
+    if (!(await exists(nodelyPath))) {
+      continue;
+    }
+
+    if (await removeIfPresent(firefoxPath)) {
+      removedPaths.push(firefoxPath);
+    }
+  }
+
+  return removedPaths;
+}
+
+async function pruneLegacyBlinkOutputs(repositoryDirectory) {
+  const outDirectory = path.join(repositoryDirectory, "out");
+  const removedPaths = [];
+
+  if (!(await exists(outDirectory))) {
+    return removedPaths;
+  }
+
+  const outEntries = await readdir(outDirectory).catch(() => []);
+
+  for (const entry of outEntries) {
+    if (!/^Nodely Browser-/u.test(entry)) {
+      continue;
+    }
+
+    const targetPath = path.join(outDirectory, entry);
+
+    if (await removeIfPresent(targetPath)) {
+      removedPaths.push(targetPath);
+    }
+  }
+
+  return removedPaths;
+}
+
 async function refreshBranding({ checkoutDir }) {
   const distBinDir = path.join(checkoutDir, "obj-nodely", "dist", "bin");
+  const packagedNodelyDir = path.join(checkoutDir, "obj-nodely", "dist", "nodely");
+  const wrapperUpdates = process.platform === "win32"
+    ? 0
+    : [
+        await ensureVersionWrapper(distBinDir, "firefox", "firefox-bin"),
+        await ensureVersionWrapper(distBinDir, "nodely", "firefox-bin"),
+        await ensureVersionWrapper(packagedNodelyDir, "nodely", "nodely-bin")
+      ].filter(Boolean).length;
   const aliasUpdates = [
-    await ensureAlias(distBinDir, "nodely", "firefox"),
     await ensureAlias(distBinDir, "nodely-bin", "firefox-bin"),
     await ensureAlias(distBinDir, "nodely.exe", "firefox.exe"),
     await ensureAlias(distBinDir, "nodely-bin.exe", "firefox-bin.exe")
@@ -130,9 +415,12 @@ async function refreshBranding({ checkoutDir }) {
     await patchIfPresent(path.join(checkoutDir, "obj-nodely", "dist", "firefox", "application.ini")),
     await patchIfPresent(path.join(checkoutDir, "obj-nodely", "dist", "nodely", "application.ini"))
   ].filter(Boolean).length;
+  const iconRefresh = await refreshIconBranding(checkoutDir);
+  const prunedFirefoxArtifacts = await pruneSupersededFirefoxArtifacts(checkoutDir);
+  const prunedBlinkOutputs = await pruneLegacyBlinkOutputs(repositoryRoot);
 
   console.log(
-    `Refreshed artifact branding in ${checkoutDir} (${aliasUpdates} alias updates, ${applicationIniUpdates} application.ini updates).`
+    `Refreshed artifact branding in ${checkoutDir} (${wrapperUpdates} wrapper updates, ${aliasUpdates} alias updates, ${applicationIniUpdates} application.ini updates, ${iconRefresh.updated} icon refreshes, ${prunedFirefoxArtifacts.length} Firefox artifact removals, ${prunedBlinkOutputs.length} Blink artifact removals).`
   );
 }
 
