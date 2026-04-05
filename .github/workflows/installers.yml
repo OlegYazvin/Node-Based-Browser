@@ -75,6 +75,7 @@ jobs:
             podman \
             flatpak \
             pkg-config \
+            desktop-file-utils \
             libgtk-3-dev \
             libdbus-glib-1-dev \
             libxt-dev \
@@ -89,11 +90,6 @@ jobs:
 
       - name: Bootstrap Gecko ESR checkout
         run: npm run gecko:bootstrap -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
-
-      - name: Bootstrap Gecko build dependencies
-        if: matrix.platform != 'linux'
-        working-directory: ${{ runner.temp }}/firefox-esr
-        run: python ./mach bootstrap --application-choice browser_artifact_mode --no-interactive
 
       - name: Write Gecko mozconfig
         run: npm run gecko:mozconfig -- --checkout-dir "$RUNNER_TEMP/firefox-esr"

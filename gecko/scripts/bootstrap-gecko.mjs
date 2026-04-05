@@ -119,6 +119,14 @@ function prepareGitEnvironment() {
     cwd: repositoryRoot,
     stdio: "ignore"
   });
+  spawnSync("git", ["config", "--global", "core.autocrlf", "false"], {
+    cwd: repositoryRoot,
+    stdio: "ignore"
+  });
+  spawnSync("git", ["config", "--global", "core.eol", "lf"], {
+    cwd: repositoryRoot,
+    stdio: "ignore"
+  });
 }
 
 function bootstrapCheckout({ checkoutDir, ref, remote, sync, patches }) {
