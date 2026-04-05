@@ -97,7 +97,16 @@ jobs:
           fi
 
       - name: Bootstrap Gecko ESR checkout
-        run: npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+        run: |
+          set -o pipefail
+
+          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-bootstrap.log; then
+            summary="$(
+              tail -n 60 gecko-bootstrap.log | python -c 'import sys; text = sys.stdin.read(); print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), end="")'
+            )"
+            echo "::error title=Gecko bootstrap failed::$summary"
+            exit 1
+          fi
 
       - name: Write Gecko mozconfig
         run: npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
@@ -107,8 +116,18 @@ jobs:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
         run: |
-          cd "$GECKO_CHECKOUT_DIR"
-          python ./mach build faster
+          set -o pipefail
+
+          if ! (
+            cd "$GECKO_CHECKOUT_DIR"
+            python ./mach build faster
+          ) 2>&1 | tee gecko-build.log; then
+            summary="$(
+              tail -n 80 gecko-build.log | python -c 'import sys; text = sys.stdin.read(); print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), end="")'
+            )"
+            echo "::error title=Gecko overlay build failed::$summary"
+            exit 1
+          fi
 
       - name: Refresh artifact-build Nodely branding
         run: npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
