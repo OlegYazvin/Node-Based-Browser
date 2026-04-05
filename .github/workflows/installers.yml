@@ -101,40 +101,7 @@ jobs:
           set -o pipefail
 
           if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-bootstrap.log; then
-            summary="$(
-              python - <<'PY'
-import pathlib
-import re
-
-text = pathlib.Path("gecko-bootstrap.log").read_text(encoding="utf-8", errors="replace")
-lines = [line for line in text.splitlines() if line.strip()]
-patterns = [
-    r"fatal:",
-    r"error:",
-    r"denied",
-    r"unable to",
-    r"failed",
-    r"Traceback",
-]
-selected = None
-
-for pattern in patterns:
-    for index, line in enumerate(lines):
-        if re.search(pattern, line, re.IGNORECASE):
-            start = max(0, index - 8)
-            end = min(len(lines), index + 16)
-            selected = lines[start:end]
-            break
-    if selected:
-        break
-
-if not selected:
-    selected = lines[-60:]
-
-text = "\n".join(selected)
-print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), end="")
-PY
-            )"
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-bootstrap.log --mode bootstrap)"
             echo "::error title=Gecko bootstrap failed::$summary"
             exit 1
           fi
@@ -153,41 +120,7 @@ PY
             cd "$GECKO_CHECKOUT_DIR"
             python ./mach build faster
           ) 2>&1 | tee gecko-build.log; then
-            summary="$(
-              python - <<'PY'
-import pathlib
-import re
-
-text = pathlib.Path("gecko-build.log").read_text(encoding="utf-8", errors="replace")
-lines = [line for line in text.splitlines() if line.strip()]
-patterns = [
-    r"error:",
-    r"ERROR",
-    r"not all --enable",
-    r"configure:",
-    r"Traceback",
-    r"Exception",
-    r"fatal:",
-]
-selected = None
-
-for pattern in patterns:
-    for index, line in enumerate(lines):
-        if re.search(pattern, line, re.IGNORECASE):
-            start = max(0, index - 10)
-            end = min(len(lines), index + 20)
-            selected = lines[start:end]
-            break
-    if selected:
-        break
-
-if not selected:
-    selected = lines[-80:]
-
-text = "\n".join(selected)
-print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), end="")
-PY
-            )"
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-build.log --mode build)"
             echo "::error title=Gecko overlay build failed::$summary"
             exit 1
           fi
