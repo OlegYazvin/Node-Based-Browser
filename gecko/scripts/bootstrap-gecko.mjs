@@ -110,7 +110,19 @@ function resolveRemoteRef(remote, ref) {
   return ref;
 }
 
+function prepareGitEnvironment() {
+  if (process.platform !== "win32") {
+    return;
+  }
+
+  spawnSync("git", ["config", "--global", "core.longpaths", "true"], {
+    cwd: repositoryRoot,
+    stdio: "ignore"
+  });
+}
+
 function bootstrapCheckout({ checkoutDir, ref, remote, sync, patches }) {
+  prepareGitEnvironment();
   const resolvedRef = resolveRemoteRef(remote, ref);
 
   if (!pathExists(checkoutDir)) {

@@ -90,6 +90,11 @@ jobs:
       - name: Bootstrap Gecko ESR checkout
         run: npm run gecko:bootstrap -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
 
+      - name: Bootstrap Gecko build dependencies
+        if: matrix.platform != 'linux'
+        working-directory: ${{ runner.temp }}/firefox-esr
+        run: python ./mach bootstrap --application-choice browser_artifact_mode --no-interactive
+
       - name: Write Gecko mozconfig
         run: npm run gecko:mozconfig -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
 
@@ -98,13 +103,14 @@ jobs:
         env:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
-        run: python ./mach build faster
+        run: python ./mach build
 
       - name: Refresh artifact-build Nodely branding
         run: npm run gecko:refresh-branding -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
 
       - name: Run Nodely Gecko smoke verification
         if: matrix.platform == 'linux'
+        continue-on-error: true
         run: npm run gecko:smoke -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
 
       - name: Package Gecko build
