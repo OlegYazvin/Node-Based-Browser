@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-05T17:05:59.661Z",
+  "generatedAt": "2026-04-05T17:33:46.918Z",
   "installers": [
     {
       "version": "0.1.0",
@@ -28,8 +28,8 @@
       "path": "linux/Nodely-Browser-0.1.0-debian-x64.deb",
       "fileName": "Nodely-Browser-0.1.0-debian-x64.deb",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-debian-x64.deb",
-      "size": 77639598,
-      "syncedAt": "2026-04-05T17:05:59.483Z"
+      "size": 18917414,
+      "syncedAt": "2026-04-05T17:33:46.894Z"
     },
     {
       "version": "0.1.0",
@@ -58,8 +58,8 @@
       "path": "linux/Nodely-Browser-0.1.0-fedora-x64.rpm",
       "fileName": "Nodely-Browser-0.1.0-fedora-x64.rpm",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-fedora-x64.rpm",
-      "size": 83186334,
-      "syncedAt": "2026-04-05T17:05:59.521Z"
+      "size": 19905727,
+      "syncedAt": "2026-04-05T17:33:46.903Z"
     },
     {
       "version": "0.1.0",
@@ -115,8 +115,8 @@
       "path": "linux/Nodely-Browser-0.1.0-linux-x64.run",
       "fileName": "Nodely-Browser-0.1.0-linux-x64.run",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-linux-x64.run",
-      "size": 75283140,
-      "syncedAt": "2026-04-05T17:05:59.557Z"
+      "size": 18371844,
+      "syncedAt": "2026-04-05T17:33:46.911Z"
     },
     {
       "version": "0.1.0",
@@ -145,8 +145,8 @@
       "path": "linux/Nodely-Browser-0.1.0-ubuntu-x64.deb",
       "fileName": "Nodely-Browser-0.1.0-ubuntu-x64.deb",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-ubuntu-x64.deb",
-      "size": 77637684,
-      "syncedAt": "2026-04-05T17:05:59.661Z"
+      "size": 18916592,
+      "syncedAt": "2026-04-05T17:33:46.918Z"
     }
   ]
 }
