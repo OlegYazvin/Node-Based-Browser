@@ -129,14 +129,22 @@ function prepareGitEnvironment() {
   });
 }
 
+function cloneArguments(resolvedRef, remote, checkoutDir) {
+  return ["clone", "--filter=blob:none", "--depth", "1", "--branch", resolvedRef, remote, checkoutDir];
+}
+
+function fetchArguments(resolvedRef) {
+  return ["fetch", "origin", resolvedRef, "--filter=blob:none", "--depth", "1"];
+}
+
 function bootstrapCheckout({ checkoutDir, ref, remote, sync, patches }) {
   prepareGitEnvironment();
   const resolvedRef = resolveRemoteRef(remote, ref);
 
   if (!pathExists(checkoutDir)) {
-    run("git", ["clone", "--depth", "1", "--branch", resolvedRef, remote, checkoutDir]);
+    run("git", cloneArguments(resolvedRef, remote, checkoutDir));
   } else if (isGitCheckout(checkoutDir)) {
-    run("git", ["-C", checkoutDir, "fetch", "origin", resolvedRef, "--depth", "1"]);
+    run("git", ["-C", checkoutDir, ...fetchArguments(resolvedRef)]);
     run("git", ["-C", checkoutDir, "checkout", resolvedRef]);
     run("git", ["-C", checkoutDir, "pull", "--ff-only", "origin", resolvedRef]);
   } else {

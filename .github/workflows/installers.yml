@@ -88,37 +88,47 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Choose Gecko checkout directory
+        run: |
+          if [[ "${{ matrix.platform }}" == "win32" ]]; then
+            echo "GECKO_CHECKOUT_DIR=C:/nodely-gecko" >> "$GITHUB_ENV"
+          else
+            echo "GECKO_CHECKOUT_DIR=$RUNNER_TEMP/firefox-esr" >> "$GITHUB_ENV"
+          fi
+
       - name: Bootstrap Gecko ESR checkout
-        run: npm run gecko:bootstrap -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+        run: npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR"
 
       - name: Write Gecko mozconfig
-        run: npm run gecko:mozconfig -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+        run: npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
 
       - name: Build Gecko overlay target
-        working-directory: ${{ runner.temp }}/firefox-esr
         env:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
-        run: python ./mach build
+        run: |
+          cd "$GECKO_CHECKOUT_DIR"
+          python ./mach build faster
 
       - name: Refresh artifact-build Nodely branding
-        run: npm run gecko:refresh-branding -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+        run: npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
 
       - name: Run Nodely Gecko smoke verification
         if: matrix.platform == 'linux'
         continue-on-error: true
-        run: npm run gecko:smoke -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+        run: npm run gecko:smoke -- --checkout-dir "$GECKO_CHECKOUT_DIR"
 
       - name: Package Gecko build
-        working-directory: ${{ runner.temp }}/firefox-esr
         env:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
-        run: python ./mach package
+        run: |
+          cd "$GECKO_CHECKOUT_DIR"
+          python ./mach package
 
       - name: Stage Gecko release artifact
         run: >
-          npm run gecko:stage-release -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+          npm run gecko:stage-release -- --checkout-dir "$GECKO_CHECKOUT_DIR"
           --platform ${{ matrix.platform }}
           --arch ${{ matrix.arch }}
           --channel ci
