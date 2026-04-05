@@ -181,14 +181,14 @@ user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.newtabpage.enabled", false);
 user_pref("nodely.shell.enabled", true);
 PREFS
-exec env \\
-  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \\
-  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \\
-  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \\
-  "${installRoot}/nodely" \\
-  -new-instance \\
-  -no-remote \\
-  -profile "$profile_dir" \\
+exec env \
+  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \
+  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
+  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
+  "${installRoot}/nodely" \
+  -new-instance \
+  -no-remote \
+  -profile "$profile_dir" \
   "$@"
 `;
 }
@@ -208,14 +208,14 @@ user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.newtabpage.enabled", false);
 user_pref("nodely.shell.enabled", true);
 PREFS
-exec env \\
-  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \\
-  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \\
-  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \\
-  /app/lib/nodely/nodely \\
-  -new-instance \\
-  -no-remote \\
-  -profile "$profile_dir" \\
+exec env \
+  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \
+  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
+  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
+  /app/lib/nodely/nodely \
+  -new-instance \
+  -no-remote \
+  -profile "$profile_dir" \
   "$@"
 `;
 }
@@ -759,6 +759,7 @@ async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory,
   const iconSvg = await readFile(iconSvgPath, "utf8");
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-linux-installers-"));
   const outputs = [];
+  const failures = [];
 
   await ensureCleanDirectory(outputDirectory);
 
@@ -769,52 +770,79 @@ async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory,
       iconSvg
     });
 
-    outputs.push(
-      await buildLinuxRunInstaller({
-        version,
-        sourceArtifactPath,
-        outputDirectory,
-        arch,
-        iconSvg
-      })
-    );
-    outputs.push(
-      await buildDebInstaller({
-        version,
-        outputDirectory,
-        arch,
-        distribution: "debian",
-        payloadRoot
-      })
-    );
-    outputs.push(
-      await buildDebInstaller({
-        version,
-        outputDirectory,
-        arch,
-        distribution: "ubuntu",
-        payloadRoot
-      })
-    );
-    outputs.push(
-      await buildRpmInstaller({
-        version,
-        outputDirectory,
-        arch,
-        payloadRoot
-      })
-    );
-    outputs.push(
-      await buildFlatpakInstaller({
-        version,
-        outputDirectory,
-        arch,
-        payloadRoot,
-        iconSvg
-      })
-    );
+    const builders = [
+      {
+        label: "linux-run",
+        run: () =>
+          buildLinuxRunInstaller({
+            version,
+            sourceArtifactPath,
+            outputDirectory,
+            arch,
+            iconSvg
+          })
+      },
+      {
+        label: "debian-deb",
+        run: () =>
+          buildDebInstaller({
+            version,
+            outputDirectory,
+            arch,
+            distribution: "debian",
+            payloadRoot
+          })
+      },
+      {
+        label: "ubuntu-deb",
+        run: () =>
+          buildDebInstaller({
+            version,
+            outputDirectory,
+            arch,
+            distribution: "ubuntu",
+            payloadRoot
+          })
+      },
+      {
+        label: "fedora-rpm",
+        run: () =>
+          buildRpmInstaller({
+            version,
+            outputDirectory,
+            arch,
+            payloadRoot
+          })
+      },
+      {
+        label: "flatpak",
+        run: () =>
+          buildFlatpakInstaller({
+            version,
+            outputDirectory,
+            arch,
+            payloadRoot,
+            iconSvg
+          })
+      }
+    ];
+
+    for (const builder of builders) {
+      try {
+        outputs.push(await builder.run());
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failures.push(`${builder.label}: ${message}`);
+        console.warn(`[installers] skipped ${builder.label}: ${message}`);
+      }
+    }
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true }).catch(() => {});
+  }
+
+  if (!outputs.length) {
+    const details = failures.length ? `\n${failures.join("\n")}` : "";
+    throw new Error(`Failed to build any Linux installers for ${arch}.${details}`);
   }
 
   return outputs;
