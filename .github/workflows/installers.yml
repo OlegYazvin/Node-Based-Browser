@@ -91,7 +91,7 @@ jobs:
       - name: Choose Gecko checkout directory
         run: |
           if [[ "${{ matrix.platform }}" == "win32" ]]; then
-            echo "GECKO_CHECKOUT_DIR=C:/nodely-gecko" >> "$GITHUB_ENV"
+            echo "GECKO_CHECKOUT_DIR=$RUNNER_TEMP/nodely-gecko" >> "$GITHUB_ENV"
           else
             echo "GECKO_CHECKOUT_DIR=$RUNNER_TEMP/firefox-esr" >> "$GITHUB_ENV"
           fi
@@ -102,7 +102,38 @@ jobs:
 
           if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-bootstrap.log; then
             summary="$(
-              tail -n 60 gecko-bootstrap.log | python -c 'import sys; text = sys.stdin.read(); print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), end="")'
+              python - <<'PY'
+import pathlib
+import re
+
+text = pathlib.Path("gecko-bootstrap.log").read_text(encoding="utf-8", errors="replace")
+lines = [line for line in text.splitlines() if line.strip()]
+patterns = [
+    r"fatal:",
+    r"error:",
+    r"denied",
+    r"unable to",
+    r"failed",
+    r"Traceback",
+]
+selected = None
+
+for pattern in patterns:
+    for index, line in enumerate(lines):
+        if re.search(pattern, line, re.IGNORECASE):
+            start = max(0, index - 8)
+            end = min(len(lines), index + 16)
+            selected = lines[start:end]
+            break
+    if selected:
+        break
+
+if not selected:
+    selected = lines[-60:]
+
+text = "\n".join(selected)
+print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), end="")
+PY
             )"
             echo "::error title=Gecko bootstrap failed::$summary"
             exit 1
@@ -123,7 +154,39 @@ jobs:
             python ./mach build faster
           ) 2>&1 | tee gecko-build.log; then
             summary="$(
-              tail -n 80 gecko-build.log | python -c 'import sys; text = sys.stdin.read(); print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), end="")'
+              python - <<'PY'
+import pathlib
+import re
+
+text = pathlib.Path("gecko-build.log").read_text(encoding="utf-8", errors="replace")
+lines = [line for line in text.splitlines() if line.strip()]
+patterns = [
+    r"error:",
+    r"ERROR",
+    r"not all --enable",
+    r"configure:",
+    r"Traceback",
+    r"Exception",
+    r"fatal:",
+]
+selected = None
+
+for pattern in patterns:
+    for index, line in enumerate(lines):
+        if re.search(pattern, line, re.IGNORECASE):
+            start = max(0, index - 10)
+            end = min(len(lines), index + 20)
+            selected = lines[start:end]
+            break
+    if selected:
+        break
+
+if not selected:
+    selected = lines[-80:]
+
+text = "\n".join(selected)
+print(text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), end="")
+PY
             )"
             echo "::error title=Gecko overlay build failed::$summary"
             exit 1
@@ -165,6 +228,16 @@ jobs:
           name: installer-output-${{ matrix.platform }}-${{ matrix.arch }}
           path: out/make
           if-no-files-found: error
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-failure-logs-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            gecko-bootstrap.log
+            gecko-build.log
+          if-no-files-found: ignore
 
   assemble-installer-directory:
     name: Assemble Installer Directory

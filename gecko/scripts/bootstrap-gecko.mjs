@@ -130,11 +130,22 @@ function prepareGitEnvironment() {
 }
 
 function cloneArguments(resolvedRef, remote, checkoutDir) {
-  return ["clone", "--filter=blob:none", "--depth", "1", "--branch", resolvedRef, remote, checkoutDir];
+  return [
+    "clone",
+    "--filter=blob:none",
+    "--depth",
+    "1",
+    "--single-branch",
+    "--no-tags",
+    "--branch",
+    resolvedRef,
+    remote,
+    checkoutDir
+  ];
 }
 
 function fetchArguments(resolvedRef) {
-  return ["fetch", "origin", resolvedRef, "--filter=blob:none", "--depth", "1"];
+  return ["fetch", "origin", resolvedRef, "--filter=blob:none", "--depth", "1", "--no-tags"];
 }
 
 function bootstrapCheckout({ checkoutDir, ref, remote, sync, patches }) {

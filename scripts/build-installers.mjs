@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { chmod, cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -510,6 +510,25 @@ async function extractLinuxArtifact(sourceArtifactPath, destinationDirectory) {
   await runCommand("tar", [tarballExtractArgument(sourceArtifactPath), sourceArtifactPath, "-C", destinationDirectory]);
 }
 
+async function resolveExtractedLinuxAppDirectory(extractedDirectory) {
+  const entries = await readdir(extractedDirectory, { withFileTypes: true });
+  const directories = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+
+  for (const preferredName of ["nodely", "firefox"]) {
+    if (directories.includes(preferredName)) {
+      return path.join(extractedDirectory, preferredName);
+    }
+  }
+
+  if (directories.length === 1) {
+    return path.join(extractedDirectory, directories[0]);
+  }
+
+  throw new Error(
+    `Unable to determine the packaged Linux app directory in ${extractedDirectory}. Found: ${directories.join(", ") || "(none)"}.`
+  );
+}
+
 async function prepareSystemPayload({ sourceArtifactPath, temporaryDirectory, iconSvg }) {
   const extractedDirectory = path.join(temporaryDirectory, "extracted");
   const payloadRoot = path.join(temporaryDirectory, "payload-root");
@@ -519,8 +538,9 @@ async function prepareSystemPayload({ sourceArtifactPath, temporaryDirectory, ic
   const iconPath = path.join(payloadRoot, "usr", "share", "icons", "hicolor", "scalable", "apps", `${systemIconName}.svg`);
 
   await extractLinuxArtifact(sourceArtifactPath, extractedDirectory);
+  const extractedAppDirectory = await resolveExtractedLinuxAppDirectory(extractedDirectory);
   await ensureDirectory(path.dirname(appDestination));
-  await cp(path.join(extractedDirectory, "nodely"), appDestination, { recursive: true });
+  await cp(extractedAppDirectory, appDestination, { recursive: true });
   await ensureDirectory(path.dirname(wrapperPath));
   await ensureDirectory(path.dirname(desktopPath));
   await ensureDirectory(path.dirname(iconPath));
@@ -565,7 +585,7 @@ async function buildDebInstaller({ version, outputDirectory, arch, distribution,
     await cp(payloadRoot, rootDirectory, { recursive: true });
     await ensureDirectory(path.join(rootDirectory, "DEBIAN"));
 
-    const controlPath = path.join(rootDirectory, "DEBIAN", "control");
+    controlPath = path.join(rootDirectory, "DEBIAN", "control");
     const postinstPath = path.join(rootDirectory, "DEBIAN", "postinst");
     const postrmPath = path.join(rootDirectory, "DEBIAN", "postrm");
 
