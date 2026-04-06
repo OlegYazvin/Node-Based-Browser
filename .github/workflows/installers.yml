@@ -100,11 +100,15 @@ jobs:
             Start-Process -FilePath $installerPath -ArgumentList '/S' -Wait
           }
 
+          choco install -y nsis 7zip.commandline
+
           "MOZILLABUILD=C:\mozilla-build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           @(
             'C:\mozilla-build\bin'
             'C:\mozilla-build\msys2\usr\bin'
             'C:\mozilla-build\moztools\bin'
+            'C:\Program Files (x86)\NSIS'
+            'C:\Program Files\7-Zip'
           ) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Choose Gecko checkout directory
@@ -164,8 +168,16 @@ jobs:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
         run: |
-          cd "$GECKO_CHECKOUT_DIR"
-          python ./mach package
+          set -o pipefail
+
+          if ! (
+            cd "$GECKO_CHECKOUT_DIR"
+            python ./mach package
+          ) 2>&1 | tee gecko-package.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-package.log --mode package)"
+            echo "::error title=Gecko package failed::$summary"
+            exit 1
+          fi
 
       - name: Stage Gecko release artifact
         run: >
@@ -175,11 +187,14 @@ jobs:
           --channel ci
 
       - name: Build platform installer
-        run: >
-          npm run installers -- --platform ${{ matrix.platform }}
-          --arch ${{ matrix.arch }}
-          --channel ci
-          --no-sync
+        run: |
+          set -o pipefail
+
+          if ! npm run installers -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --channel ci --strict --no-sync 2>&1 | tee installer-build.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log installer-build.log --mode installer)"
+            echo "::error title=Installer build failed::$summary"
+            exit 1
+          fi
 
       - name: Verify Linux x64 installer set
         if: matrix.platform == 'linux' && matrix.arch == 'x64'
@@ -220,6 +235,8 @@ jobs:
           path: |
             gecko-bootstrap.log
             gecko-build.log
+            gecko-package.log
+            installer-build.log
           if-no-files-found: ignore
 
   assemble-installer-directory:

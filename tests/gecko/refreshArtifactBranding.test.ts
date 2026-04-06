@@ -56,4 +56,31 @@ describe("refresh-artifact-branding", () => {
       await rm(tempDirectory, { recursive: true, force: true });
     }
   });
+
+  it("falls back to firefox-bin when that is the only bundle executable", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-mac-compat-firefox-bin-"));
+    const executablePath = path.join(
+      tempDirectory,
+      "obj-nodely",
+      "dist",
+      "Firefox.app",
+      "Contents",
+      "MacOS",
+      "firefox-bin"
+    );
+
+    try {
+      await mkdir(path.dirname(executablePath), { recursive: true });
+      await writeFile(executablePath, "binary", "utf8");
+
+      const updates = await ensureMacArtifactCompatibility(tempDirectory);
+      const aliasPath = path.join(tempDirectory, "obj-nodely", "dist", "bin", "firefox");
+
+      expect(updates).toBe(1);
+      await access(aliasPath);
+      expect(await readFile(aliasPath, "utf8")).toBe("binary");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
 });

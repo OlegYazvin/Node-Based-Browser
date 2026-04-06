@@ -58,6 +58,7 @@ Options:
   --channel <name>        Release channel in gecko/release-artifacts (default: local)
   --artifact <path>       Override the staged Gecko release artifact path
   --out-dir <path>        Installer build output directory (default: out/make)
+  --strict                Fail if any expected installer builder fails
   --no-sync               Skip syncing finished installers into Installer/
   --help                  Show this help text
 `);
@@ -70,6 +71,7 @@ function parseArguments(argv) {
     channel: "local",
     artifactPath: null,
     outDirectory: outMakeDirectory,
+    strict: false,
     sync: true
   };
 
@@ -91,6 +93,9 @@ function parseArguments(argv) {
         break;
       case "--out-dir":
         options.outDirectory = path.resolve(argv[++index]);
+        break;
+      case "--strict":
+        options.strict = true;
         break;
       case "--no-sync":
         options.sync = false;
@@ -774,7 +779,7 @@ async function buildFlatpakInstaller({ version, outputDirectory, arch, payloadRo
   }
 }
 
-async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory, arch }) {
+async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory, arch, strict = false }) {
   const outputDirectory = path.join(outDirectory, "linux", arch);
   const iconSvgPath = path.join(repositoryRoot, "desktop", "nodely-icon.svg");
   const iconSvg = await readFile(iconSvgPath, "utf8");
@@ -866,6 +871,10 @@ async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory,
     throw new Error(`Failed to build any Linux installers for ${arch}.${details}`);
   }
 
+  if (strict && failures.length) {
+    throw new Error(`Failed to build the full Linux installer set for ${arch}.\n${failures.join("\n")}`);
+  }
+
   return outputs;
 }
 
@@ -905,7 +914,8 @@ async function main() {
       version,
       sourceArtifactPath,
       outDirectory: options.outDirectory,
-      arch: options.arch
+      arch: options.arch,
+      strict: options.strict
     });
   } else if (options.platform === "win32" || options.platform === "darwin") {
     outputs = await copyNativeInstaller({

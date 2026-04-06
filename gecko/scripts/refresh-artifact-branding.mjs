@@ -153,7 +153,7 @@ export async function ensureMacArtifactCompatibility(checkoutDir) {
     return 0;
   }
 
-  const executableCandidates = ["firefox", "nodely"];
+  const executableCandidates = ["firefox", "firefox-bin", "nodely", "nodely-bin"];
   let relativeExecutablePath = null;
 
   for (const executableName of executableCandidates) {

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import process from "node:process";
 
 function usage() {
-  console.log(`Usage: node scripts/summarize-ci-log.mjs --log <path> --mode <bootstrap|build>`);
+  console.log(`Usage: node scripts/summarize-ci-log.mjs --log <path> --mode <bootstrap|build|package|installer>`);
 }
 
 function parseArguments(argv) {
@@ -50,6 +50,46 @@ function modeConfig(mode) {
       before: 8,
       after: 16,
       fallback: 60
+    };
+  }
+
+  if (mode === "package") {
+    return {
+      patterns: [
+        "error:",
+        "Error:",
+        "FATAL",
+        "FAILED",
+        "Exception",
+        "Traceback",
+        "No rule to make target",
+        "makensis",
+        "nsis",
+        "7z"
+      ],
+      before: 10,
+      after: 24,
+      fallback: 100
+    };
+  }
+
+  if (mode === "installer") {
+    return {
+      patterns: [
+        "\\[installers\\] skipped",
+        "Missing expected",
+        "error:",
+        "Error:",
+        "FAILED",
+        "Exception",
+        "Traceback",
+        "flatpak",
+        "rpmbuild",
+        "desktop-file-validate"
+      ],
+      before: 10,
+      after: 28,
+      fallback: 120
     };
   }
 
