@@ -92,11 +92,20 @@ jobs:
         if: matrix.platform == 'win32'
         shell: pwsh
         run: |
-          choco install -y mozillabuild
+          if (-not (Test-Path 'C:\mozilla-build')) {
+            $installerPath = Join-Path $env:RUNNER_TEMP 'MozillaBuildSetup-Latest.exe'
+            Invoke-WebRequest `
+              -Uri 'https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-Latest.exe' `
+              -OutFile $installerPath
+            Start-Process -FilePath $installerPath -ArgumentList '/S' -Wait
+          }
+
           "MOZILLABUILD=C:\mozilla-build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "C:\mozilla-build\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          "C:\mozilla-build\msys2\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          "C:\mozilla-build\moztools\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          @(
+            'C:\mozilla-build\bin'
+            'C:\mozilla-build\msys2\usr\bin'
+            'C:\mozilla-build\moztools\bin'
+          ) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Choose Gecko checkout directory
         run: |
