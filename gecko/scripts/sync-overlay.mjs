@@ -305,6 +305,35 @@ function ensureBrowserProfileDefaultsPatched(checkoutDir) {
   });
 }
 
+function syncLooseRuntimeOverlay(checkoutDir) {
+  const sourceDirectory = path.join(
+    overlayRoot,
+    "browser",
+    "base",
+    "content",
+    "nodely"
+  );
+  const runtimeDirectory = path.join(
+    checkoutDir,
+    "obj-nodely",
+    "dist",
+    "bin",
+    "browser",
+    "chrome",
+    "browser",
+    "content",
+    "browser",
+    "nodely"
+  );
+
+  if (!existsSync(sourceDirectory) || !existsSync(runtimeDirectory)) {
+    return false;
+  }
+
+  copyDirectory(sourceDirectory, runtimeDirectory);
+  return true;
+}
+
 function syncOverlay({ checkoutDir }) {
   if (!existsSync(checkoutDir) || !statSync(checkoutDir).isDirectory()) {
     throw new Error(`Gecko source checkout directory not found: ${checkoutDir}`);
@@ -318,6 +347,10 @@ function syncOverlay({ checkoutDir }) {
   ensureBrowserMozConfigurePatched(checkoutDir);
   ensureBrowserProfileDefaultsPatched(checkoutDir);
   ensureUnofficialBrandingPatched(checkoutDir);
+  const looseRuntimeSynced = syncLooseRuntimeOverlay(checkoutDir);
+  if (looseRuntimeSynced) {
+    console.log(`Overlay copied into live runtime chrome under ${path.relative(repositoryRoot, checkoutDir)}`);
+  }
   console.log(`Overlay synced into ${checkoutDir}`);
 }
 

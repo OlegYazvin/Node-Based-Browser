@@ -142,40 +142,68 @@ async function ensureAlias(directory, aliasName, sourceName) {
   return true;
 }
 
-export async function ensureMacArtifactCompatibility(checkoutDir) {
-  const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
-  const distBinDir = path.join(distDirectory, "bin");
-  const distBinFirefox = path.join(distBinDir, "firefox");
+async function resolveMacCompatSource(distDirectory, distBinDir) {
+  const executableCandidates = ["firefox", "firefox-bin", "nodely", "nodely-bin"];
 
-  if (!(await exists(distDirectory)) || (await exists(distBinFirefox))) {
-    return 0;
+  for (const executableName of executableCandidates) {
+    if (await exists(path.join(distBinDir, executableName))) {
+      return {
+        executableName,
+        reference: executableName
+      };
+    }
   }
 
   const distEntries = await readdir(distDirectory, { withFileTypes: true }).catch(() => []);
   const bundleEntry = distEntries.find((entry) => entry.isDirectory() && entry.name.endsWith(".app"));
 
   if (!bundleEntry) {
-    return 0;
+    return null;
   }
 
-  const executableCandidates = ["firefox", "firefox-bin", "nodely", "nodely-bin"];
-  let relativeExecutablePath = null;
-
   for (const executableName of executableCandidates) {
-    const candidatePath = path.join("..", bundleEntry.name, "Contents", "MacOS", executableName);
+    const reference = path.join("..", bundleEntry.name, "Contents", "MacOS", executableName);
 
-    if (await exists(path.join(distBinDir, candidatePath))) {
-      relativeExecutablePath = candidatePath;
-      break;
+    if (await exists(path.join(distBinDir, reference))) {
+      return {
+        executableName,
+        reference
+      };
     }
   }
 
-  if (!relativeExecutablePath) {
+  return null;
+}
+
+export async function ensureMacArtifactCompatibility(checkoutDir) {
+  const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
+  const distBinDir = path.join(distDirectory, "bin");
+
+  if (!(await exists(distDirectory))) {
+    return 0;
+  }
+
+  const source = await resolveMacCompatSource(distDirectory, distBinDir);
+
+  if (!source) {
     return 0;
   }
 
   await mkdir(distBinDir, { recursive: true });
-  return (await ensureAlias(distBinDir, "firefox", relativeExecutablePath)) ? 1 : 0;
+  const aliasNames = ["firefox", "firefox-bin", "nodely", "nodely-bin"];
+  let updates = 0;
+
+  for (const aliasName of aliasNames) {
+    if (aliasName === source.reference) {
+      continue;
+    }
+
+    if (await ensureAlias(distBinDir, aliasName, source.reference)) {
+      updates += 1;
+    }
+  }
+
+  return updates;
 }
 
 function nodelyVersionWrapper(targetName) {

@@ -31,6 +31,8 @@ Options:
   --checkout-dir <path>  Gecko source checkout directory
   --binary <path>        Nodely browser binary path
   --profile-dir <path>   Existing profile directory to reuse
+  --scenario <name>      Optional smoke scenario to run after bootstrap
+  --headed               Run with a visible browser window instead of -headless
   --timeout-ms <ms>      Timeout while waiting for smoke snapshot (default: 30000)
   --keep-profile         Keep the temporary profile after the run
   --help                 Show this help text
@@ -43,6 +45,8 @@ function parseArguments(argv) {
     checkoutDir: defaultCheckoutDir,
     binary: null,
     profileDir: null,
+    scenario: "",
+    headed: false,
     timeoutMs: 30_000,
     keepProfile: false
   };
@@ -60,6 +64,12 @@ function parseArguments(argv) {
         break;
       case "--profile-dir":
         options.profileDir = path.resolve(argv[++index]);
+        break;
+      case "--scenario":
+        options.scenario = String(argv[++index] ?? "").trim();
+        break;
+      case "--headed":
+        options.headed = true;
         break;
       case "--timeout-ms":
         options.timeoutMs = Number(argv[++index] ?? options.timeoutMs);
@@ -137,7 +147,7 @@ function buildSeedWorkspace() {
   return workspace;
 }
 
-async function writeSmokeProfile({ profileDir, namespace, smokeFile }) {
+async function writeSmokeProfile({ profileDir, namespace, smokeFile, scenario }) {
   const workspaceDirectory = path.join(profileDir, namespace);
   const workspacePath = path.join(workspaceDirectory, "default.json");
   const workspace = buildSeedWorkspace();
@@ -153,13 +163,76 @@ async function writeSmokeProfile({ profileDir, namespace, smokeFile }) {
     'user_pref("nodely.shell.enabled", true);',
     'user_pref("nodely.testing.enabled", true);',
     `user_pref("nodely.testing.workspace_namespace", "${escapeUserPrefValue(namespace)}");`,
-    `user_pref("nodely.testing.smoke_file", "${escapeUserPrefValue(smokeFile)}");`
+    `user_pref("nodely.testing.smoke_file", "${escapeUserPrefValue(smokeFile)}");`,
+    `user_pref("nodely.testing.smoke_scenario", "${escapeUserPrefValue(scenario ?? "")}");`
   ].join("\n");
 
   await writeFile(path.join(profileDir, "user.js"), `${userJs}\n`, "utf8");
 }
 
-async function waitForSnapshot(smokeFile, timeoutMs) {
+function snapshotLooksReady(snapshot) {
+  const expectedTop =
+    (snapshot.layout?.topbar?.height ?? 0) +
+    (snapshot.layout?.composer?.height ?? 0) +
+    (snapshot.layout?.pagebar?.height ?? 0);
+  const pageContainer = snapshot.layout?.tabpanels ?? snapshot.layout?.appcontent ?? null;
+  const expectedSplitLeft =
+    snapshot.view === "split" && snapshot.browserSurface === "page"
+      ? snapshot.layout?.graph?.width ?? 0
+      : 0;
+  const layoutLooksStable =
+    Math.abs((snapshot.layout?.browser?.top ?? 0) - expectedTop) <= 4 &&
+    Math.abs((snapshot.layout?.tabbox?.left ?? 0) - expectedSplitLeft) <= 4 &&
+    pageContainer != null &&
+    Math.abs((pageContainer.left ?? 0) - (snapshot.layout?.tabbox?.left ?? 0)) <= 4 &&
+    Math.abs((pageContainer.top ?? 0) - (snapshot.layout?.tabbox?.top ?? 0)) <= 4;
+  const minimapLooksReady =
+    snapshot.ui?.minimap?.visible === true &&
+    snapshot.ui?.minimap?.svgPresent === true &&
+    (snapshot.ui?.minimap?.nodeShapeCount ?? 0) >= 4 &&
+    (snapshot.ui?.minimap?.edgeCount ?? 0) >= 1 &&
+    snapshot.ui?.minimap?.viewportPresent === true &&
+    (snapshot.ui?.minimap?.toolbarButtonCount ?? 0) >= 3;
+
+  return (
+    snapshot.bootstrapState === "ready" &&
+    snapshot.active === "true" &&
+    (snapshot.workspace?.nodeCount ?? 0) >= 2 &&
+    (snapshot.workspace?.edgeCount ?? 0) >= 1 &&
+    (snapshot.selectedTree?.nodeCount ?? 0) >= 2 &&
+    snapshot.ui?.surfaceCloseLabel === "Canvas" &&
+    minimapLooksReady &&
+    layoutLooksStable
+  );
+}
+
+function snapshotMatchesScenario(snapshot, scenario) {
+  if (!scenario) {
+    return snapshot.workspace?.selectedNode?.url === "https://example.org/";
+  }
+
+  if (scenario === "graph-select-root") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.selectedNode?.parentId === null &&
+      snapshot.workspace?.selectedNode?.url === "https://example.com/"
+    );
+  }
+
+  if (scenario === "pagebar-new-child") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.nodeCount === 3 &&
+      snapshot.workspace?.edgeCount === 2 &&
+      snapshot.workspace?.selectedNode?.parentId != null &&
+      snapshot.workspace?.selectedNode?.kind === "page"
+    );
+  }
+
+  return snapshot.reason === `scenario:${scenario}:complete`;
+}
+
+async function waitForSnapshot(smokeFile, timeoutMs, scenario = "") {
   const startedAt = Date.now();
   let lastParseError = null;
 
@@ -167,38 +240,17 @@ async function waitForSnapshot(smokeFile, timeoutMs) {
     if (await exists(smokeFile)) {
       try {
         const snapshot = JSON.parse(await readFile(smokeFile, "utf8"));
-        const expectedTop =
-          (snapshot.layout?.topbar?.height ?? 0) +
-          (snapshot.layout?.composer?.height ?? 0) +
-          (snapshot.layout?.pagebar?.height ?? 0);
-        const pageContainer = snapshot.layout?.tabpanels ?? snapshot.layout?.appcontent ?? null;
-        const expectedSplitLeft =
-          snapshot.view === "split" && snapshot.browserSurface === "page"
-            ? snapshot.layout?.graph?.width ?? 0
-            : 0;
-        const layoutLooksStable =
-          Math.abs((snapshot.layout?.browser?.top ?? 0) - expectedTop) <= 4 &&
-          Math.abs((snapshot.layout?.tabbox?.left ?? 0) - expectedSplitLeft) <= 4 &&
-          pageContainer != null &&
-          Math.abs((pageContainer.left ?? 0) - (snapshot.layout?.tabbox?.left ?? 0)) <= 4 &&
-          Math.abs((pageContainer.top ?? 0) - (snapshot.layout?.tabbox?.top ?? 0)) <= 4;
-        const minimapLooksReady =
-          snapshot.ui?.minimap?.visible === true &&
-          snapshot.ui?.minimap?.svgPresent === true &&
-          (snapshot.ui?.minimap?.nodeShapeCount ?? 0) >= 4 &&
-          (snapshot.ui?.minimap?.edgeCount ?? 0) >= 1 &&
-          snapshot.ui?.minimap?.viewportPresent === true &&
-          (snapshot.ui?.minimap?.toolbarButtonCount ?? 0) >= 3;
         const looksReady =
-          snapshot.bootstrapState === "ready" &&
-          snapshot.active === "true" &&
-          snapshot.workspace?.nodeCount === 2 &&
-          snapshot.workspace?.edgeCount === 1 &&
-          snapshot.workspace?.selectedNode?.url === "https://example.org/" &&
-          snapshot.selectedTree?.nodeCount === 2 &&
-          snapshot.ui?.surfaceCloseLabel === "Canvas" &&
-          minimapLooksReady &&
-          layoutLooksStable;
+          snapshotLooksReady(snapshot) &&
+          snapshotMatchesScenario(snapshot, scenario);
+
+        if (scenario && snapshot.reason === `scenario:${scenario}:error`) {
+          throw new Error(`Smoke scenario failed inside Nodely: ${scenario}`);
+        }
+
+        if (scenario && snapshot.reason === `scenario:${scenario}:unknown`) {
+          throw new Error(`Unknown smoke scenario requested: ${scenario}`);
+        }
 
         if (looksReady) {
           return snapshot;
@@ -248,15 +300,22 @@ async function runSmoke(options) {
   const namespace = `nodely-smoke-${Date.now()}`;
 
   await mkdir(profileDir, { recursive: true });
-  await writeSmokeProfile({ profileDir, namespace, smokeFile });
+  await writeSmokeProfile({ profileDir, namespace, smokeFile, scenario: options.scenario });
 
   const stdoutChunks = [];
   const stderrChunks = [];
-  const child = spawn(options.binary, ["-headless", "-new-instance", "-no-remote", "-profile", profileDir], {
+  const launchArgs = [
+    ...(options.headed ? [] : ["-headless"]),
+    "-new-instance",
+    "-no-remote",
+    "-profile",
+    profileDir
+  ];
+  const child = spawn(options.binary, launchArgs, {
     env: {
       ...process.env,
       MOZ_APP_REMOTINGNAME: "nodely",
-      MOZ_HEADLESS: "1"
+      ...(options.headed ? {} : { MOZ_HEADLESS: "1" })
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -269,7 +328,7 @@ async function runSmoke(options) {
   });
 
   try {
-    const snapshot = await waitForSnapshot(smokeFile, options.timeoutMs);
+    const snapshot = await waitForSnapshot(smokeFile, options.timeoutMs, options.scenario);
     console.log(JSON.stringify(snapshot, null, 2));
   } catch (error) {
     const output = `${stdoutChunks.join("")}\n${stderrChunks.join("")}`.trim();

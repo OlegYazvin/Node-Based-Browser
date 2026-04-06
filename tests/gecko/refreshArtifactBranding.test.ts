@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ensureMacArtifactCompatibility } from "../../gecko/scripts/refresh-artifact-branding.mjs";
 
 describe("refresh-artifact-branding", () => {
-  it("creates a dist/bin/firefox alias for mac app bundle artifacts", async () => {
+  it("creates the full mac dist/bin alias set for app bundle artifacts", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-mac-compat-"));
     const executablePath = path.join(
       tempDirectory,
@@ -24,23 +24,29 @@ describe("refresh-artifact-branding", () => {
       await writeFile(executablePath, "binary", "utf8");
 
       const updates = await ensureMacArtifactCompatibility(tempDirectory);
-      const aliasPath = path.join(tempDirectory, "obj-nodely", "dist", "bin", "firefox");
-      const aliasStat = await lstat(aliasPath);
+      const distBinDirectory = path.join(tempDirectory, "obj-nodely", "dist", "bin");
+      const expectedReference = path.join("..", "Firefox Nightly.app", "Contents", "MacOS", "firefox");
 
-      expect(updates).toBe(1);
-      await access(aliasPath);
+      expect(updates).toBe(4);
 
-      if (aliasStat.isSymbolicLink()) {
-        expect(await readlink(aliasPath)).toBe(path.join("..", "Firefox Nightly.app", "Contents", "MacOS", "firefox"));
-      } else {
-        expect(await readFile(aliasPath, "utf8")).toBe("binary");
+      for (const aliasName of ["firefox", "firefox-bin", "nodely", "nodely-bin"]) {
+        const aliasPath = path.join(distBinDirectory, aliasName);
+        const aliasStat = await lstat(aliasPath);
+
+        await access(aliasPath);
+
+        if (aliasStat.isSymbolicLink()) {
+          expect(await readlink(aliasPath)).toBe(expectedReference);
+        } else {
+          expect(await readFile(aliasPath, "utf8")).toBe("binary");
+        }
       }
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }
   });
 
-  it("leaves an existing dist/bin/firefox in place", async () => {
+  it("preserves an existing dist/bin/firefox and fills the remaining aliases", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-mac-compat-existing-"));
     const aliasPath = path.join(tempDirectory, "obj-nodely", "dist", "bin", "firefox");
 
@@ -50,8 +56,21 @@ describe("refresh-artifact-branding", () => {
 
       const updates = await ensureMacArtifactCompatibility(tempDirectory);
 
-      expect(updates).toBe(0);
+      expect(updates).toBe(3);
       expect(await readFile(aliasPath, "utf8")).toBe("existing");
+
+      for (const siblingAlias of ["firefox-bin", "nodely", "nodely-bin"]) {
+        const siblingPath = path.join(tempDirectory, "obj-nodely", "dist", "bin", siblingAlias);
+        const siblingStat = await lstat(siblingPath);
+
+        await access(siblingPath);
+
+        if (siblingStat.isSymbolicLink()) {
+          expect(await readlink(siblingPath)).toBe("firefox");
+        } else {
+          expect(await readFile(siblingPath, "utf8")).toBe("existing");
+        }
+      }
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }
@@ -74,11 +93,23 @@ describe("refresh-artifact-branding", () => {
       await writeFile(executablePath, "binary", "utf8");
 
       const updates = await ensureMacArtifactCompatibility(tempDirectory);
-      const aliasPath = path.join(tempDirectory, "obj-nodely", "dist", "bin", "firefox");
+      const distBinDirectory = path.join(tempDirectory, "obj-nodely", "dist", "bin");
+      const expectedReference = path.join("..", "Firefox.app", "Contents", "MacOS", "firefox-bin");
 
-      expect(updates).toBe(1);
-      await access(aliasPath);
-      expect(await readFile(aliasPath, "utf8")).toBe("binary");
+      expect(updates).toBe(4);
+
+      for (const aliasName of ["firefox", "firefox-bin", "nodely", "nodely-bin"]) {
+        const aliasPath = path.join(distBinDirectory, aliasName);
+        const aliasStat = await lstat(aliasPath);
+
+        await access(aliasPath);
+
+        if (aliasStat.isSymbolicLink()) {
+          expect(await readlink(aliasPath)).toBe(expectedReference);
+        } else {
+          expect(await readFile(aliasPath, "utf8")).toBe("binary");
+        }
+      }
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }

@@ -59,6 +59,10 @@ function iconPrint() {
   return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.3 6.2V3.5h9.4v2.7M4.2 9h11.6A1.8 1.8 0 0 1 17.6 10.8v2.5H14.7v3.2H5.3v-3.2H2.4v-2.5A1.8 1.8 0 0 1 4.2 9Zm1.8 4.3h8m-8 2.1h6.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 }
 
+function iconNodeTabPlus() {
+  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.2 5.3v7.2m0 0c0 1.8 1.5 3.3 3.3 3.3h3.2m-6.5-3.3c0-1.8 1.5-3.3 3.3-3.3h3.2m-6.5-4.7A1.7 1.7 0 1 0 5.2 8a1.7 1.7 0 0 0 0-3.4Zm8.3 0A1.7 1.7 0 1 0 13.5 8a1.7 1.7 0 0 0 0-3.4Zm0 8A1.7 1.7 0 1 0 13.5 16a1.7 1.7 0 0 0 0-3.4Z" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16.8 3.2v3.8m1.9-1.9H15" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"></path></svg>`;
+}
+
 function iconWarning() {
   return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 3.1 7 12.3H3l7-12.3Zm0 4.1v4.4m0 2.8h.01" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 }
@@ -276,12 +280,10 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
-    const workspace = this.state.workspace;
+    const dismissedUi = this.dismissTransientUi();
 
-    if (workspace?.prefs.surfaceMode === "canvas") {
-      this.closeInlinePanels();
-      this.drawer = null;
-      await this.controller.setSurfaceMode("page");
+    if (dismissedUi) {
+      this.render();
     }
 
     await this.controller.selectNode(nodeId);
@@ -696,9 +698,9 @@ export class NodelyShell extends HTMLElement {
       })
     );
 
-    const tabs = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tabs");
-    if (selectedRoot) {
-      for (const node of orderTreeNodesForTabs(workspace, selectedRoot.id)) {
+	    const tabs = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tabs");
+	    if (selectedRoot) {
+	      for (const node of orderTreeNodesForTabs(workspace, selectedRoot.id)) {
         const category = classifySiteCategory(node.url);
         const tab = createActionButton(
           this.ownerDocument,
@@ -713,13 +715,27 @@ export class NodelyShell extends HTMLElement {
         label.textContent = node.title || "Untitled";
         const categoryText = createHtmlElement(this.ownerDocument, "span");
         categoryText.textContent = siteCategoryLabel(category);
-        tab.append(label, categoryText);
-        tabs.append(tab);
-      }
-    }
+	        tab.append(label, categoryText);
+	        tabs.append(tab);
+	      }
+	    }
 
-    treeStrip.append(treeHeader, tabs);
-    this.pagebar.append(pageActions, treeStrip);
+      tabs.append(
+        createActionButton(
+          this.ownerDocument,
+          "",
+          "nodely-shell__tab nodely-shell__tab--new-child",
+          {
+            action: "create-child-node",
+            disabled: !activeTabNodeId,
+            title: "Create a new child node from the active page",
+            html: `${iconNodeTabPlus()}<span>New Node</span>`
+          }
+        )
+      );
+
+	    treeStrip.append(treeHeader, tabs);
+	    this.pagebar.append(pageActions, treeStrip);
 
     if (workspace.prefs.viewMode === "focus" && workspace.prefs.showFocusHint !== false) {
       const focusHint = createHtmlElement(this.ownerDocument, "div", "nodely-shell__focus-hint");
@@ -1375,12 +1391,17 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
-    if (action === "toggle-branch-next") {
-      this.controller?.setCaptureNextNavigation(!this.state.workspace.prefs.captureNextNavigation);
+	    if (action === "toggle-branch-next") {
+	      this.controller?.setCaptureNextNavigation(!this.state.workspace.prefs.captureNextNavigation);
+	      return;
+	    }
+
+    if (action === "create-child-node") {
+      this.controller?.createChildNode({ origin: "tab-button" });
       return;
     }
 
-    if (action === "toggle-permissions-panel") {
+	    if (action === "toggle-permissions-panel") {
       const nextOpen = !this.permissionsPanelOpen;
       this.closeInlinePanels();
       this.drawer = null;
@@ -1520,7 +1541,7 @@ export class NodelyShell extends HTMLElement {
 
     switch (button.dataset.action) {
       case "show-artifact-node":
-        this.controller?.selectNode(button.dataset.nodeId);
+        void this.openNodeFromGraph(button.dataset.nodeId);
         this.graph.centerOnNode(button.dataset.nodeId);
         break;
       case "open-artifact-node-file":
@@ -1568,7 +1589,7 @@ export class NodelyShell extends HTMLElement {
         this.controller?.restoreCrashedNode(button.dataset.nodeId);
         break;
       case "show-node":
-        this.controller?.selectNode(button.dataset.nodeId);
+        void this.openNodeFromGraph(button.dataset.nodeId);
         this.graph.centerOnNode(button.dataset.nodeId);
         break;
       default:
@@ -1584,7 +1605,7 @@ export class NodelyShell extends HTMLElement {
     }
 
     if (button.dataset.action === "show-tree") {
-      this.controller?.selectNode(button.dataset.rootId);
+      void this.openNodeFromGraph(button.dataset.rootId);
       this.graph.centerOnNode(button.dataset.rootId);
       return;
     }
@@ -1638,7 +1659,7 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
-    this.controller?.selectNode(button.dataset.nodeId);
+    void this.openNodeFromGraph(button.dataset.nodeId);
     this.graph.centerOnNode(button.dataset.nodeId);
   }
 

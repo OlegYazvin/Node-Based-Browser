@@ -4,3 +4,14 @@
 - Do not claim Gecko release artifacts were built for platforms, architectures, or channels that were not actually packaged.
 - Prefer the CI workflow at `.github/workflows/gecko-verify.yml` for cross-platform verification and staged release refreshes after Gecko-facing changes.
 - Keep `gecko/release-artifacts/` user-facing: stage the single packaged artifact a person should download for each platform/channel, not auxiliary build outputs.
+
+## Lean Implementation Rules
+
+- Prefer the smallest change that fully solves the problem. Do not add new layers, files, or abstractions unless they clearly reduce complexity or are reused.
+- Keep code paths tight in hot or frequently used flows. Avoid repeated full-tree scans, duplicate work, unnecessary DOM churn, and avoidable async hops when a simpler approach works.
+- Do not add dependencies, frameworks, helpers, or configuration unless they are justified by a concrete current need.
+- Favor extending existing modules over creating parallel versions of the same logic. If a path is replaced, remove the obsolete path instead of leaving dead or duplicate code behind.
+- Avoid speculative architecture. Build only what the current feature or fix needs, not future-facing infrastructure that is not yet required.
+- Keep build, smoke, and installer tooling lightweight. Do not add steps that slow iteration unless they provide clear verification value.
+- Keep tests targeted and high-signal. Add regression coverage for real behavior, but avoid bulky test scaffolding that duplicates what existing tests already cover.
+- Prefer clear, direct code over clever code, but keep it compact. Comments, utilities, and wrappers should earn their keep.

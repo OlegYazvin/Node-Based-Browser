@@ -61,6 +61,18 @@ function smokeFilePath() {
   }
 }
 
+function smokeScenarioName() {
+  if (!ServicesRef?.prefs) {
+    return "";
+  }
+
+  try {
+    return ServicesRef.prefs.getStringPref("nodely.testing.smoke_scenario", "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function marionetteEnabled() {
   if (!ServicesRef?.prefs) {
     return false;
@@ -192,7 +204,9 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
   }
 
   const smokePath = smokeFilePath();
+  const configuredScenario = smokeScenarioName();
   let smokeWriteChain = Promise.resolve();
+  let smokeScenarioRun = null;
 
   const api = {
     shell,
@@ -235,6 +249,22 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
 
         controller.addEventListener("state-changed", onStateChange);
       });
+    },
+    runConfiguredSmokeScenario() {
+      if (!configuredScenario) {
+        return Promise.resolve(null);
+      }
+
+      if (!smokeScenarioRun) {
+        smokeScenarioRun = runSmokeScenario({
+          shell,
+          controller,
+          writeSmokeSnapshot,
+          scenarioName: configuredScenario
+        });
+      }
+
+      return smokeScenarioRun;
     }
   };
 
@@ -318,6 +348,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
             },
       ui: {
         surfaceCloseLabel: surfaceCloseButton?.textContent?.trim() ?? "",
+        smokeActivationMethod: window.__nodelySmokeActivationMethod ?? null,
         minimap: {
           visible: Boolean(minimap && !minimap.hidden),
           svgPresent: Boolean(minimapSvg),
@@ -355,6 +386,197 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
   controller.addEventListener("state-changed", () => {
     writeSmokeSnapshot("state-changed");
   });
+}
+
+async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenarioName }) {
+  try {
+    switch (scenarioName) {
+      case "graph-select-root":
+        await runGraphSelectRootScenario({ shell, controller });
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "pagebar-new-child":
+        await runPagebarNewChildScenario({ shell, controller });
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      default:
+        writeSmokeSnapshot(`scenario:${scenarioName}:unknown`);
+        return;
+    }
+  } catch (error) {
+    reportBootstrapError(`smoke.${scenarioName}`, error);
+    writeSmokeSnapshot(`scenario:${scenarioName}:error`);
+  }
+}
+
+async function runGraphSelectRootScenario({ shell, controller }) {
+  const readyState = await window.__nodelyTest.waitForState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length >= 2 &&
+      selectedNode?.url === "https://example.org/" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke graph ready");
+  const rootNode =
+    readyState.workspace?.nodes?.find?.((node) => node.parentId === null) ?? null;
+
+  if (!rootNode?.id) {
+    throw new Error("Smoke graph-select-root scenario could not find a root node.");
+  }
+
+  shell.graph.centerOnNode(rootNode.id);
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  const selector = `.nodely-graph-node[data-node-id="${escapeAttributeValue(rootNode.id)}"]`;
+  const nodeElement = document.querySelector(selector);
+
+  if (!nodeElement) {
+    throw new Error(`Smoke graph-select-root scenario could not find ${selector}.`);
+  }
+
+  synthesizeMouseActivation(nodeElement);
+
+  await window.__nodelyTest.waitForState((state) => {
+    const selectedNode =
+      state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      selectedNode?.id === rootNode.id &&
+      selectedNode?.url === "https://example.com/" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "graph root selection");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runPagebarNewChildScenario() {
+  const readyState = await window.__nodelyTest.waitForState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length === 2 &&
+      selectedNode?.url === "https://example.org/" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke pagebar ready");
+  const parentNodeId = readyState.workspace?.selectedNodeId ?? null;
+  const button = document.querySelector('[data-action="create-child-node"]');
+
+  if (!parentNodeId) {
+    throw new Error("Smoke pagebar-new-child scenario could not resolve the active page node.");
+  }
+
+  if (!button) {
+    throw new Error("Smoke pagebar-new-child scenario could not find the new child button.");
+  }
+
+  button.click();
+
+  await window.__nodelyTest.waitForState((state) => {
+    const selectedNode =
+      state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      state.workspace?.nodes?.length === 3 &&
+      state.workspace?.edgeCount === 2 &&
+      selectedNode?.id !== parentNodeId &&
+      selectedNode?.parentId === parentNodeId &&
+      selectedNode?.kind === "page" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "pagebar new child");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+function escapeAttributeValue(value) {
+  if (globalThis.CSS?.escape) {
+    return globalThis.CSS.escape(value);
+  }
+
+  return String(value).replace(/["\\]/gu, "\\$&");
+}
+
+function nextAnimationFrame() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+function synthesizeMouseActivation(element) {
+  const rect = element.getBoundingClientRect();
+  const clientX = rect.left + rect.width / 2;
+  const clientY = rect.top + rect.height / 2;
+  const utils = window.windowUtils;
+  const mouseSource = window.MouseEvent?.MOZ_SOURCE_MOUSE ?? 1;
+  const pointerId = utils?.DEFAULT_MOUSE_POINTER_ID ?? 1;
+
+  if (!utils?.sendMouseEvent) {
+    window.__nodelySmokeActivationMethod = "dispatchEvent-fallback";
+    dispatchSyntheticMouseActivation(element, clientX, clientY);
+    return;
+  }
+
+  try {
+    // Drive the graph through Gecko's window-utils synthesis so smoke
+    // coverage matches the browser's real click path more closely than plain
+    // dispatchEvent shortcuts. Headless builds can reject this call, so we
+    // fall back below when needed.
+    utils.sendMouseEvent("mousemove", clientX, clientY, 0, 0, 0, false, 0, mouseSource, true, false, 0, pointerId);
+    utils.sendMouseEvent("mousedown", clientX, clientY, 0, 1, 0, false, 0, mouseSource, true, false, 1, pointerId);
+    utils.sendMouseEvent("mouseup", clientX, clientY, 0, 1, 0, false, 0, mouseSource, true, false, 0, pointerId);
+    utils.sendMouseEvent("click", clientX, clientY, 0, 1, 0, false, 0, mouseSource, true, false, 0, pointerId);
+    window.__nodelySmokeActivationMethod = "windowUtils";
+  } catch {
+    window.__nodelySmokeActivationMethod = "dispatchEvent-fallback";
+    dispatchSyntheticMouseActivation(element, clientX, clientY);
+  }
+}
+
+function dispatchSyntheticMouseActivation(element, clientX, clientY) {
+  const pointerBase = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+    clientX,
+    clientY
+  };
+
+  element.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      ...pointerBase,
+      button: 0,
+      buttons: 1
+    })
+  );
+  element.dispatchEvent(
+    new PointerEvent("pointerup", {
+      ...pointerBase,
+      button: 0,
+      buttons: 0
+    })
+  );
+  element.dispatchEvent(
+    new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX,
+      clientY,
+      button: 0
+    })
+  );
 }
 
 function initializeNodelyShell() {
@@ -398,6 +620,7 @@ function initializeNodelyShell() {
       .then(() => {
         if (testingEnabled()) {
           window.dispatchEvent(new CustomEvent("nodely-ready", { detail: { shell } }));
+          void window.__nodelyTest?.runConfiguredSmokeScenario?.();
         }
       })
       .catch((error) => reportBootstrapError("controller.initialize", error));

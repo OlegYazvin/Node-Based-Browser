@@ -69,6 +69,7 @@ export class NodelyGraphSurface extends HTMLElement {
     this.handleWheel = this.handleWheel.bind(this);
     this.handleBackgroundPointerDown = this.handleBackgroundPointerDown.bind(this);
     this.handleNodePointerDown = this.handleNodePointerDown.bind(this);
+    this.handleNodePointerUp = this.handleNodePointerUp.bind(this);
     this.handleNodeClick = this.handleNodeClick.bind(this);
     this.handleMinimapPointerDown = this.handleMinimapPointerDown.bind(this);
     this.handleMinimapToolbarClick = this.handleMinimapToolbarClick.bind(this);
@@ -112,8 +113,6 @@ export class NodelyGraphSurface extends HTMLElement {
     this.context = this.canvas.getContext("2d");
     this.stage.addEventListener("pointerdown", this.handleBackgroundPointerDown);
     this.stage.addEventListener("wheel", this.handleWheel, { passive: false });
-    this.nodeLayer.addEventListener("pointerdown", this.handleNodePointerDown);
-    this.nodeLayer.addEventListener("click", this.handleNodeClick);
     this.minimap.addEventListener("pointerdown", this.handleMinimapPointerDown);
     this.minimapToolbar.addEventListener("click", this.handleMinimapToolbarClick);
     this.resizeObserver.observe(this);
@@ -449,6 +448,9 @@ export class NodelyGraphSurface extends HTMLElement {
 
       if (!this.nodeElements.has(node.id)) {
         element.type = "button";
+        element.addEventListener("pointerdown", this.handleNodePointerDown);
+        element.addEventListener("pointerup", this.handleNodePointerUp);
+        element.addEventListener("click", this.handleNodeClick);
         this.nodeElements.set(node.id, element);
         this.nodeLayer.appendChild(element);
       }
@@ -674,7 +676,9 @@ export class NodelyGraphSurface extends HTMLElement {
       viewport: { ...this.viewport },
       moved: false
     };
-    this.stage.setPointerCapture?.(event.pointerId);
+    try {
+      this.stage.setPointerCapture?.(event.pointerId);
+    } catch {}
 
     window.addEventListener("pointermove", this.handlePointerMove);
     window.addEventListener("pointerup", this.handlePointerUp);
@@ -691,7 +695,6 @@ export class NodelyGraphSurface extends HTMLElement {
       return;
     }
 
-    event.preventDefault();
     event.stopPropagation();
 
     const node = findNode(this.workspace, nodeElement.dataset.nodeId);
@@ -712,10 +715,20 @@ export class NodelyGraphSurface extends HTMLElement {
       moved: false
     };
     this.livePositions.set(node.id, { ...position });
-    nodeElement.setPointerCapture?.(event.pointerId);
+    try {
+      nodeElement.setPointerCapture?.(event.pointerId);
+    } catch {}
 
     window.addEventListener("pointermove", this.handlePointerMove);
     window.addEventListener("pointerup", this.handlePointerUp);
+  }
+
+  handleNodePointerUp(event) {
+    if (!this.finalizeNodePointerInteraction(event)) {
+      return;
+    }
+
+    this.cleanupPointerListenersIfIdle();
   }
 
   handlePointerMove(event) {
@@ -769,55 +782,24 @@ export class NodelyGraphSurface extends HTMLElement {
 
   handlePointerUp(event) {
     if (this.minimapState && event.pointerId === this.minimapState.pointerId) {
-      this.minimap.releasePointerCapture?.(event.pointerId);
+      try {
+        this.minimap.releasePointerCapture?.(event.pointerId);
+      } catch {}
       this.minimapState = null;
       this.emitViewportChange();
     }
 
-    if (this.dragState && event.pointerId === this.dragState.pointerId) {
-      const node = findNode(this.workspace, this.dragState.nodeId);
-      const currentPosition = this.livePositions.get(this.dragState.nodeId) ?? node?.position;
-
-      if (this.dragState.moved && node && currentPosition) {
-        const snappedPosition = snapNodePosition(this.workspace, node.id, currentPosition);
-        this.livePositions.set(node.id, snappedPosition);
-        this.requestRender({
-          edges: true,
-          nodes: true,
-          minimap: true
-        });
-        this.dispatchEvent(
-          new CustomEvent("nodely-node-moved", {
-            bubbles: true,
-            detail: {
-              nodeId: node.id,
-              position: snappedPosition
-            }
-          })
-        );
-        this.suppressClickNodeId = node.id;
-        this.suppressClickUntil = performance.now() + CLICK_SUPPRESSION_MS;
-      } else if (node) {
-        this.livePositions.delete(node.id);
-        this.dispatchNodeSelection(node.id);
-        this.suppressClickNodeId = node.id;
-        this.suppressClickUntil = performance.now() + CLICK_SUPPRESSION_MS;
-      }
-
-      this.nodeElements.get(node?.id)?.releasePointerCapture?.(event.pointerId);
-      this.dragState = null;
-    }
+    this.finalizeNodePointerInteraction(event);
 
     if (this.panState && event.pointerId === this.panState.pointerId) {
-      this.stage.releasePointerCapture?.(event.pointerId);
+      try {
+        this.stage.releasePointerCapture?.(event.pointerId);
+      } catch {}
       this.panState = null;
       this.emitViewportChange();
     }
 
-    if (!this.dragState && !this.panState && !this.minimapState) {
-      window.removeEventListener("pointermove", this.handlePointerMove);
-      window.removeEventListener("pointerup", this.handlePointerUp);
-    }
+    this.cleanupPointerListenersIfIdle();
   }
 
   handleNodeClick(event) {
@@ -850,7 +832,9 @@ export class NodelyGraphSurface extends HTMLElement {
     this.minimapState = {
       pointerId: event.pointerId
     };
-    this.minimap.setPointerCapture?.(event.pointerId);
+    try {
+      this.minimap.setPointerCapture?.(event.pointerId);
+    } catch {}
     this.centerOnMinimapClientPoint(event.clientX, event.clientY, { persist: false });
     window.addEventListener("pointermove", this.handlePointerMove);
     window.addEventListener("pointerup", this.handlePointerUp);
@@ -893,6 +877,51 @@ export class NodelyGraphSurface extends HTMLElement {
         detail: { nodeId }
       })
     );
+  }
+
+  finalizeNodePointerInteraction(event) {
+    if (!this.dragState || event.pointerId !== this.dragState.pointerId) {
+      return false;
+    }
+
+    const node = findNode(this.workspace, this.dragState.nodeId);
+    const currentPosition = this.livePositions.get(this.dragState.nodeId) ?? node?.position;
+
+    if (this.dragState.moved && node && currentPosition) {
+      const snappedPosition = snapNodePosition(this.workspace, node.id, currentPosition);
+      this.livePositions.set(node.id, snappedPosition);
+      this.requestRender({
+        edges: true,
+        nodes: true,
+        minimap: true
+      });
+      this.dispatchEvent(
+        new CustomEvent("nodely-node-moved", {
+          bubbles: true,
+          detail: {
+            nodeId: node.id,
+            position: snappedPosition
+          }
+        })
+      );
+      this.suppressClickNodeId = node.id;
+      this.suppressClickUntil = performance.now() + CLICK_SUPPRESSION_MS;
+    } else if (node) {
+      this.livePositions.delete(node.id);
+    }
+
+    try {
+      this.nodeElements.get(node?.id)?.releasePointerCapture?.(event.pointerId);
+    } catch {}
+    this.dragState = null;
+    return true;
+  }
+
+  cleanupPointerListenersIfIdle() {
+    if (!this.dragState && !this.panState && !this.minimapState) {
+      window.removeEventListener("pointermove", this.handlePointerMove);
+      window.removeEventListener("pointerup", this.handlePointerUp);
+    }
   }
 }
 
