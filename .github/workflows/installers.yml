@@ -90,20 +90,13 @@ jobs:
 
       - name: Install MozillaBuild
         if: matrix.platform == 'win32'
+        shell: pwsh
         run: |
-          if [[ ! -d /c/mozilla-build ]]; then
-            installer_path="$RUNNER_TEMP/MozillaBuildSetup-Latest.exe"
-            curl -fsSL https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-Latest.exe -o "$installer_path"
-            windows_installer_path="$(cygpath -w "$installer_path")"
-            cmd.exe //c "\"$windows_installer_path\" /S"
-          fi
-
-          echo "MOZILLABUILD=C:/mozilla-build" >> "$GITHUB_ENV"
-          {
-            echo "C:/mozilla-build/bin"
-            echo "C:/mozilla-build/moztools/bin"
-            echo "C:/mozilla-build/msys2/usr/bin"
-          } >> "$GITHUB_PATH"
+          choco install -y mozillabuild
+          "MOZILLABUILD=C:\mozilla-build" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "C:\mozilla-build\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "C:\mozilla-build\msys2\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "C:\mozilla-build\moztools\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Choose Gecko checkout directory
         run: |
@@ -195,6 +188,9 @@ jobs:
             matches=($pattern)
 
             if [[ ${#matches[@]} -eq 0 ]]; then
+              echo "Present Linux x64 installers:" >&2
+              find out/make/linux/x64 -maxdepth 1 -type f -printf '  %f\n' | sort >&2 || true
+              echo "::error title=Missing expected Linux x64 installer::$pattern"
               echo "Missing expected Linux x64 installer: $pattern" >&2
               exit 1
             fi
