@@ -88,6 +88,23 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Install MozillaBuild
+        if: matrix.platform == 'win32'
+        run: |
+          if [[ ! -d /c/mozilla-build ]]; then
+            installer_path="$RUNNER_TEMP/MozillaBuildSetup-Latest.exe"
+            curl -fsSL https://ftp.mozilla.org/pub/mozilla/libraries/win32/MozillaBuildSetup-Latest.exe -o "$installer_path"
+            windows_installer_path="$(cygpath -w "$installer_path")"
+            cmd.exe //c "\"$windows_installer_path\" /S"
+          fi
+
+          echo "MOZILLABUILD=C:/mozilla-build" >> "$GITHUB_ENV"
+          {
+            echo "C:/mozilla-build/bin"
+            echo "C:/mozilla-build/moztools/bin"
+            echo "C:/mozilla-build/msys2/usr/bin"
+          } >> "$GITHUB_PATH"
+
       - name: Choose Gecko checkout directory
         run: |
           if [[ "${{ matrix.platform }}" == "win32" ]]; then
@@ -119,6 +136,7 @@ jobs:
           if ! (
             cd "$GECKO_CHECKOUT_DIR"
             if [[ "${{ matrix.platform }}" == "darwin" ]]; then
+              python ./mach configure
               python ./mach artifact install
               cd "$GITHUB_WORKSPACE"
               npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
