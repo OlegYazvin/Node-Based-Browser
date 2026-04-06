@@ -20,7 +20,7 @@ This layer turns real packaged browser artifacts into the downloadables in `Inst
 
 - `scripts/build-installers.mjs` builds Linux installer formats from a staged Gecko package and copies native Windows/macOS installers from staged Gecko outputs.
 - `scripts/installers-lib.mjs` syncs finished installers into `Installer/`, prunes managed slices, writes `Installer/manifest.json`, and regenerates `Installer/README.MD`.
-- `.github/workflows/installers.yml` is the native CI path for Windows/macOS packaging and for assembling and promoting a truthful `Installer/` directory.
+- `.github/workflows/installers.yml` is the native CI path for Windows/macOS packaging and for assembling and promoting a truthful `Installer/` directory. It runs on pushes to `main` and ignores installer-only promotion commits so generated installer commits do not loop forever.
 
 Change this layer when you are changing installer formats, installer sync behavior, support-matrix docs, or the `Installer/` assembly flow.
 

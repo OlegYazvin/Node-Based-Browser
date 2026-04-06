@@ -4,13 +4,8 @@ on:
   push:
     branches:
       - main
-    paths:
-      - ".github/workflows/installers.yml"
-      - "desktop/**"
-      - "gecko/**"
-      - "scripts/**"
-      - "package.json"
-      - "package-lock.json"
+    paths-ignore:
+      - "Installer/**"
   workflow_dispatch:
 
 permissions:
@@ -145,10 +140,11 @@ jobs:
               python ./mach configure
               python ./mach artifact install
               cd "$GITHUB_WORKSPACE"
+              npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR"
               npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode compat
-              cd "$GECKO_CHECKOUT_DIR"
+            else
+              python ./mach build faster
             fi
-            python ./mach build faster
           ) 2>&1 | tee gecko-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-build.log --mode build)"
             echo "::error title=Gecko overlay build failed::$summary"

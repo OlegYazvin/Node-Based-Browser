@@ -90,6 +90,69 @@ function patchFile(filePath, marker, patcher) {
   return true;
 }
 
+function patchBrowserXhtmlContents(contents) {
+  let next = contents;
+
+  if (!next.includes("chrome://browser/content/nodely/nodely-shell.css")) {
+    next = next.replace(
+      "</head>",
+      '  <html:link rel="stylesheet" href="chrome://browser/content/nodely/nodely-shell.css" />\n</head>'
+    );
+  }
+
+  if (next.includes("chrome://browser/content/nodely/nodely-bootstrap.mjs")) {
+    return next;
+  }
+
+  if (next.includes("</html:body>")) {
+    return next.replace(
+      "</html:body>",
+      '  <html:script type="module" src="chrome://browser/content/nodely/nodely-bootstrap.mjs"></html:script>\n</html:body>'
+    );
+  }
+
+  return next.replace(
+    "</body>",
+    '  <html:script type="module" src="chrome://browser/content/nodely/nodely-bootstrap.mjs"></html:script>\n</body>'
+  );
+}
+
+function patchFirefoxDefaultsContents(contents) {
+  let next = contents;
+
+  next = next.replace(
+    'pref("browser.startup.page",                1);',
+    'pref("browser.startup.page",                0);'
+  );
+  next = next.replace(
+    'pref("browser.startup.homepage",            "about:home");',
+    'pref("browser.startup.homepage",            "about:blank");'
+  );
+  next = next.replace(
+    'pref("browser.aboutwelcome.enabled", true);',
+    'pref("browser.aboutwelcome.enabled", false);'
+  );
+
+  if (!next.includes('pref("browser.startup.homepage_override.mstone", "ignore");')) {
+    next = next.replace(
+      /pref\("browser\.startup\.homepage",\s+"about:blank"\);/u,
+      'pref("browser.startup.homepage",            "about:blank");\n' +
+        'pref("browser.startup.homepage_override.mstone", "ignore");\n' +
+        'pref("startup.homepage_welcome_url",      "");\n' +
+        'pref("startup.homepage_welcome_url.additional", "");'
+    );
+  }
+
+  if (!next.includes('pref("browser.newtabpage.enabled", false);')) {
+    next = next.replace(
+      /pref\("browser\.aboutwelcome\.enabled", false\);/u,
+      'pref("browser.aboutwelcome.enabled", false);\n' + 'pref("browser.newtabpage.enabled", false);'
+    );
+  }
+
+  return next;
+}
+
 function ensureUnofficialBrandingPatched(checkoutDir) {
   const configurePath = path.join(checkoutDir, "browser", "branding", "unofficial", "configure.sh");
   const brandFtlPath = path.join(checkoutDir, "browser", "branding", "unofficial", "locales", "en-US", "brand.ftl");
@@ -158,34 +221,7 @@ function ensureBrowserXhtmlPatched(checkoutDir) {
     throw new Error(`Gecko checkout is missing browser.xhtml: ${browserXhtmlPath}`);
   }
 
-  patchFile(browserXhtmlPath, "browser.xhtml stylesheet", (contents) => {
-    if (contents.includes("chrome://browser/content/nodely/nodely-shell.css")) {
-      return contents;
-    }
-
-    return contents.replace(
-      "</head>",
-      '  <html:link rel="stylesheet" href="chrome://browser/content/nodely/nodely-shell.css" />\n</head>'
-    );
-  });
-
-  patchFile(browserXhtmlPath, "browser.xhtml bootstrap", (contents) => {
-    if (contents.includes("chrome://browser/content/nodely/nodely-bootstrap.mjs")) {
-      return contents;
-    }
-
-    if (contents.includes("</html:body>")) {
-      return contents.replace(
-        "</html:body>",
-        '  <html:script type="module" src="chrome://browser/content/nodely/nodely-bootstrap.mjs"></html:script>\n</html:body>'
-      );
-    }
-
-    return contents.replace(
-      "</body>",
-      '  <html:script type="module" src="chrome://browser/content/nodely/nodely-bootstrap.mjs"></html:script>\n</body>'
-    );
-  });
+  patchFile(browserXhtmlPath, "browser.xhtml nodely hooks", patchBrowserXhtmlContents);
 }
 
 function ensureJarManifestPatched(checkoutDir) {
@@ -267,45 +303,10 @@ function ensureBrowserProfileDefaultsPatched(checkoutDir) {
     throw new Error(`Gecko checkout is missing browser/app/profile/firefox.js: ${firefoxProfilePath}`);
   }
 
-  patchFile(firefoxProfilePath, "browser/app/profile/firefox.js nodely startup prefs", (contents) => {
-    let next = contents;
-
-    next = next.replace(
-      'pref("browser.startup.page",                1);',
-      'pref("browser.startup.page",                0);'
-    );
-    next = next.replace(
-      'pref("browser.startup.homepage",            "about:home");',
-      'pref("browser.startup.homepage",            "about:blank");'
-    );
-    next = next.replace(
-      'pref("browser.aboutwelcome.enabled", true);',
-      'pref("browser.aboutwelcome.enabled", false);'
-    );
-
-    if (!next.includes('pref("browser.startup.homepage_override.mstone", "ignore");')) {
-      next = next.replace(
-        'pref("browser.startup.homepage",            "about:blank");\n',
-        'pref("browser.startup.homepage",            "about:blank");\n' +
-          'pref("browser.startup.homepage_override.mstone", "ignore");\n' +
-          'pref("startup.homepage_welcome_url",      "");\n' +
-          'pref("startup.homepage_welcome_url.additional", "");\n'
-      );
-    }
-
-    if (!next.includes('pref("browser.newtabpage.enabled", false);')) {
-      next = next.replace(
-        'pref("browser.aboutwelcome.enabled", false);\n',
-        'pref("browser.aboutwelcome.enabled", false);\n' +
-          'pref("browser.newtabpage.enabled", false);\n'
-      );
-    }
-
-    return next;
-  });
+  patchFile(firefoxProfilePath, "browser/app/profile/firefox.js nodely startup prefs", patchFirefoxDefaultsContents);
 }
 
-function syncLooseRuntimeOverlay(checkoutDir) {
+export function syncLooseRuntimeOverlay(checkoutDir) {
   const sourceDirectory = path.join(
     overlayRoot,
     "browser",
@@ -313,28 +314,103 @@ function syncLooseRuntimeOverlay(checkoutDir) {
     "content",
     "nodely"
   );
-  const runtimeDirectory = path.join(
-    checkoutDir,
-    "obj-nodely",
-    "dist",
-    "bin",
-    "browser",
-    "chrome",
-    "browser",
-    "content",
-    "browser",
-    "nodely"
-  );
-
-  if (!existsSync(sourceDirectory) || !existsSync(runtimeDirectory)) {
+  if (!existsSync(sourceDirectory)) {
     return false;
   }
 
-  copyDirectory(sourceDirectory, runtimeDirectory);
-  return true;
+  const runtimeOverlayDirectories = [
+    {
+      parentDirectory: path.join(
+        checkoutDir,
+        "obj-nodely",
+        "dist",
+        "bin",
+        "browser",
+        "chrome",
+        "browser",
+        "content",
+        "browser"
+      ),
+      runtimeDirectory: path.join(
+        checkoutDir,
+        "obj-nodely",
+        "dist",
+        "bin",
+        "browser",
+        "chrome",
+        "browser",
+        "content",
+        "browser",
+        "nodely"
+      )
+    },
+    {
+      parentDirectory: path.join(
+        checkoutDir,
+        "obj-nodely",
+        "dist",
+        "nodely",
+        "browser",
+        "chrome",
+        "browser",
+        "content",
+        "browser"
+      ),
+      runtimeDirectory: path.join(
+        checkoutDir,
+        "obj-nodely",
+        "dist",
+        "nodely",
+        "browser",
+        "chrome",
+        "browser",
+        "content",
+        "browser",
+        "nodely"
+      )
+    }
+  ];
+  const runtimeBrowserXhtmlPaths = [
+    path.join(checkoutDir, "obj-nodely", "dist", "bin", "browser", "chrome", "browser", "content", "browser", "browser.xhtml"),
+    path.join(checkoutDir, "obj-nodely", "dist", "nodely", "browser", "chrome", "browser", "content", "browser", "browser.xhtml")
+  ];
+  const runtimeFirefoxDefaultsPaths = [
+    path.join(checkoutDir, "obj-nodely", "dist", "bin", "browser", "defaults", "preferences", "firefox.js"),
+    path.join(checkoutDir, "obj-nodely", "dist", "nodely", "browser", "defaults", "preferences", "firefox.js")
+  ];
+
+  let updated = false;
+
+  for (const { parentDirectory, runtimeDirectory } of runtimeOverlayDirectories) {
+    if (!existsSync(parentDirectory)) {
+      continue;
+    }
+
+    copyDirectory(sourceDirectory, runtimeDirectory);
+    updated = true;
+  }
+
+  for (const browserXhtmlPath of runtimeBrowserXhtmlPaths) {
+    if (!existsSync(browserXhtmlPath)) {
+      continue;
+    }
+
+    updated = patchFile(browserXhtmlPath, "runtime browser.xhtml nodely hooks", patchBrowserXhtmlContents) || updated;
+  }
+
+  for (const firefoxDefaultsPath of runtimeFirefoxDefaultsPaths) {
+    if (!existsSync(firefoxDefaultsPath)) {
+      continue;
+    }
+
+    updated =
+      patchFile(firefoxDefaultsPath, "runtime firefox.js nodely startup prefs", patchFirefoxDefaultsContents) || updated;
+  }
+
+  return updated;
 }
 
-function syncOverlay({ checkoutDir }) {
+export function syncOverlay({ checkoutDir }) {
   if (!existsSync(checkoutDir) || !statSync(checkoutDir).isDirectory()) {
     throw new Error(`Gecko source checkout directory not found: ${checkoutDir}`);
   }
@@ -354,9 +430,11 @@ function syncOverlay({ checkoutDir }) {
   console.log(`Overlay synced into ${checkoutDir}`);
 }
 
-try {
-  syncOverlay(parseArguments(process.argv.slice(2)));
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    syncOverlay(parseArguments(process.argv.slice(2)));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
