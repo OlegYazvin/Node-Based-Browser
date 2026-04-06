@@ -10,7 +10,7 @@ This directory contains the installers that actually exist in this repo right no
 - If a section below says no installers are staged, there is nothing in this repo for that target today.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
-Generated from `Installer/manifest.json` at 2026-04-06T14:46:14.588Z.
+Generated from `Installer/manifest.json` at 2026-04-06T15:22:16.015Z.
 
 ## Windows 10 and 11
 

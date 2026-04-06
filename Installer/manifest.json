@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-06T14:46:14.588Z",
+  "generatedAt": "2026-04-06T15:22:16.015Z",
   "installers": [
     {
       "version": "0.1.0",
@@ -28,8 +28,8 @@
       "path": "linux/Nodely-Browser-0.1.0-debian-x64.deb",
       "fileName": "Nodely-Browser-0.1.0-debian-x64.deb",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-debian-x64.deb",
-      "size": 18917886,
-      "syncedAt": "2026-04-06T14:46:14.387Z"
+      "size": 18918856,
+      "syncedAt": "2026-04-06T15:22:15.829Z"
     },
     {
       "version": "0.1.0",
@@ -58,8 +58,8 @@
       "path": "linux/Nodely-Browser-0.1.0-fedora-x64.rpm",
       "fileName": "Nodely-Browser-0.1.0-fedora-x64.rpm",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-fedora-x64.rpm",
-      "size": 19907434,
-      "syncedAt": "2026-04-06T14:46:14.395Z"
+      "size": 19907489,
+      "syncedAt": "2026-04-06T15:22:15.838Z"
     },
     {
       "version": "0.1.0",
@@ -115,8 +115,8 @@
       "path": "linux/Nodely-Browser-0.1.0-linux-x64.flatpak",
       "fileName": "Nodely-Browser-0.1.0-linux-x64.flatpak",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-linux-x64.flatpak",
-      "size": 18701648,
-      "syncedAt": "2026-04-06T14:46:14.403Z"
+      "size": 18703864,
+      "syncedAt": "2026-04-06T15:22:15.845Z"
     },
     {
       "version": "0.1.0",
@@ -134,8 +134,8 @@
       "path": "linux/Nodely-Browser-0.1.0-linux-x64.run",
       "fileName": "Nodely-Browser-0.1.0-linux-x64.run",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-linux-x64.run",
-      "size": 18374396,
-      "syncedAt": "2026-04-06T14:46:14.411Z"
+      "size": 18376032,
+      "syncedAt": "2026-04-06T15:22:15.853Z"
     },
     {
       "version": "0.1.0",
@@ -164,8 +164,8 @@
       "path": "linux/Nodely-Browser-0.1.0-ubuntu-x64.deb",
       "fileName": "Nodely-Browser-0.1.0-ubuntu-x64.deb",
       "source": "out/make/linux/x64/Nodely-Browser-0.1.0-ubuntu-x64.deb",
-      "size": 18919808,
-      "syncedAt": "2026-04-06T14:46:14.419Z"
+      "size": 18918258,
+      "syncedAt": "2026-04-06T15:22:15.860Z"
     },
     {
       "version": "0.1.0",
@@ -180,8 +180,8 @@
       "path": "windows/nodely-browser-140.10.0.en-US.win64.installer.exe",
       "fileName": "nodely-browser-140.10.0.en-US.win64.installer.exe",
       "source": "out/make/win32/x64/nodely-browser-140.10.0.en-US.win64.installer.exe",
-      "size": 19209312,
-      "syncedAt": "2026-04-06T14:46:14.588Z"
+      "size": 19209564,
+      "syncedAt": "2026-04-06T15:22:16.015Z"
     }
   ]
 }
