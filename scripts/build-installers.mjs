@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { chmod, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -506,6 +506,15 @@ async function commandSucceeds(command, args, options = {}) {
   }
 }
 
+async function pathExists(targetPath) {
+  try {
+    await access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function podmanUnshare(args, options = {}) {
   return runCommand("podman", ["unshare", ...args], options);
 }
@@ -693,7 +702,7 @@ async function buildFlatpakInstaller({ version, outputDirectory, arch, payloadRo
   const appRoot = path.join(filesDirectory, "lib", "nodely");
   const wrapperPath = path.join(filesDirectory, "bin", "nodely-browser");
   const desktopPath = path.join(filesDirectory, "share", "applications", `${flatpakAppId}.desktop`);
-  const iconPath = path.join(filesDirectory, "share", "icons", "hicolor", "scalable", "apps", `${flatpakAppId}.svg`);
+  const iconPath = path.join(filesDirectory, "share", "icons", "hicolor", "128x128", "apps", `${flatpakAppId}.png`);
   const metainfoPath = path.join(filesDirectory, "share", "metainfo", `${flatpakAppId}.metainfo.xml`);
   const finalPath = path.join(outputDirectory, linuxFlatpakFileName(version, arch));
   const flatpakArch = flatpakArchNames[arch] ?? arch;
@@ -733,7 +742,17 @@ async function buildFlatpakInstaller({ version, outputDirectory, arch, payloadRo
       "utf8"
     );
     await runCommand("desktop-file-validate", [desktopPath]);
-    await writeFile(iconPath, `${iconSvg.trim()}\n`, "utf8");
+    const iconCandidates = [
+      path.join(appRoot, "browser", "chrome", "icons", "default", "default128.png"),
+      path.join(appRoot, "browser", "chrome", "icons", "default", "default64.png")
+    ];
+    const flatpakIconSource = (await Promise.all(iconCandidates.map((candidate) => pathExists(candidate)))).findIndex(Boolean);
+
+    if (flatpakIconSource === -1) {
+      throw new Error(`Unable to locate a PNG app icon for Flatpak export in ${appRoot}.`);
+    }
+
+    await cp(iconCandidates[flatpakIconSource], iconPath);
     await writeFile(metainfoPath, buildFlatpakMetainfo(version), "utf8");
 
     await runCommand("flatpak", [

@@ -94,7 +94,18 @@ function modeConfig(mode) {
   }
 
   return {
-    patterns: ["error:", "ERROR", "not all --enable", "configure:", "Traceback", "Exception", "fatal:"],
+    patterns: [
+      "error:",
+      "ERROR",
+      "not all --enable",
+      "configure:",
+      "Traceback",
+      "Exception",
+      "fatal:",
+      "No rule to make target",
+      "not found",
+      "failed with exit code"
+    ],
     before: 10,
     after: 20,
     fallback: 80

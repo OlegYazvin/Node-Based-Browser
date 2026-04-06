@@ -31,13 +31,15 @@ function usage() {
 
 Options:
   --checkout-dir <path>  Gecko source checkout directory
+  --mode <full|compat>   Run the full branding refresh or only the macOS compat shim
   --help                 Show this help text
 `);
 }
 
 function parseArguments(argv) {
   const options = {
-    checkoutDir: path.resolve(repositoryRoot, "..", "Nodely-Gecko", "firefox-esr")
+    checkoutDir: path.resolve(repositoryRoot, "..", "Nodely-Gecko", "firefox-esr"),
+    mode: "full"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -47,6 +49,9 @@ function parseArguments(argv) {
       case "--checkout-dir":
       case "--firefox-dir":
         options.checkoutDir = path.resolve(argv[++index]);
+        break;
+      case "--mode":
+        options.mode = argv[++index] ?? options.mode;
         break;
       case "--help":
         usage();
@@ -430,10 +435,16 @@ async function pruneLegacyBlinkOutputs(repositoryDirectory) {
   return removedPaths;
 }
 
-async function refreshBranding({ checkoutDir }) {
+async function refreshBranding({ checkoutDir, mode = "full" }) {
   const distBinDir = path.join(checkoutDir, "obj-nodely", "dist", "bin");
   const packagedNodelyDir = path.join(checkoutDir, "obj-nodely", "dist", "nodely");
   const macCompatUpdates = await ensureMacArtifactCompatibility(checkoutDir);
+
+  if (mode === "compat") {
+    console.log(`Refreshed artifact branding in ${checkoutDir} (${macCompatUpdates} macOS compat updates, compat-only mode).`);
+    return;
+  }
+
   const wrapperUpdates = process.platform === "win32"
     ? 0
     : [
