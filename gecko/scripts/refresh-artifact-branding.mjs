@@ -7,6 +7,7 @@ import {
   constants,
   copyFile,
   lstat,
+  mkdir,
   readFile,
   readdir,
   rm,
@@ -134,6 +135,42 @@ async function ensureAlias(directory, aliasName, sourceName) {
   }
 
   return true;
+}
+
+export async function ensureMacArtifactCompatibility(checkoutDir) {
+  const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
+  const distBinDir = path.join(distDirectory, "bin");
+  const distBinFirefox = path.join(distBinDir, "firefox");
+
+  if (!(await exists(distDirectory)) || (await exists(distBinFirefox))) {
+    return 0;
+  }
+
+  const distEntries = await readdir(distDirectory, { withFileTypes: true }).catch(() => []);
+  const bundleEntry = distEntries.find((entry) => entry.isDirectory() && entry.name.endsWith(".app"));
+
+  if (!bundleEntry) {
+    return 0;
+  }
+
+  const executableCandidates = ["firefox", "nodely"];
+  let relativeExecutablePath = null;
+
+  for (const executableName of executableCandidates) {
+    const candidatePath = path.join("..", bundleEntry.name, "Contents", "MacOS", executableName);
+
+    if (await exists(path.join(distBinDir, candidatePath))) {
+      relativeExecutablePath = candidatePath;
+      break;
+    }
+  }
+
+  if (!relativeExecutablePath) {
+    return 0;
+  }
+
+  await mkdir(distBinDir, { recursive: true });
+  return (await ensureAlias(distBinDir, "firefox", relativeExecutablePath)) ? 1 : 0;
 }
 
 function nodelyVersionWrapper(targetName) {
@@ -396,6 +433,7 @@ async function pruneLegacyBlinkOutputs(repositoryDirectory) {
 async function refreshBranding({ checkoutDir }) {
   const distBinDir = path.join(checkoutDir, "obj-nodely", "dist", "bin");
   const packagedNodelyDir = path.join(checkoutDir, "obj-nodely", "dist", "nodely");
+  const macCompatUpdates = await ensureMacArtifactCompatibility(checkoutDir);
   const wrapperUpdates = process.platform === "win32"
     ? 0
     : [
@@ -420,13 +458,17 @@ async function refreshBranding({ checkoutDir }) {
   const prunedBlinkOutputs = await pruneLegacyBlinkOutputs(repositoryRoot);
 
   console.log(
-    `Refreshed artifact branding in ${checkoutDir} (${wrapperUpdates} wrapper updates, ${aliasUpdates} alias updates, ${applicationIniUpdates} application.ini updates, ${iconRefresh.updated} icon refreshes, ${prunedFirefoxArtifacts.length} Firefox artifact removals, ${prunedBlinkOutputs.length} Blink artifact removals).`
+    `Refreshed artifact branding in ${checkoutDir} (${macCompatUpdates} macOS compat updates, ${wrapperUpdates} wrapper updates, ${aliasUpdates} alias updates, ${applicationIniUpdates} application.ini updates, ${iconRefresh.updated} icon refreshes, ${prunedFirefoxArtifacts.length} Firefox artifact removals, ${prunedBlinkOutputs.length} Blink artifact removals).`
   );
 }
 
-try {
-  await refreshBranding(parseArguments(process.argv.slice(2)));
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+export { refreshBranding };
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    await refreshBranding(parseArguments(process.argv.slice(2)));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

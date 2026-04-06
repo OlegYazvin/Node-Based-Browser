@@ -170,7 +170,11 @@ function bootstrapCheckout({ checkoutDir, ref, remote, sync, patches }) {
     run(process.execPath, [
       path.join(geckoRoot, "scripts", "apply-patches.mjs"),
       "--checkout-dir",
-      checkoutDir
+      checkoutDir,
+      "--platform",
+      process.platform,
+      "--arch",
+      process.arch
     ]);
   }
 }

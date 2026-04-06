@@ -585,7 +585,7 @@ async function buildDebInstaller({ version, outputDirectory, arch, distribution,
     await cp(payloadRoot, rootDirectory, { recursive: true });
     await ensureDirectory(path.join(rootDirectory, "DEBIAN"));
 
-    controlPath = path.join(rootDirectory, "DEBIAN", "control");
+    const controlPath = path.join(rootDirectory, "DEBIAN", "control");
     const postinstPath = path.join(rootDirectory, "DEBIAN", "postinst");
     const postrmPath = path.join(rootDirectory, "DEBIAN", "postrm");
 
@@ -666,16 +666,17 @@ async function buildRpmInstaller({ version, outputDirectory, arch, payloadRoot }
   }
 }
 
-async function ensureFlatpakSdkInstalled() {
-  const runtimeRef = `${flatpakRuntime}//${flatpakRuntimeBranch}`;
-  const sdkRef = `${flatpakSdk}//${flatpakRuntimeBranch}`;
+async function ensureFlatpakSdkInstalled(arch) {
+  const flatpakArch = flatpakArchNames[arch] ?? arch;
+  const runtimeRef = `${flatpakRuntime}/${flatpakArch}/${flatpakRuntimeBranch}`;
+  const sdkRef = `${flatpakSdk}/${flatpakArch}/${flatpakRuntimeBranch}`;
 
-  if (!(await commandSucceeds("flatpak", ["info", "--user", runtimeRef]))) {
-    await runCommand("flatpak", ["install", "--user", "-y", "flathub", runtimeRef]);
+  if (!(await commandSucceeds("flatpak", ["info", "--user", "--arch", flatpakArch, runtimeRef]))) {
+    await runCommand("flatpak", ["install", "--user", "-y", "--arch", flatpakArch, "flathub", runtimeRef]);
   }
 
-  if (!(await commandSucceeds("flatpak", ["info", "--user", sdkRef]))) {
-    await runCommand("flatpak", ["install", "--user", "-y", "flathub", sdkRef]);
+  if (!(await commandSucceeds("flatpak", ["info", "--user", "--arch", flatpakArch, sdkRef]))) {
+    await runCommand("flatpak", ["install", "--user", "-y", "--arch", flatpakArch, "flathub", sdkRef]);
   }
 }
 
@@ -693,7 +694,7 @@ async function buildFlatpakInstaller({ version, outputDirectory, arch, payloadRo
   const flatpakArch = flatpakArchNames[arch] ?? arch;
 
   try {
-    await ensureFlatpakSdkInstalled();
+    await ensureFlatpakSdkInstalled(arch);
     await rm(buildDirectory, { recursive: true, force: true });
     await rm(repoDirectory, { recursive: true, force: true });
 

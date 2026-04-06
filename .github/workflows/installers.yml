@@ -118,6 +118,12 @@ jobs:
 
           if ! (
             cd "$GECKO_CHECKOUT_DIR"
+            if [[ "${{ matrix.platform }}" == "darwin" ]]; then
+              python ./mach artifact install
+              cd "$GITHUB_WORKSPACE"
+              npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+              cd "$GECKO_CHECKOUT_DIR"
+            fi
             python ./mach build faster
           ) 2>&1 | tee gecko-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-build.log --mode build)"
@@ -154,6 +160,27 @@ jobs:
           --arch ${{ matrix.arch }}
           --channel ci
           --no-sync
+
+      - name: Verify Linux x64 installer set
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        run: |
+          shopt -s nullglob
+          required_patterns=(
+            "out/make/linux/x64/Nodely-Browser-*-linux-x64.run"
+            "out/make/linux/x64/Nodely-Browser-*-debian-x64.deb"
+            "out/make/linux/x64/Nodely-Browser-*-ubuntu-x64.deb"
+            "out/make/linux/x64/Nodely-Browser-*-fedora-x64.rpm"
+            "out/make/linux/x64/Nodely-Browser-*-linux-x64.flatpak"
+          )
+
+          for pattern in "${required_patterns[@]}"; do
+            matches=($pattern)
+
+            if [[ ${#matches[@]} -eq 0 ]]; then
+              echo "Missing expected Linux x64 installer: $pattern" >&2
+              exit 1
+            fi
+          done
 
       - name: Upload installer output
         uses: actions/upload-artifact@v4
