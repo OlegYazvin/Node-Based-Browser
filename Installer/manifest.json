@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-05T18:32:04.369Z",
+  "generatedAt": "2026-04-06T03:11:34.195Z",
   "installers": [
     {
       "version": "0.1.0",
@@ -30,21 +30,6 @@
       "source": "out/make/linux/arm64/Nodely-Browser-0.1.0-fedora-arm64.rpm",
       "size": 76941064,
       "syncedAt": "2026-04-05T14:14:43.569Z"
-    },
-    {
-      "version": "0.1.0",
-      "platform": "linux",
-      "arch": "x64",
-      "variant": "rpm",
-      "distribution": "fedora",
-      "compatibility": [
-        "Fedora"
-      ],
-      "path": "linux/Nodely-Browser-0.1.0-fedora-x64.rpm",
-      "fileName": "Nodely-Browser-0.1.0-fedora-x64.rpm",
-      "source": "out/make/linux/x64/Nodely-Browser-0.1.0-fedora-x64.rpm",
-      "size": 19905901,
-      "syncedAt": "2026-04-05T18:32:04.359Z"
     },
     {
       "version": "0.1.0",
@@ -87,25 +72,6 @@
     {
       "version": "0.1.0",
       "platform": "linux",
-      "arch": "x64",
-      "variant": "generic",
-      "distribution": "generic",
-      "compatibility": [
-        "Ubuntu",
-        "Debian",
-        "Fedora",
-        "Linux Mint",
-        "other common desktop Linux distros"
-      ],
-      "path": "linux/Nodely-Browser-0.1.0-linux-x64.run",
-      "fileName": "Nodely-Browser-0.1.0-linux-x64.run",
-      "source": "out/make/linux/x64/Nodely-Browser-0.1.0-linux-x64.run",
-      "size": 18369260,
-      "syncedAt": "2026-04-05T18:32:04.369Z"
-    },
-    {
-      "version": "0.1.0",
-      "platform": "linux",
       "arch": "arm64",
       "variant": "deb",
       "distribution": "ubuntu",
@@ -117,6 +83,22 @@
       "source": "out/make/linux/arm64/Nodely-Browser-0.1.0-ubuntu-arm64.deb",
       "size": 68543634,
       "syncedAt": "2026-04-05T14:14:43.586Z"
+    },
+    {
+      "version": "0.1.0",
+      "platform": "win32",
+      "arch": "x64",
+      "variant": "installer",
+      "distribution": "windows",
+      "compatibility": [
+        "Windows 10",
+        "Windows 11"
+      ],
+      "path": "windows/nodely-browser-140.10.0.en-US.win64.installer.exe",
+      "fileName": "nodely-browser-140.10.0.en-US.win64.installer.exe",
+      "source": "out/make/win32/x64/nodely-browser-140.10.0.en-US.win64.installer.exe",
+      "size": 19207747,
+      "syncedAt": "2026-04-06T03:11:34.195Z"
     }
   ]
 }

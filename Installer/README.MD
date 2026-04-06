@@ -10,13 +10,15 @@ This directory contains the installers that actually exist in this repo right no
 - If a section below says no installers are staged, there is nothing in this repo for that target today.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
-Generated from `Installer/manifest.json` at 2026-04-05T18:32:04.369Z.
+Generated from `Installer/manifest.json` at 2026-04-06T03:11:34.195Z.
 
 ## Windows 10 and 11
 
 Use this on Intel/AMD Windows 10 or Windows 11 PCs.
 
-No installers are currently staged in this repo for this target.
+| File | Type | Supported systems |
+| --- | --- | --- |
+| [nodely-browser-140.10.0.en-US.win64.installer.exe](./windows/nodely-browser-140.10.0.en-US.win64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only |
 
 ## macOS Intel
 
@@ -34,10 +36,7 @@ No installers are currently staged in this repo for this target.
 
 Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/AMD processors.
 
-| File | Type | Supported systems |
-| --- | --- | --- |
-| [Nodely-Browser-0.1.0-fedora-x64.rpm](./linux/Nodely-Browser-0.1.0-fedora-x64.rpm) | Fedora RPM package | Fedora; x64 only |
-| [Nodely-Browser-0.1.0-linux-x64.run](./linux/Nodely-Browser-0.1.0-linux-x64.run) | Self-extracting installer (`.run`) | Ubuntu, Debian, Fedora, Linux Mint, other common desktop Linux distros; x64 only |
+No installers are currently staged in this repo for this target.
 
 ## Linux arm64
 
