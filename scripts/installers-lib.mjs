@@ -95,10 +95,18 @@ export async function pathExists(targetPath) {
   }
 }
 
-export async function readPackageVersion() {
-  const packageJsonPath = path.join(repositoryRoot, "package.json");
-  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
-  return packageJson.version;
+export function extractInstallerVersion(fileName) {
+  const match = fileName.match(
+    /^Nodely-Browser-([0-9][0-9A-Za-z.-]*?)-(?:(?:linux|ubuntu|debian|fedora|macos|win32|windows))(?:[-.])/u
+  );
+  return match?.[1] ?? extractGeckoArtifactVersion(fileName);
+}
+
+export function extractGeckoArtifactVersion(fileName) {
+  const match = fileName.match(
+    /^(?:nodely(?:-browser)?|firefox(?:-browser)?)-([0-9][0-9A-Za-z.-]*?)(?=\.en-US\.|\.linux-|\.mac(?:os)?(?:\.|-)|\.win|\.dmg$|\.pkg$|\.tar\.)/iu
+  );
+  return match?.[1] ?? null;
 }
 
 export async function readGeckoReleaseManifest(stageDirectory = geckoReleaseDirectory) {
@@ -477,7 +485,6 @@ export async function syncInstallers({
 }) {
   const normalizedPlatform = normalizePlatform(platform);
   const normalizedArch = normalizeArch(arch);
-  const version = await readPackageVersion();
   const outputs = await listInstallerOutputs(normalizedPlatform, normalizedArch, makeDirectory);
 
   if (!outputs.length) {
@@ -488,6 +495,48 @@ export async function syncInstallers({
 
   await ensureDirectory(targetDirectory);
   const manifest = await readInstallerManifest(targetDirectory);
+  const outputVersions = new Set();
+
+  for (const outputPath of outputs) {
+    const version = extractInstallerVersion(path.basename(outputPath));
+
+    if (!version) {
+      throw new Error(
+        `Could not determine the Nodely version from installer output ${path.basename(outputPath)}.`
+      );
+    }
+
+    outputVersions.add(version);
+  }
+
+  if (outputVersions.size !== 1) {
+    throw new Error(
+      `Expected a single Nodely version for ${normalizedPlatform}/${normalizedArch}, found ${[...outputVersions].sort().join(", ")}.`
+    );
+  }
+
+  const version = [...outputVersions][0];
+  const stagedVersions = new Set();
+
+  for (const entry of manifest.installers) {
+    if (entry.platform === normalizedPlatform && entry.arch === normalizedArch) {
+      continue;
+    }
+
+    const entryVersion = entry.version ?? extractInstallerVersion(entry.fileName);
+
+    if (entryVersion) {
+      stagedVersions.add(entryVersion);
+    }
+  }
+
+  if (stagedVersions.size > 1 || (stagedVersions.size === 1 && !stagedVersions.has(version))) {
+    const versions = [...new Set([...stagedVersions, version])].sort().join(", ");
+    throw new Error(
+      `Installer staging would contain multiple Nodely versions (${versions}). Keep Installer/ to a single Nodely version and prune stale slices before syncing.`
+    );
+  }
+
   const nextInstallers = manifest.installers.filter(
     (entry) => !(entry.platform === normalizedPlatform && entry.arch === normalizedArch)
   );

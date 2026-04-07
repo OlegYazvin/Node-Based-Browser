@@ -11,6 +11,7 @@ import {
   currentPlatform,
   ensureCleanDirectory,
   ensureDirectory,
+  extractGeckoArtifactVersion,
   normalizeArch,
   normalizePlatform,
   outMakeDirectory,
@@ -918,13 +919,19 @@ async function copyNativeInstaller({ platform, arch, sourceArtifactPath, outDire
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const version = JSON.parse(await readFile(path.join(repositoryRoot, "package.json"), "utf8")).version;
   const sourceArtifactPath = await resolveGeckoReleaseArtifact({
     platform: options.platform,
     arch: options.arch,
     channel: options.channel,
     artifactPath: options.artifactPath
   });
+  const version = extractGeckoArtifactVersion(path.basename(sourceArtifactPath));
+
+  if (!version) {
+    throw new Error(
+      `Could not determine the Nodely version from packaged artifact ${path.basename(sourceArtifactPath)}.`
+    );
+  }
 
   let outputs = [];
 

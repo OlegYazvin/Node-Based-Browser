@@ -123,6 +123,8 @@ The installer manifest lives at:
 
 - `Installer/manifest.json`
 
+Keep one visible Nodely release version across `gecko/release-artifacts/` and `Installer/`. A repo snapshot can contain multiple platform-specific downloads, but they should all belong to the same Nodely version.
+
 Use:
 
 ```bash

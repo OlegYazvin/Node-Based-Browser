@@ -4,9 +4,21 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { pruneInstallers, renderInstallerReadme, syncInstallers } from "../../scripts/installers-lib.mjs";
+import {
+  extractGeckoArtifactVersion,
+  extractInstallerVersion,
+  pruneInstallers,
+  renderInstallerReadme,
+  syncInstallers
+} from "../../scripts/installers-lib.mjs";
 
 describe("installers-lib", () => {
+  it("parses the visible Nodely version from installer and packaged artifact file names", () => {
+    expect(extractInstallerVersion("Nodely-Browser-140.10.0-linux-arm64.run")).toBe("140.10.0");
+    expect(extractInstallerVersion("nodely-browser-140.10.0.en-US.win64.installer.exe")).toBe("140.10.0");
+    expect(extractGeckoArtifactVersion("nodely-browser-140.10.0.en-US.linux-aarch64.tar.xz")).toBe("140.10.0");
+  });
+
   it("renders a support matrix from the installer manifest", () => {
     const readme = renderInstallerReadme({
       generatedAt: "2026-04-05T00:00:00.000Z",
@@ -55,7 +67,7 @@ describe("installers-lib", () => {
     try {
       await mkdir(path.join(makeDirectory, "linux", "arm64"), { recursive: true });
       await writeFile(
-        path.join(makeDirectory, "linux", "arm64", "Nodely-Browser-0.1.0-linux-arm64.run"),
+        path.join(makeDirectory, "linux", "arm64", "Nodely-Browser-140.10.0-linux-arm64.run"),
         "payload",
         "utf8"
       );
@@ -73,7 +85,7 @@ describe("installers-lib", () => {
             generatedAt: "2026-04-04T00:00:00.000Z",
             installers: [
               {
-                version: "0.1.0",
+                version: "140.10.0",
                 platform: "linux",
                 arch: "arm64",
                 variant: "deb",
@@ -101,13 +113,68 @@ describe("installers-lib", () => {
       });
 
       expect(manifest.installers).toHaveLength(1);
-      expect(manifest.installers[0].fileName).toBe("Nodely-Browser-0.1.0-linux-arm64.run");
+      expect(manifest.installers[0].version).toBe("140.10.0");
+      expect(manifest.installers[0].fileName).toBe("Nodely-Browser-140.10.0-linux-arm64.run");
       await expect(
         access(path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-debian-arm64.deb"))
       ).rejects.toThrow();
 
       const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
-      expect(readme).toContain("Nodely-Browser-0.1.0-linux-arm64.run");
+      expect(readme).toContain("Nodely-Browser-140.10.0-linux-arm64.run");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects syncing installers when staging would mix Nodely versions", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-installers-lib-mixed-"));
+    const makeDirectory = path.join(tempDirectory, "out", "make");
+    const targetDirectory = path.join(tempDirectory, "Installer");
+
+    try {
+      await mkdir(path.join(makeDirectory, "linux", "arm64"), { recursive: true });
+      await writeFile(
+        path.join(makeDirectory, "linux", "arm64", "Nodely-Browser-140.10.0-linux-arm64.run"),
+        "payload",
+        "utf8"
+      );
+
+      await mkdir(path.join(targetDirectory, "windows"), { recursive: true });
+      await writeFile(
+        path.join(targetDirectory, "manifest.json"),
+        `${JSON.stringify(
+          {
+            generatedAt: "2026-04-04T00:00:00.000Z",
+            installers: [
+              {
+                version: "0.1.0",
+                platform: "win32",
+                arch: "x64",
+                variant: "installer",
+                distribution: "windows",
+                compatibility: ["Windows 10", "Windows 11"],
+                path: "windows/nodely-browser-0.1.0.en-US.win64.installer.exe",
+                fileName: "nodely-browser-0.1.0.en-US.win64.installer.exe",
+                source: "out/make/win32/x64/nodely-browser-0.1.0.en-US.win64.installer.exe",
+                size: 3,
+                syncedAt: "2026-04-04T00:00:00.000Z"
+              }
+            ]
+          },
+          null,
+          2
+        )}\n`,
+        "utf8"
+      );
+
+      await expect(
+        syncInstallers({
+          platform: "linux",
+          arch: "arm64",
+          makeDirectory,
+          targetDirectory
+        })
+      ).rejects.toThrow(/multiple Nodely versions/i);
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }
