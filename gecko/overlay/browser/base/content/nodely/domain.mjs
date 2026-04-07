@@ -178,6 +178,7 @@ export function createEmptyWorkspace(id = "default", name = "Nodely Workspace") 
     prefs: {
       viewMode: "split",
       surfaceMode: DEFAULT_SURFACE_MODE,
+      themeMode: "light",
       searchProvider: "google",
       captureNextNavigation: false,
       showFocusHint: true,
@@ -189,6 +190,10 @@ export function createEmptyWorkspace(id = "default", name = "Nodely Workspace") 
       }
     }
   };
+}
+
+export function normalizeThemeMode(themeMode) {
+  return themeMode === "dark" ? "dark" : "light";
 }
 
 export function normalizeSearchProvider(searchProvider) {
@@ -743,10 +748,11 @@ export function removeTree(workspace, rootId) {
 export function killNode(workspace, nodeId) {
   const node = findNode(workspace, nodeId);
 
-  if (!node || node.parentId === null) {
+  if (!node) {
     return {
       workspace,
-      removedNodeIds: []
+      removedNodeIds: [],
+      invalidatedNodeIds: []
     };
   }
 
@@ -761,8 +767,13 @@ export function killNode(workspace, nodeId) {
 
     return {
       workspace: applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId),
-      removedNodeIds
+      removedNodeIds,
+      invalidatedNodeIds: removedNodeIds
     };
+  }
+
+  if (node.parentId === null) {
+    return killRootNode(workspace, node);
   }
 
   const pageChildren = sortNodesForSlots(findPageChildren(workspace, node.id));
@@ -813,7 +824,107 @@ export function killNode(workspace, nodeId) {
 
   return {
     workspace: applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId),
-    removedNodeIds
+    removedNodeIds,
+    invalidatedNodeIds: removedNodeIds
+  };
+}
+
+function killRootNode(workspace, node) {
+  const pageChildren = sortNodesForSlots(findPageChildren(workspace, node.id));
+  const artifactChildren = sortNodesForSlots(findArtifactChildren(workspace, node.id));
+  const artifactIds = artifactChildren.map((childNode) => childNode.id);
+  const artifactIdSet = new Set(artifactIds);
+
+  if (pageChildren.length === 0) {
+    const removedNodeIds = [node.id, ...artifactIds];
+    const removedNodeIdSet = new Set(removedNodeIds);
+    const nextNodes = workspace.nodes.filter((candidate) => !removedNodeIdSet.has(candidate.id));
+    const nextSelectedNodeId =
+      workspace.selectedNodeId && removedNodeIdSet.has(workspace.selectedNodeId)
+        ? sortNodesForSlots(nextNodes.filter((candidate) => candidate.parentId === null))[0]?.id ?? null
+        : workspace.selectedNodeId;
+
+    return {
+      workspace: applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId),
+      removedNodeIds,
+      invalidatedNodeIds: removedNodeIds
+    };
+  }
+
+  if (pageChildren.length === 1) {
+    const promotedChild = pageChildren[0];
+    const removedNodeIds = [node.id, ...artifactIds];
+    const removedNodeIdSet = new Set(removedNodeIds);
+    const nextNodes = workspace.nodes
+      .filter((candidate) => !removedNodeIdSet.has(candidate.id))
+      .map((candidate) => {
+        if (candidate.rootId !== node.id) {
+          return candidate;
+        }
+
+        const rebasedNode = {
+          ...candidate,
+          rootId: promotedChild.id
+        };
+
+        if (candidate.id === promotedChild.id) {
+          return {
+            ...rebasedNode,
+            parentId: null,
+            slotIndex: node.slotIndex
+          };
+        }
+
+        return rebasedNode;
+      });
+    const nextSelectedNodeId =
+      workspace.selectedNodeId === node.id ||
+      (workspace.selectedNodeId && removedNodeIdSet.has(workspace.selectedNodeId))
+        ? promotedChild.id
+        : workspace.selectedNodeId;
+
+    return {
+      workspace: applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId),
+      removedNodeIds,
+      invalidatedNodeIds: removedNodeIds
+    };
+  }
+
+  const fallbackSelection = pageChildren[0]?.id ?? node.id;
+  const invalidatedNodeIds = [node.id, ...artifactIds];
+  const nextSelectedNodeId =
+    workspace.selectedNodeId === node.id ||
+    (workspace.selectedNodeId && artifactIdSet.has(workspace.selectedNodeId))
+      ? fallbackSelection
+      : workspace.selectedNodeId;
+  const nextNodes = workspace.nodes
+    .filter((candidate) => !artifactIdSet.has(candidate.id))
+    .map((candidate) =>
+      candidate.id === node.id
+        ? {
+            ...candidate,
+            title: "Origin",
+            url: null,
+            faviconUrl: null,
+            updatedAt: now(),
+            lastVisitedAt: null,
+            lastActiveAt: null,
+            origin: "root",
+            runtimeState: "empty",
+            searchQuery: null,
+            history: null,
+            canGoBack: false,
+            canGoForward: false,
+            errorMessage: null,
+            permissions: null
+          }
+        : candidate
+    );
+
+  return {
+    workspace: applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId),
+    removedNodeIds: artifactIds,
+    invalidatedNodeIds
   };
 }
 
@@ -859,6 +970,17 @@ export function setSearchProvider(workspace, searchProvider) {
     prefs: {
       ...workspace.prefs,
       searchProvider: normalizeSearchProvider(searchProvider)
+    }
+  };
+}
+
+export function setThemeMode(workspace, themeMode) {
+  return {
+    ...workspace,
+    updatedAt: now(),
+    prefs: {
+      ...workspace.prefs,
+      themeMode: normalizeThemeMode(themeMode)
     }
   };
 }
@@ -925,6 +1047,7 @@ export function normalizeWorkspace(workspace) {
       ...workspace.prefs,
       viewMode: workspace.prefs.viewMode === "focus" ? "focus" : "split",
       surfaceMode: normalizeSurfaceMode(workspace.prefs.surfaceMode),
+      themeMode: normalizeThemeMode(workspace.prefs.themeMode),
       searchProvider: normalizeSearchProvider(workspace.prefs.searchProvider),
       captureNextNavigation: workspace.prefs.captureNextNavigation === true,
       showFocusHint: workspace.prefs.showFocusHint !== false,

@@ -4,6 +4,13 @@
 - Do not claim Gecko release artifacts were built for platforms, architectures, or channels that were not actually packaged.
 - Prefer the CI workflow at `.github/workflows/gecko-verify.yml` for cross-platform verification and staged release refreshes after Gecko-facing changes.
 - Keep `gecko/release-artifacts/` user-facing: stage the single packaged artifact a person should download for each platform/channel, not auxiliary build outputs.
+- For Nodely interaction regressions, verify the packaged app's actual runtime tab or browser surface behavior; workspace selection alone is not enough to prove a page opened.
+- For Nodely canvas/split input regressions, packaged smoke must confirm the live `nodely-graph-surface` and split handle both report `pointerEvents: "auto"` when they should be interactive. Synthetic activation alone is not enough to clear a manual mouse bug.
+- For Nodely icon-only controls or contextual overlays, packaged smoke should verify rendered icon/path presence and placement mode, not just that wrapper buttons exist in the DOM.
+- For Nodely dropdowns and context menus, packaged smoke should verify they anchor to the live trigger area and keep `nodely-browser-surface="page"` when the page is supposed to stay interactive.
+- Local Gecko browser launch directory: `../Nodely-Gecko/firefox-esr/obj-nodely/dist/nodely`. Treat `obj-nodely/dist/nodely/nodely` as the only supported local runnable Gecko app for Nodely. Do not fall back to `obj-nodely/dist/bin/*` when launching or verifying local Gecko behavior.
+- Before calling a bug fixed, reproduce it on the relevant runtime first and rerun an explicit verification after the change. For local Gecko/Nodely bugs, prefer a packaged-build smoke run or equivalent concrete execution path over source-only reasoning.
+- On this Wayland workstation, prefer packaged-build smoke plus `pyatspi` for real UI verification. Native Nodely windows may not be reachable through X11-only click tools, so do not treat failed X11 input synthesis as proof that the UI itself is broken.
 
 ## Lean Implementation Rules
 

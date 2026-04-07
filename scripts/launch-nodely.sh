@@ -6,10 +6,16 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$script_dir/.." && pwd)
 checkout_dir_default="$repo_root/../Nodely-Gecko/firefox-esr"
 checkout_dir="${NODELY_BROWSER_CHECKOUT:-${NODELY_FIREFOX_DIR:-$checkout_dir_default}}"
-nodely_binary_default="$checkout_dir/obj-nodely/dist/bin/nodely"
-legacy_binary_default="$checkout_dir/obj-nodely/dist/bin/firefox"
-binary="${NODELY_BROWSER_BINARY:-${NODELY_FIREFOX_BINARY:-}}"
+packaged_binary_default="$checkout_dir/obj-nodely/dist/nodely/nodely"
+binary="${NODELY_BROWSER_BINARY:-${NODELY_FIREFOX_BINARY:-$packaged_binary_default}}"
 profile_dir="${NODELY_PROFILE_DIR:-$HOME/.local/share/nodely/gecko-profile}"
+
+desktop_exec_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value// /\\ }"
+  printf '%s' "$value"
+}
 
 ensure_linux_desktop_integration() {
   [[ "$(uname -s)" == "Linux" ]] || return 0
@@ -18,6 +24,9 @@ ensure_linux_desktop_integration() {
   local icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
   local desktop_file="$applications_dir/nodely.desktop"
   local icon_file="$icon_dir/nodely.svg"
+  local escaped_script_path
+
+  escaped_script_path=$(desktop_exec_escape "$script_dir/launch-nodely.sh")
 
   mkdir -p "$applications_dir" "$icon_dir"
 
@@ -31,8 +40,8 @@ Version=1.0
 Type=Application
 Name=Nodely
 Comment=Launch Nodely Browser
-TryExec=$script_dir/launch-nodely.sh
-Exec=$script_dir/launch-nodely.sh %u
+TryExec=$escaped_script_path
+Exec=$escaped_script_path %u
 Path=$repo_root
 Icon=nodely
 Terminal=false
@@ -64,14 +73,6 @@ if [[ -x "$repo_root/.tools/node/bin/node" ]]; then
     --checkout-dir "$checkout_dir" >/dev/null 2>&1 || true
 fi
 
-if [[ -z "$binary" ]]; then
-  if [[ -x "$nodely_binary_default" ]]; then
-    binary="$nodely_binary_default"
-  else
-    binary="$legacy_binary_default"
-  fi
-fi
-
 show_error() {
   local message="$1"
 
@@ -83,7 +84,7 @@ show_error() {
 }
 
 if [[ ! -x "$binary" ]]; then
-  show_error "Nodely browser binary not found at $binary. Build the Gecko app first, then launch it again."
+  show_error "Nodely browser binary not found at $binary. The supported local Gecko launcher is $packaged_binary_default. Build that packaged app first, then launch it again."
   exit 1
 fi
 

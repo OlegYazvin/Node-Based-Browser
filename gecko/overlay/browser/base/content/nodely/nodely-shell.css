@@ -79,29 +79,129 @@
 }
 
 .nodely-shell {
+  --nodely-text: #203246;
+  --nodely-muted: #5f7286;
+  --nodely-soft-text: #57697d;
+  --nodely-panel-text: #4c6278;
+  --nodely-shell-empty-bg: linear-gradient(180deg, #eff4fa, #e3ebf4);
+  --nodely-topbar-bg: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(232, 239, 247, 0.98));
+  --nodely-topbar-border: rgba(102, 124, 149, 0.26);
+  --nodely-topbar-shadow: 0 12px 24px rgba(35, 62, 93, 0.08);
+  --nodely-button-border: rgba(92, 112, 135, 0.28);
+  --nodely-button-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(233, 240, 247, 0.98));
+  --nodely-button-bg-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(224, 236, 248, 0.99));
+  --nodely-button-active-bg: linear-gradient(180deg, rgba(223, 239, 255, 1), rgba(203, 227, 249, 1));
+  --nodely-button-active-text: #0b5cad;
+  --nodely-button-active-border: rgba(29, 115, 201, 0.48);
+  --nodely-accent-border: rgba(29, 115, 201, 0.42);
+  --nodely-segmented-border: rgba(92, 112, 135, 0.24);
+  --nodely-segmented-bg: rgba(244, 248, 253, 0.94);
+  --nodely-input-border: rgba(92, 112, 135, 0.24);
+  --nodely-input-bg: rgba(255, 255, 255, 0.98);
+  --nodely-composer-bg: #f3f7fc;
+  --nodely-pagebar-bg: #f7fbff;
+  --nodely-pagebar-border: rgba(102, 124, 149, 0.2);
+  --nodely-pagebar-shadow: 0 10px 22px rgba(35, 62, 93, 0.06);
+  --nodely-tab-bg: rgba(255, 255, 255, 0.92);
+  --nodely-tab-text: #203246;
+  --nodely-tab-meta: #5f7286;
+  --nodely-tab-research: #edf5ff;
+  --nodely-tab-social: #fff2e3;
+  --nodely-tab-commercial: #edf8ec;
+  --nodely-tab-general: #eef2f7;
+  --nodely-new-child-text: #20456b;
+  --nodely-new-child-bg: linear-gradient(180deg, rgba(234, 244, 255, 0.98), rgba(218, 232, 247, 0.98));
+  --nodely-new-child-hover-bg: linear-gradient(180deg, rgba(239, 247, 255, 1), rgba(221, 236, 251, 1));
+  --nodely-focus-hint-border: rgba(92, 112, 135, 0.18);
+  --nodely-focus-hint-bg: rgba(242, 248, 255, 0.94);
+  --nodely-graph-bg:
+    radial-gradient(circle at top left, rgba(79, 192, 255, 0.12), transparent 42%),
+    linear-gradient(180deg, #f3f8fd, #e6eef7);
+  --nodely-split-handle-bg: linear-gradient(180deg, rgba(29, 115, 201, 0.04), rgba(29, 115, 201, 0.12));
+  --nodely-split-handle-border: rgba(29, 115, 201, 0.12);
+  --nodely-split-handle-grip: rgba(29, 115, 201, 0.26);
+  --nodely-empty-card-border: rgba(92, 112, 135, 0.22);
+  --nodely-empty-card-bg:
+    radial-gradient(circle at top right, rgba(77, 176, 255, 0.18), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(236, 242, 249, 0.96));
+  --nodely-empty-card-text: #203246;
+  --nodely-empty-card-muted: #5d6f83;
   position: fixed;
   inset: 0;
   z-index: 2147482000;
   pointer-events: none;
   display: block;
   isolation: isolate;
+  color-scheme: light;
   font-family:
     "SF Pro Text",
     "Segoe UI",
     "Noto Sans",
     system-ui,
     sans-serif;
-  color: #203246;
+  color: var(--nodely-text);
+}
+
+:root[nodely-theme="dark"] .nodely-shell {
+  --nodely-text: #e4edf7;
+  --nodely-muted: #9aafc4;
+  --nodely-soft-text: #9aaec1;
+  --nodely-panel-text: #b6c7d8;
+  --nodely-shell-empty-bg: linear-gradient(180deg, #16202a, #0f1720);
+  --nodely-topbar-bg: linear-gradient(180deg, rgba(25, 33, 43, 0.98), rgba(17, 24, 32, 0.98));
+  --nodely-topbar-border: rgba(128, 155, 185, 0.24);
+  --nodely-topbar-shadow: 0 12px 24px rgba(0, 0, 0, 0.32);
+  --nodely-button-border: rgba(120, 143, 168, 0.32);
+  --nodely-button-bg: linear-gradient(180deg, rgba(44, 56, 69, 0.98), rgba(29, 38, 48, 0.98));
+  --nodely-button-bg-hover: linear-gradient(180deg, rgba(54, 68, 84, 0.99), rgba(36, 46, 58, 0.99));
+  --nodely-button-active-bg: linear-gradient(180deg, rgba(30, 70, 111, 0.98), rgba(18, 48, 79, 0.98));
+  --nodely-button-active-text: #d6ebff;
+  --nodely-button-active-border: rgba(104, 184, 255, 0.56);
+  --nodely-accent-border: rgba(104, 184, 255, 0.5);
+  --nodely-segmented-border: rgba(120, 143, 168, 0.28);
+  --nodely-segmented-bg: rgba(22, 30, 39, 0.94);
+  --nodely-input-border: rgba(120, 143, 168, 0.28);
+  --nodely-input-bg: rgba(17, 24, 32, 0.98);
+  --nodely-composer-bg: #18222d;
+  --nodely-pagebar-bg: #141d27;
+  --nodely-pagebar-border: rgba(128, 155, 185, 0.2);
+  --nodely-pagebar-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
+  --nodely-tab-bg: rgba(34, 44, 55, 0.96);
+  --nodely-tab-text: #edf4fb;
+  --nodely-tab-meta: #a7bbcf;
+  --nodely-tab-research: #23384c;
+  --nodely-tab-social: #493828;
+  --nodely-tab-commercial: #23392b;
+  --nodely-tab-general: #2a3440;
+  --nodely-new-child-text: #d4e9ff;
+  --nodely-new-child-bg: linear-gradient(180deg, rgba(26, 56, 88, 0.98), rgba(18, 40, 64, 0.98));
+  --nodely-new-child-hover-bg: linear-gradient(180deg, rgba(33, 66, 101, 0.99), rgba(22, 49, 78, 0.99));
+  --nodely-focus-hint-border: rgba(120, 143, 168, 0.24);
+  --nodely-focus-hint-bg: rgba(24, 35, 47, 0.94);
+  --nodely-graph-bg:
+    radial-gradient(circle at top left, rgba(67, 140, 214, 0.18), transparent 42%),
+    linear-gradient(180deg, #17222c, #0f1821);
+  --nodely-split-handle-bg: linear-gradient(180deg, rgba(104, 184, 255, 0.08), rgba(104, 184, 255, 0.18));
+  --nodely-split-handle-border: rgba(104, 184, 255, 0.18);
+  --nodely-split-handle-grip: rgba(129, 195, 255, 0.36);
+  --nodely-empty-card-border: rgba(120, 143, 168, 0.22);
+  --nodely-empty-card-bg:
+    radial-gradient(circle at top right, rgba(67, 140, 214, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(28, 38, 50, 0.96), rgba(18, 26, 35, 0.96));
+  --nodely-empty-card-text: #e4edf7;
+  --nodely-empty-card-muted: #a9bdd0;
+  color-scheme: dark;
 }
 
 :root[nodely-empty-workspace="true"] .nodely-shell {
-  background: linear-gradient(180deg, #eff4fa, #e3ebf4);
+  background: var(--nodely-shell-empty-bg);
 }
 
 .nodely-shell__topbar,
 .nodely-shell__composer,
 .nodely-shell__pagebar,
 .nodely-shell__drawer,
+.nodely-shell__menu,
 .nodely-shell__graph,
 .nodely-shell__artifact-surface,
 .nodely-shell__prompt-stack {
@@ -122,9 +222,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 12px 0 16px;
-  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(232, 239, 247, 0.98));
-  border-bottom: 1px solid rgba(102, 124, 149, 0.26);
-  box-shadow: 0 12px 24px rgba(35, 62, 93, 0.08);
+  background: var(--nodely-topbar-bg);
+  border-bottom: 1px solid var(--nodely-topbar-border);
+  box-shadow: var(--nodely-topbar-shadow);
   -moz-window-dragging: drag;
 }
 
@@ -170,9 +270,9 @@
 .nodely-shell__primary,
 .nodely-shell__segmented button {
   appearance: none;
-  border: 1px solid rgba(92, 112, 135, 0.28);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(233, 240, 247, 0.98));
-  color: #203246;
+  border: 1px solid var(--nodely-button-border);
+  background: var(--nodely-button-bg);
+  color: var(--nodely-text);
   border-radius: 10px;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
   transition: background 120ms ease, border-color 120ms ease, transform 120ms ease, color 120ms ease;
@@ -194,33 +294,21 @@
   padding-inline: 8px;
 }
 
-.nodely-shell__button--surface {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.nodely-shell__button--surface svg {
-  width: 14px;
-  height: 14px;
-}
-
 .nodely-shell__button:hover,
 .nodely-shell__icon-button:hover,
 .nodely-shell__drawer-pill:hover,
 .nodely-shell__primary:hover,
 .nodely-shell__segmented button:hover {
-  border-color: rgba(29, 115, 201, 0.42);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(224, 236, 248, 0.99));
+  border-color: var(--nodely-accent-border);
+  background: var(--nodely-button-bg-hover);
 }
 
 .nodely-shell__button.is-active,
 .nodely-shell__icon-button.is-active,
 .nodely-shell__segmented button.is-active {
-  color: #0b5cad;
-  border-color: rgba(29, 115, 201, 0.48);
-  background: linear-gradient(180deg, rgba(223, 239, 255, 1), rgba(203, 227, 249, 1));
+  color: var(--nodely-button-active-text);
+  border-color: var(--nodely-button-active-border);
+  background: var(--nodely-button-active-bg);
 }
 
 .nodely-shell__icon-button {
@@ -242,9 +330,9 @@
   align-items: center;
   padding: 2px;
   gap: 2px;
-  border: 1px solid rgba(92, 112, 135, 0.24);
+  border: 1px solid var(--nodely-segmented-border);
   border-radius: 12px;
-  background: rgba(244, 248, 253, 0.94);
+  background: var(--nodely-segmented-bg);
 }
 
 .nodely-shell__segmented button {
@@ -261,16 +349,16 @@
   gap: 8px;
   padding-left: 4px;
   font-size: 11px;
-  color: #57697d;
+  color: var(--nodely-soft-text);
 }
 
 .nodely-shell__search select,
 .nodely-shell__drawer-input,
 .nodely-shell__input {
   appearance: none;
-  border: 1px solid rgba(92, 112, 135, 0.24);
-  background: rgba(255, 255, 255, 0.98);
-  color: #203246;
+  border: 1px solid var(--nodely-input-border);
+  background: var(--nodely-input-bg);
+  color: var(--nodely-text);
   border-radius: 10px;
   font-size: 12px;
   padding: 7px 10px;
@@ -282,8 +370,17 @@
   inset: 52px 0 auto 0;
   z-index: 35;
   padding: 10px 16px;
-  background: #f3f7fc;
-  border-bottom: 1px solid rgba(102, 124, 149, 0.2);
+  background: var(--nodely-composer-bg);
+  border-bottom: 1px solid var(--nodely-pagebar-border);
+}
+
+.nodely-shell__composer[data-placement="contextual"] {
+  inset: auto auto auto auto;
+  padding: 12px;
+  border: 1px solid var(--nodely-pagebar-border);
+  border-radius: 16px;
+  background: var(--nodely-pagebar-bg);
+  box-shadow: var(--nodely-pagebar-shadow);
 }
 
 .nodely-shell__composer-form,
@@ -306,7 +403,7 @@
 
 .nodely-shell__page-surface-main {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -317,6 +414,11 @@
   flex: 1;
 }
 
+.nodely-shell__address-form {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .nodely-shell__pagebar {
   position: fixed;
   inset: calc(var(--nodely-topbar-height, 52px) + var(--nodely-composer-height, 0px)) 0 auto 0;
@@ -325,9 +427,13 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 16px 8px;
-  background: #f7fbff;
-  border-bottom: 1px solid rgba(102, 124, 149, 0.2);
-  box-shadow: 0 10px 22px rgba(35, 62, 93, 0.06);
+  background: var(--nodely-pagebar-bg);
+  border-bottom: 1px solid var(--nodely-pagebar-border);
+  box-shadow: var(--nodely-pagebar-shadow);
+}
+
+:root[nodely-pagebar-layout="page-pane"] .nodely-shell__pagebar {
+  inset-inline-start: var(--nodely-graph-width, 340px);
 }
 
 .nodely-shell__pagebar[hidden],
@@ -337,6 +443,7 @@
 
 .nodely-shell__nav-group {
   display: inline-flex;
+  flex: 0 0 auto;
   gap: 6px;
 }
 
@@ -394,13 +501,20 @@
   min-width: 84px;
 }
 
+.nodely-shell__surface-close.nodely-shell__icon-button {
+  min-width: 32px;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .nodely-shell__inline-panel {
   display: grid;
   gap: 10px;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(92, 112, 135, 0.16);
-  background: rgba(245, 249, 254, 0.96);
+  border: 1px solid var(--nodely-focus-hint-border);
+  background: var(--nodely-focus-hint-bg);
 }
 
 .nodely-shell__inline-panel-heading strong {
@@ -410,7 +524,7 @@
 
 .nodely-shell__inline-panel-heading span {
   font-size: 11px;
-  color: #5f7286;
+  color: var(--nodely-muted);
 }
 
 .nodely-shell__inline-actions,
@@ -426,7 +540,7 @@
   border-radius: 999px;
   font-size: 10.5px;
   font-weight: 600;
-  color: #4c6278;
+  color: var(--nodely-panel-text);
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(92, 112, 135, 0.14);
 }
@@ -443,18 +557,24 @@
 .nodely-shell__tree-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
+.nodely-shell__tree-heading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .nodely-shell__tree-header strong {
-  display: block;
   font-size: 12px;
 }
 
 .nodely-shell__tree-header span {
   font-size: 11px;
-  color: #5f7286;
+  color: var(--nodely-muted);
 }
 
 .nodely-shell__tabs {
@@ -470,15 +590,14 @@
   max-width: 164px;
   padding: 6px 8px;
   border-radius: 10px;
-  border: 1px solid rgba(92, 112, 135, 0.26);
+  border: 1px solid var(--nodely-button-border);
   text-align: left;
-  display: grid;
-  gap: 2px;
-  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  align-items: center;
+  background: var(--nodely-tab-bg);
 }
 
-.nodely-shell__tab strong,
-.nodely-shell__tab span {
+.nodely-shell__tab strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -486,49 +605,43 @@
 
 .nodely-shell__tab strong {
   font-size: 11.5px;
-}
-
-.nodely-shell__tab span {
-  font-size: 10.5px;
-  color: #5f7286;
+  color: var(--nodely-tab-text);
+  display: block;
+  width: 100%;
 }
 
 .nodely-shell__tab.is-active {
-  border-color: rgba(29, 115, 201, 0.46);
+  border-color: var(--nodely-button-active-border);
   box-shadow: 0 0 0 1px rgba(29, 115, 201, 0.12) inset;
 }
 
 .nodely-shell__tab--new-child {
-  min-width: 92px;
-  max-width: 92px;
+  min-width: 50px;
+  max-width: 50px;
   flex: 0 0 auto;
+  padding: 6px;
+  display: grid;
   align-items: center;
   justify-items: center;
   text-align: center;
-  color: #20456b;
-  background: linear-gradient(180deg, rgba(234, 244, 255, 0.98), rgba(218, 232, 247, 0.98));
+  color: var(--nodely-new-child-text);
+  background: var(--nodely-new-child-bg);
 }
 
 .nodely-shell__tab--new-child:hover {
-  border-color: rgba(29, 115, 201, 0.42);
-  background: linear-gradient(180deg, rgba(239, 247, 255, 1), rgba(221, 236, 251, 1));
+  border-color: var(--nodely-accent-border);
+  background: var(--nodely-new-child-hover-bg);
 }
 
 .nodely-shell__tab--new-child svg {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
 }
 
-.nodely-shell__tab--new-child span {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: inherit;
-}
-
-.nodely-shell__tab--research { background: #edf5ff; }
-.nodely-shell__tab--social { background: #fff2e3; }
-.nodely-shell__tab--commercial { background: #edf8ec; }
-.nodely-shell__tab--general { background: #eef2f7; }
+.nodely-shell__tab--research { background: var(--nodely-tab-research); }
+.nodely-shell__tab--social { background: var(--nodely-tab-social); }
+.nodely-shell__tab--commercial { background: var(--nodely-tab-commercial); }
+.nodely-shell__tab--general { background: var(--nodely-tab-general); }
 
 .nodely-shell__focus-hint {
   display: flex;
@@ -537,8 +650,8 @@
   gap: 8px;
   padding: 10px 12px;
   border-radius: 12px;
-  border: 1px solid rgba(92, 112, 135, 0.18);
-  background: rgba(242, 248, 255, 0.94);
+  border: 1px solid var(--nodely-focus-hint-border);
+  background: var(--nodely-focus-hint-bg);
 }
 
 .nodely-shell__focus-hint strong {
@@ -550,7 +663,7 @@
 .nodely-shell__focus-hint p {
   margin: 0;
   font-size: 11.5px;
-  color: #5b6d81;
+  color: var(--nodely-muted);
 }
 
 .nodely-shell__artifact-bar,
@@ -574,7 +687,7 @@
 
 .nodely-shell__artifact-summary span:last-child {
   font-size: 11px;
-  color: #5f7286;
+  color: var(--nodely-muted);
 }
 
 .nodely-shell__artifact-glyph {
@@ -583,8 +696,8 @@
   border-radius: 10px;
   display: inline-grid;
   place-items: center;
-  background: rgba(230, 238, 247, 0.92);
-  color: #305a8e;
+  background: var(--nodely-segmented-bg);
+  color: var(--nodely-button-active-text);
 }
 
 .nodely-shell__artifact-glyph svg {
@@ -598,10 +711,8 @@
   width: var(--nodely-graph-width, 340px);
   display: block;
   z-index: 10;
-  background:
-    radial-gradient(circle at top left, rgba(79, 192, 255, 0.14), transparent 42%),
-    linear-gradient(180deg, #f3f8fd, #e6eef7);
-  border-inline-end: 1px solid rgba(102, 124, 149, 0.2);
+  background: var(--nodely-graph-bg);
+  border-inline-end: 1px solid var(--nodely-pagebar-border);
   overflow: hidden;
 }
 
@@ -621,9 +732,10 @@
   width: 8px;
   z-index: 16;
   display: none;
+  pointer-events: auto;
   cursor: ew-resize;
-  background: linear-gradient(180deg, rgba(29, 115, 201, 0.04), rgba(29, 115, 201, 0.12));
-  border-inline: 1px solid rgba(29, 115, 201, 0.12);
+  background: var(--nodely-split-handle-bg);
+  border-inline: 1px solid var(--nodely-split-handle-border);
 }
 
 .nodely-shell__split-handle::after {
@@ -635,7 +747,7 @@
   height: 56px;
   transform: translate(-50%, -50%);
   border-radius: 999px;
-  background: rgba(29, 115, 201, 0.26);
+  background: var(--nodely-split-handle-grip);
 }
 
 .nodely-shell__artifact-surface {
@@ -643,9 +755,7 @@
   inset: calc(var(--nodely-topbar-height, 52px) + var(--nodely-composer-height, 0px) + var(--nodely-pagebar-height, 0px)) 0 0 var(--nodely-graph-width, 0px);
   z-index: 20;
   padding: 18px 22px;
-  background:
-    radial-gradient(circle at top left, rgba(79, 192, 255, 0.12), transparent 36%),
-    linear-gradient(180deg, rgba(244, 249, 255, 0.98), rgba(230, 237, 246, 0.98));
+  background: var(--nodely-graph-bg);
 }
 
 :root[nodely-view="focus"] .nodely-shell__artifact-surface {
@@ -656,9 +766,9 @@
   max-width: 820px;
   padding: 20px 22px;
   border-radius: 20px;
-  border: 1px solid rgba(92, 112, 135, 0.18);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 16px 32px rgba(27, 41, 56, 0.12);
+  border: 1px solid var(--nodely-empty-card-border);
+  background: var(--nodely-input-bg);
+  box-shadow: var(--nodely-pagebar-shadow);
   display: grid;
   gap: 16px;
 }
@@ -677,7 +787,7 @@
 
 .nodely-shell__artifact-card-heading span {
   font-size: 12px;
-  color: #5f7286;
+  color: var(--nodely-muted);
 }
 
 .nodely-shell__artifact-card-badge {
@@ -688,8 +798,8 @@
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  color: #0b5cad;
-  background: rgba(223, 239, 255, 0.92);
+  color: var(--nodely-button-active-text);
+  background: var(--nodely-button-active-bg);
 }
 
 .nodely-shell__artifact-card-badge svg {
@@ -715,7 +825,7 @@
   margin: 0;
   font-size: 11px;
   font-weight: 700;
-  color: #52667c;
+  color: var(--nodely-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -724,7 +834,7 @@
   margin: 0;
   min-width: 0;
   font-size: 12px;
-  color: #203246;
+  color: var(--nodely-text);
   word-break: break-word;
 }
 
@@ -732,9 +842,8 @@
   position: absolute;
   inset: 0;
   display: block;
-  background:
-    radial-gradient(circle at top left, rgba(79, 192, 255, 0.12), transparent 42%),
-    linear-gradient(180deg, #f3f8fd, #e6eef7);
+  pointer-events: auto;
+  background: var(--nodely-graph-bg);
 }
 
 .nodely-graph-surface__stage,
@@ -748,9 +857,7 @@
   z-index: 0;
   cursor: grab;
   touch-action: none;
-  background:
-    radial-gradient(circle at top left, rgba(79, 192, 255, 0.12), transparent 42%),
-    linear-gradient(180deg, #f3f8fd, #e6eef7);
+  background: var(--nodely-graph-bg);
 }
 
 .nodely-graph-surface__edges {
@@ -776,13 +883,11 @@
   width: min(480px, calc(100% - 32px));
   padding: 28px 30px;
   border-radius: 24px;
-  border: 1px solid rgba(92, 112, 135, 0.22);
-  background:
-    radial-gradient(circle at top right, rgba(77, 176, 255, 0.18), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(236, 242, 249, 0.96));
+  border: 1px solid var(--nodely-empty-card-border);
+  background: var(--nodely-empty-card-bg);
   box-shadow: 0 12px 26px rgba(27, 41, 56, 0.12);
   text-align: center;
-  color: #203246;
+  color: var(--nodely-empty-card-text);
 }
 
 .nodely-graph-surface__empty-card strong {
@@ -794,10 +899,11 @@
 .nodely-graph-surface__empty-card p {
   margin: 10px 0 18px;
   font-size: 13px;
-  color: #5d6f83;
+  color: var(--nodely-empty-card-muted);
 }
 
 .nodely-graph-node {
+  appearance: none;
   position: absolute;
   width: 142px;
   height: 126px;
@@ -919,9 +1025,9 @@
   overflow: hidden;
   z-index: 24;
   isolation: isolate;
-  border: 1px solid rgba(92, 112, 135, 0.22);
-  background: rgba(253, 255, 255, 0.97);
-  box-shadow: 0 10px 22px rgba(29, 44, 61, 0.14);
+  border: 1px solid var(--nodely-button-border);
+  background: var(--nodely-input-bg);
+  box-shadow: var(--nodely-pagebar-shadow);
   pointer-events: auto;
 }
 
@@ -935,9 +1041,9 @@
   gap: 4px;
   padding: 4px;
   border-radius: 999px;
-  border: 1px solid rgba(92, 112, 135, 0.22);
-  background: rgba(251, 253, 255, 0.96);
-  box-shadow: 0 8px 16px rgba(29, 44, 61, 0.12);
+  border: 1px solid var(--nodely-button-border);
+  background: var(--nodely-input-bg);
+  box-shadow: var(--nodely-pagebar-shadow);
   pointer-events: auto;
 }
 
@@ -949,18 +1055,23 @@
   display: inline-grid;
   place-items: center;
   border-radius: 999px;
-  border: 1px solid rgba(92, 112, 135, 0.2);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(234, 241, 248, 0.99));
-  color: #203246;
+  border: 1px solid var(--nodely-button-border);
+  background: var(--nodely-button-bg);
+  color: var(--nodely-text);
   font-size: 14px;
   font-weight: 700;
   line-height: 1;
 }
 
+.nodely-graph-surface__minimap-button svg {
+  width: 14px;
+  height: 14px;
+}
+
 .nodely-graph-surface__minimap-button:hover {
-  border-color: rgba(29, 115, 201, 0.42);
-  color: #0b5cad;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(223, 236, 248, 1));
+  border-color: var(--nodely-accent-border);
+  color: var(--nodely-button-active-text);
+  background: var(--nodely-button-bg-hover);
 }
 
 .nodely-graph-surface__minimap-svg {
@@ -988,14 +1099,14 @@
 .nodely-shell__drawer {
   position: fixed;
   top: 60px;
-  right: 10px;
+  left: 10px;
   z-index: 50;
   width: 320px;
   max-height: calc(100vh - 70px);
   overflow: auto;
   border-radius: 16px;
-  border: 1px solid rgba(92, 112, 135, 0.2);
-  background: rgba(251, 253, 255, 0.98);
+  border: 1px solid var(--nodely-button-border);
+  background: var(--nodely-input-bg);
   box-shadow: 0 22px 36px rgba(27, 41, 56, 0.18);
   padding: 10px;
 }
@@ -1017,7 +1128,7 @@
 
 .nodely-shell__drawer-section-title {
   font-size: 11px;
-  color: #536679;
+  color: var(--nodely-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 2px 4px 0;
@@ -1030,17 +1141,21 @@
   align-items: center;
   padding: 8px;
   border-radius: 12px;
-  border: 1px solid rgba(92, 112, 135, 0.18);
+  border: 1px solid var(--nodely-button-border);
 }
 
-.nodely-shell__drawer-row--research { background: #edf5ff; }
-.nodely-shell__drawer-row--social { background: #fff2e3; }
-.nodely-shell__drawer-row--commercial { background: #edf8ec; }
-.nodely-shell__drawer-row--general { background: #eef2f7; }
+.nodely-shell__drawer-row--research { background: var(--nodely-tab-research); }
+.nodely-shell__drawer-row--social { background: var(--nodely-tab-social); }
+.nodely-shell__drawer-row--commercial { background: var(--nodely-tab-commercial); }
+.nodely-shell__drawer-row--general { background: var(--nodely-tab-general); }
 
 .nodely-shell__drawer-row--tree {
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  background: rgba(248, 251, 255, 0.95);
+  grid-template-columns: minmax(0, 1fr) auto;
+  background: var(--nodely-button-bg);
+}
+
+.nodely-shell__drawer-row--tree .nodely-shell__drawer-input {
+  min-width: 0;
 }
 
 .nodely-shell__drawer-row--stacked {
@@ -1072,10 +1187,49 @@
 .nodely-shell__drawer-link span,
 .nodely-shell__drawer-empty {
   font-size: 11px;
-  color: #5f7286;
+  color: var(--nodely-muted);
 }
 
 .nodely-shell__drawer-pill.is-danger {
+  color: #9b2132;
+}
+
+.nodely-shell__menu {
+  position: fixed;
+  top: 60px;
+  left: 10px;
+  z-index: 52;
+  width: 192px;
+  border-radius: 14px;
+  border: 1px solid var(--nodely-button-border);
+  background: var(--nodely-input-bg);
+  box-shadow: 0 22px 36px rgba(27, 41, 56, 0.18);
+  padding: 6px;
+}
+
+.nodely-shell__menu-body {
+  display: grid;
+  gap: 4px;
+}
+
+.nodely-shell__menu-item {
+  appearance: none;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--nodely-text);
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nodely-shell__menu-item:hover {
+  background: var(--nodely-button-bg-hover);
+}
+
+.nodely-shell__menu-item--danger {
   color: #9b2132;
 }
 
@@ -1152,6 +1306,10 @@
 
   .nodely-shell__drawer {
     width: min(92vw, 320px);
+  }
+
+  .nodely-shell__menu {
+    width: min(92vw, 192px);
   }
 
   .nodely-shell__prompt-stack {

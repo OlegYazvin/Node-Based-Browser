@@ -33,6 +33,26 @@ function safeHostname(url, fallback) {
   }
 }
 
+function createIcon(paths, viewBox = "0 0 20 20") {
+  return {
+    viewBox,
+    paths
+  };
+}
+
+function iconAutoOrganize() {
+  return createIcon([
+    {
+      d: "M4.4 4.5h3.2v3.2H4.4Zm8 0h3.2v3.2h-3.2Zm-4 8h3.2v3.2H8.4Zm-2.3-5.3h6.8m-3.4.1v5",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.4",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
+}
+
 export class NodelyGraphSurface extends HTMLElement {
   constructor() {
     super();
@@ -68,6 +88,7 @@ export class NodelyGraphSurface extends HTMLElement {
     this.handlePointerUp = this.handlePointerUp.bind(this);
     this.handleWheel = this.handleWheel.bind(this);
     this.handleBackgroundPointerDown = this.handleBackgroundPointerDown.bind(this);
+    this.handleContextMenu = this.handleContextMenu.bind(this);
     this.handleNodePointerDown = this.handleNodePointerDown.bind(this);
     this.handleNodePointerUp = this.handleNodePointerUp.bind(this);
     this.handleNodeClick = this.handleNodeClick.bind(this);
@@ -100,6 +121,7 @@ export class NodelyGraphSurface extends HTMLElement {
       "nodely-graph-surface__minimap-toolbar"
     );
     this.minimapToolbar.append(
+      createGraphToolbarButton(this.ownerDocument, "Organize tree", "auto-organize", "", iconAutoOrganize()),
       createGraphToolbarButton(this.ownerDocument, "Zoom out", "zoom-out", "−"),
       createGraphToolbarButton(this.ownerDocument, "Zoom in", "zoom-in", "+"),
       createGraphToolbarButton(this.ownerDocument, "Center tree", "center-tree", "◎")
@@ -112,6 +134,7 @@ export class NodelyGraphSurface extends HTMLElement {
 
     this.context = this.canvas.getContext("2d");
     this.stage.addEventListener("pointerdown", this.handleBackgroundPointerDown);
+    this.addEventListener("contextmenu", this.handleContextMenu);
     this.stage.addEventListener("wheel", this.handleWheel, { passive: false });
     this.minimap.addEventListener("pointerdown", this.handleMinimapPointerDown);
     this.minimapToolbar.addEventListener("click", this.handleMinimapToolbarClick);
@@ -444,7 +467,7 @@ export class NodelyGraphSurface extends HTMLElement {
       const colors = SITE_CATEGORY_STYLES[category];
       const point = this.screenFromWorld(positions.get(node.id) ?? node.position);
       const dimensions = nodeDimensions(node);
-      const element = this.nodeElements.get(node.id) ?? document.createElement("button");
+      const element = this.nodeElements.get(node.id) ?? createHtmlElement(this.ownerDocument, "button");
 
       if (!this.nodeElements.has(node.id)) {
         element.type = "button";
@@ -634,6 +657,15 @@ export class NodelyGraphSurface extends HTMLElement {
 
     if (button.dataset.action === "center-tree") {
       this.centerOnNode(this.selectedNodeId ?? this.workspace?.selectedNodeId ?? null);
+      return;
+    }
+
+    if (button.dataset.action === "auto-organize") {
+      this.dispatchEvent(
+        new CustomEvent("nodely-auto-organize", {
+          bubbles: true
+        })
+      );
     }
   }
 
@@ -819,6 +851,43 @@ export class NodelyGraphSurface extends HTMLElement {
     this.dispatchNodeSelection(nodeElement.dataset.nodeId);
   }
 
+  handleContextMenu(event) {
+    const target = event.target;
+
+    if (!target?.closest) {
+      return;
+    }
+
+    const nodeElement = target.closest(".nodely-graph-node");
+
+    if (nodeElement?.dataset?.nodeId) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.dispatchNodeMenuOpen(nodeElement.dataset.nodeId, {
+        clientX: event.clientX,
+        clientY: event.clientY
+      });
+      return;
+    }
+
+    if (
+      target.closest(".nodely-graph-surface__minimap, .nodely-graph-surface__minimap-toolbar")
+    ) {
+      return;
+    }
+
+    if (!target.closest(".nodely-graph-surface__stage, .nodely-graph-surface__empty")) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.dispatchComposerOpen({
+      clientX: event.clientX,
+      clientY: event.clientY
+    });
+  }
+
   handleMinimapPointerDown(event) {
     if (event.button !== 0 || !this.workspace) {
       return;
@@ -875,6 +944,31 @@ export class NodelyGraphSurface extends HTMLElement {
       new CustomEvent("nodely-select-node", {
         bubbles: true,
         detail: { nodeId }
+      })
+    );
+  }
+
+  dispatchComposerOpen(anchor = null) {
+    this.dispatchEvent(
+      new CustomEvent("nodely-open-composer", {
+        bubbles: true,
+        detail: anchor ? { anchor } : {}
+      })
+    );
+  }
+
+  dispatchNodeMenuOpen(nodeId, anchor = null) {
+    if (!nodeId) {
+      return;
+    }
+
+    this.dispatchEvent(
+      new CustomEvent("nodely-open-node-menu", {
+        bubbles: true,
+        detail: {
+          nodeId,
+          ...(anchor ? { anchor } : {})
+        }
       })
     );
   }
@@ -955,7 +1049,7 @@ function minimapProjection(surface, positions) {
   };
 }
 
-function createGraphToolbarButton(documentRef, title, action, text) {
+function createGraphToolbarButton(documentRef, title, action, text, icon = null) {
   const button = createHtmlElement(
     documentRef,
     "button",
@@ -964,7 +1058,15 @@ function createGraphToolbarButton(documentRef, title, action, text) {
   button.type = "button";
   button.dataset.action = action;
   button.title = title;
-  button.textContent = text;
+
+  if (icon) {
+    appendSvgIcon(documentRef, button, icon);
+  }
+
+  if (text) {
+    button.textContent = text;
+  }
+
   return button;
 }
 
@@ -1031,6 +1133,30 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function appendSvgIcon(documentRef, element, icon) {
+  if (!icon?.paths?.length) {
+    return;
+  }
+
+  const svg = documentRef.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", icon.viewBox ?? "0 0 20 20");
+  svg.setAttribute("aria-hidden", "true");
+
+  for (const pathAttributes of icon.paths) {
+    const path = documentRef.createElementNS(SVG_NS, "path");
+
+    for (const [name, value] of Object.entries(pathAttributes)) {
+      if (value != null) {
+        path.setAttribute(name, String(value));
+      }
+    }
+
+    svg.append(path);
+  }
+
+  element.append(svg);
 }
 
 if (!customElements.get("nodely-graph-surface")) {

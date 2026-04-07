@@ -644,6 +644,10 @@ export class BrowserBasicsBridge {
     this.window.goDoCommand?.("cmd_printPreviewToggle");
   }
 
+  toggleFullscreen() {
+    this.window.document.getElementById("View:FullScreen")?.doCommand?.();
+  }
+
   toggleDevTools() {
     this.window.document.getElementById("menu_devToolbox")?.doCommand?.();
   }

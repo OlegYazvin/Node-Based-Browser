@@ -1,6 +1,18 @@
 #!/usr/bin/env node
 
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -9,6 +21,13 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const overlayRoot = path.join(geckoRoot, "overlay");
 const repositoryRoot = path.resolve(geckoRoot, "..");
+const runtimeOverlaySourceDirectory = path.join(
+  overlayRoot,
+  "browser",
+  "base",
+  "content",
+  "nodely"
+);
 
 function usage() {
   console.log(`Usage: node gecko/scripts/sync-overlay.mjs --checkout-dir <path>
@@ -88,6 +107,21 @@ function patchFile(filePath, marker, patcher) {
   writeFileSync(filePath, next, "utf8");
   console.log(`patched ${marker}: ${path.relative(repositoryRoot, filePath)}`);
   return true;
+}
+
+function runCommand(command, args, { cwd = repositoryRoot, input = null } = {}) {
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    input
+  });
+
+  if (result.status !== 0) {
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
+    throw new Error(`${command} ${args.join(" ")} failed${output ? `: ${output}` : ""}`);
+  }
+
+  return result.stdout ?? "";
 }
 
 function patchBrowserXhtmlContents(contents) {
@@ -307,13 +341,7 @@ function ensureBrowserProfileDefaultsPatched(checkoutDir) {
 }
 
 export function syncLooseRuntimeOverlay(checkoutDir) {
-  const sourceDirectory = path.join(
-    overlayRoot,
-    "browser",
-    "base",
-    "content",
-    "nodely"
-  );
+  const sourceDirectory = runtimeOverlaySourceDirectory;
   if (!existsSync(sourceDirectory)) {
     return false;
   }
@@ -410,6 +438,85 @@ export function syncLooseRuntimeOverlay(checkoutDir) {
   return updated;
 }
 
+function stageArchiveEntry(stagingDirectory, entryPath, contents) {
+  const targetPath = path.join(stagingDirectory, entryPath);
+  ensureDirectory(path.dirname(targetPath));
+  writeFileSync(targetPath, contents, "utf8");
+  return entryPath;
+}
+
+function syncRuntimeOmniArchive(archivePath) {
+  if (!existsSync(archivePath) || !existsSync(runtimeOverlaySourceDirectory)) {
+    return false;
+  }
+
+  const stagingDirectory = mkdtempSync(path.join(os.tmpdir(), "nodely-omni-sync-"));
+
+  try {
+    const stagedEntries = [];
+
+    for (const entry of readdirSync(runtimeOverlaySourceDirectory, { withFileTypes: true })) {
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const sourcePath = path.join(runtimeOverlaySourceDirectory, entry.name);
+      const entryPath = path.posix.join(
+        "chrome",
+        "browser",
+        "content",
+        "browser",
+        "nodely",
+        entry.name
+      );
+      const sourceContents = readFileSync(sourcePath, "utf8");
+      stagedEntries.push(stageArchiveEntry(stagingDirectory, entryPath, sourceContents));
+    }
+
+    const browserXhtmlEntry = "chrome/browser/content/browser/browser.xhtml";
+    const browserXhtml = runCommand("unzip", ["-p", archivePath, browserXhtmlEntry]);
+    stagedEntries.push(
+      stageArchiveEntry(stagingDirectory, browserXhtmlEntry, patchBrowserXhtmlContents(browserXhtml))
+    );
+
+    const firefoxDefaultsEntry = "defaults/preferences/firefox.js";
+    const firefoxDefaults = runCommand("unzip", ["-p", archivePath, firefoxDefaultsEntry]);
+    stagedEntries.push(
+      stageArchiveEntry(
+        stagingDirectory,
+        firefoxDefaultsEntry,
+        patchFirefoxDefaultsContents(firefoxDefaults)
+      )
+    );
+
+    runCommand("zip", ["-q", archivePath, ...stagedEntries], {
+      cwd: stagingDirectory
+    });
+    return true;
+  } finally {
+    rmSync(stagingDirectory, {
+      force: true,
+      recursive: true
+    });
+  }
+}
+
+export function syncPackagedRuntimeOmniOverlay(checkoutDir) {
+  const runtimeArchives = [path.join(checkoutDir, "obj-nodely", "dist", "nodely", "browser", "omni.ja")];
+
+  let updated = false;
+
+  for (const archivePath of runtimeArchives) {
+    if (!existsSync(archivePath)) {
+      continue;
+    }
+
+    updated = syncRuntimeOmniArchive(archivePath) || updated;
+  }
+
+  return updated;
+}
+
 export function syncOverlay({ checkoutDir }) {
   if (!existsSync(checkoutDir) || !statSync(checkoutDir).isDirectory()) {
     throw new Error(`Gecko source checkout directory not found: ${checkoutDir}`);
@@ -424,8 +531,12 @@ export function syncOverlay({ checkoutDir }) {
   ensureBrowserProfileDefaultsPatched(checkoutDir);
   ensureUnofficialBrandingPatched(checkoutDir);
   const looseRuntimeSynced = syncLooseRuntimeOverlay(checkoutDir);
+  const packagedRuntimeSynced = syncPackagedRuntimeOmniOverlay(checkoutDir);
   if (looseRuntimeSynced) {
     console.log(`Overlay copied into live runtime chrome under ${path.relative(repositoryRoot, checkoutDir)}`);
+  }
+  if (packagedRuntimeSynced) {
+    console.log(`Overlay synced into packaged runtime archives under ${path.relative(repositoryRoot, checkoutDir)}`);
   }
   console.log(`Overlay synced into ${checkoutDir}`);
 }

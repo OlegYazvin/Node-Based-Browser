@@ -386,7 +386,6 @@ export class NodeRuntimeManager {
   loadNode(node, url, { background = false } = {}) {
     const tab = this.ensureRuntime(node, { background });
     const browser = tab.linkedBrowser;
-    const gBrowser = this.window.gBrowser;
     this.pendingNavigationByNodeId.set(node.id, {
       url,
       startedAt: Date.now()
@@ -394,21 +393,21 @@ export class NodeRuntimeManager {
     this.prepareTabForManagedNavigation(tab, url);
 
     if (!background) {
-      gBrowser.selectedTab = tab;
+      this.window.gBrowser.selectedTab = tab;
     }
 
     const targetUri = ServicesRef?.io?.newURI?.(url) ?? null;
 
-    if (targetUri && !background && typeof gBrowser?.loadURI === "function") {
-      gBrowser.loadURI(targetUri, {
+    if (typeof browser?.fixupAndLoadURIString === "function") {
+      browser.fixupAndLoadURIString(url, {
         triggeringPrincipal: systemPrincipal()
       });
     } else if (targetUri && typeof browser?.loadURI === "function") {
       browser.loadURI(targetUri, {
         triggeringPrincipal: systemPrincipal()
       });
-    } else if (typeof browser?.fixupAndLoadURIString === "function") {
-      browser.fixupAndLoadURIString(url, {
+    } else if (targetUri && !background && typeof this.window.gBrowser?.loadURI === "function") {
+      this.window.gBrowser.loadURI(targetUri, {
         triggeringPrincipal: systemPrincipal()
       });
     }

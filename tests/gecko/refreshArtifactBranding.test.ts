@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ensureMacArtifactCompatibility } from "../../gecko/scripts/refresh-artifact-branding.mjs";
+import { ensureMacArtifactCompatibility, refreshBranding } from "../../gecko/scripts/refresh-artifact-branding.mjs";
 
 describe("refresh-artifact-branding", () => {
   it("creates the full mac dist/bin alias set for app bundle artifacts", async () => {
@@ -110,6 +110,30 @@ describe("refresh-artifact-branding", () => {
           expect(await readFile(aliasPath, "utf8")).toBe("binary");
         }
       }
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("makes the packaged nodely wrapper desktop-aware on Linux builds", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-linux-wrapper-"));
+    const packagedTargetPath = path.join(tempDirectory, "obj-nodely", "dist", "nodely", "nodely-bin");
+
+    try {
+      await mkdir(path.dirname(packagedTargetPath), { recursive: true });
+      await writeFile(packagedTargetPath, "binary", "utf8");
+
+      await refreshBranding({ checkoutDir: tempDirectory, mode: "full" });
+
+      const wrapper = await readFile(
+        path.join(tempDirectory, "obj-nodely", "dist", "nodely", "nodely"),
+        "utf8"
+      );
+
+      expect(wrapper).toContain('desktop_file_name="nodely-local-build.desktop"');
+      expect(wrapper).toContain('MOZ_APP_REMOTINGNAME="${MOZ_APP_REMOTINGNAME:-nodely}"');
+      expect(wrapper).toContain('MOZ_DESKTOP_FILE_NAME="${MOZ_DESKTOP_FILE_NAME:-$desktop_file_name}"');
+      expect(wrapper).toContain('NoDisplay=true');
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }

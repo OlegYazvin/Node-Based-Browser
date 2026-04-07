@@ -206,7 +206,63 @@ export async function ensureMacArtifactCompatibility(checkoutDir) {
   return updates;
 }
 
-function nodelyVersionWrapper(targetName) {
+function nodelyVersionWrapper(targetName, { desktopFileName = "" } = {}) {
+  const desktopIntegrationBlock = desktopFileName
+    ? `
+desktop_file_name="${desktopFileName}"
+
+if [[ "$(uname -s)" == "Linux" ]]; then
+  applications_dir="\${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+  desktop_path="$applications_dir/$desktop_file_name"
+  icon_path="$script_dir/browser/chrome/icons/default/default128.png"
+
+  if [[ ! -f "$icon_path" && -f "$script_dir/icons/updater.png" ]]; then
+    icon_path="$script_dir/icons/updater.png"
+  fi
+
+  mkdir -p "$applications_dir"
+
+  cat >"$desktop_path" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Nodely
+Comment=Node-based Gecko browser for research workflows
+TryExec=$script_dir/nodely
+Exec=$script_dir/nodely %u
+Path=$script_dir
+Icon=$icon_path
+Terminal=false
+StartupNotify=true
+StartupWMClass=nodely
+X-GNOME-WMClass=nodely
+NoDisplay=true
+Categories=Network;WebBrowser;
+Keywords=browser;research;nodely;graph;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+EOF
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$applications_dir" >/dev/null 2>&1 || true
+  fi
+
+  if command -v kbuildsycoca6 >/dev/null 2>&1; then
+    kbuildsycoca6 >/dev/null 2>&1 || true
+  elif command -v kbuildsycoca5 >/dev/null 2>&1; then
+    kbuildsycoca5 >/dev/null 2>&1 || true
+  fi
+fi
+
+exec env \\
+  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \\
+  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \\
+  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-$desktop_file_name}" \\
+  "$target" "$@"
+`
+    : `
+exec "$target" "$@"
+`;
+
   return `#!/usr/bin/env bash
 
 set -euo pipefail
@@ -223,11 +279,11 @@ if [[ "\${1:-}" == "--version" || "\${1:-}" == "-v" ]]; then
   fi
 fi
 
-exec "$target" "$@"
+${desktopIntegrationBlock.trim()}
 `;
 }
 
-async function ensureVersionWrapper(directory, wrapperName, targetName) {
+async function ensureVersionWrapper(directory, wrapperName, targetName, options = {}) {
   const targetPath = path.join(directory, targetName);
 
   if (!(await exists(targetPath))) {
@@ -235,7 +291,7 @@ async function ensureVersionWrapper(directory, wrapperName, targetName) {
   }
 
   const wrapperPath = path.join(directory, wrapperName);
-  const nextContents = nodelyVersionWrapper(targetName);
+  const nextContents = nodelyVersionWrapper(targetName, options);
   const existingContents =
     (await exists(wrapperPath)) && !(await lstat(wrapperPath)).isDirectory()
       ? await readFile(wrapperPath, "utf8").catch(() => null)
@@ -478,7 +534,9 @@ async function refreshBranding({ checkoutDir, mode = "full" }) {
     : [
         await ensureVersionWrapper(distBinDir, "firefox", "firefox-bin"),
         await ensureVersionWrapper(distBinDir, "nodely", "firefox-bin"),
-        await ensureVersionWrapper(packagedNodelyDir, "nodely", "nodely-bin")
+        await ensureVersionWrapper(packagedNodelyDir, "nodely", "nodely-bin", {
+          desktopFileName: "nodely-local-build.desktop"
+        })
       ].filter(Boolean).length;
   const aliasUpdates = [
     await ensureAlias(distBinDir, "nodely-bin", "firefox-bin"),

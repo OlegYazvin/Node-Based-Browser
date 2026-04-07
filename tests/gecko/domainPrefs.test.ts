@@ -4,25 +4,29 @@ import {
   createEmptyWorkspace,
   normalizeWorkspace,
   setSurfaceMode,
+  setThemeMode,
   setSplitWidth
 } from "../../gecko/overlay/browser/base/content/nodely/domain.mjs";
 
 describe("Gecko workspace preferences", () => {
-  it("defaults split width and surface mode for fresh and legacy workspaces", () => {
+  it("defaults split width, surface mode, and theme mode for fresh and legacy workspaces", () => {
     expect(createEmptyWorkspace().prefs.splitWidth).toBe(340);
     expect(createEmptyWorkspace().prefs.surfaceMode).toBe("page");
+    expect(createEmptyWorkspace().prefs.themeMode).toBe("light");
 
     const legacyWorkspace = normalizeWorkspace({
       ...createEmptyWorkspace(),
       prefs: {
         ...createEmptyWorkspace().prefs,
         splitWidth: undefined,
-        surfaceMode: undefined
+        surfaceMode: undefined,
+        themeMode: undefined
       }
     });
 
     expect(legacyWorkspace.prefs.splitWidth).toBe(340);
     expect(legacyWorkspace.prefs.surfaceMode).toBe("page");
+    expect(legacyWorkspace.prefs.themeMode).toBe("light");
   });
 
   it("clamps split width into the supported range", () => {
@@ -38,5 +42,12 @@ describe("Gecko workspace preferences", () => {
 
     expect(setSurfaceMode(workspace, "canvas").prefs.surfaceMode).toBe("canvas");
     expect(setSurfaceMode(workspace, "anything-else").prefs.surfaceMode).toBe("page");
+  });
+
+  it("normalizes theme mode to light or dark", () => {
+    const workspace = createEmptyWorkspace();
+
+    expect(setThemeMode(workspace, "dark").prefs.themeMode).toBe("dark");
+    expect(setThemeMode(workspace, "anything-else").prefs.themeMode).toBe("light");
   });
 });

@@ -2,6 +2,7 @@ import {
   applyNodeNavigation,
   autoOrganizeWorkspace,
   buildPageFavoriteEntry,
+  buildTreeFavoriteId,
   buildTreeFavoriteEntry,
   createChildNode as createPageChildNode,
   createRootNode,
@@ -19,6 +20,7 @@ import {
   selectNode,
   setCaptureNextNavigation,
   setSearchProvider,
+  setThemeMode,
   setShowFocusHint,
   setSurfaceMode,
   setSplitWidth,
@@ -38,6 +40,7 @@ export class ChromeStateController extends EventTarget {
     this.runtimeManager = runtimeManager;
     this.basicsBridge = basicsBridge;
     this.workspace = null;
+    this.workspacePersistChain = Promise.resolve();
     this.favorites = [];
     this.chrome = createChromeState();
     this.basicsBridge.callbacks = {
@@ -115,13 +118,27 @@ export class ChromeStateController extends EventTarget {
     });
   }
 
-  async persistWorkspace(nextWorkspace) {
-    this.workspace = await this.workspaceStore.saveWorkspace(nextWorkspace);
-    this.emitStateChange();
-    return this.workspace;
+  async persistWorkspace(nextWorkspaceOrUpdater) {
+    let persistedWorkspace = this.workspace;
+
+    this.workspacePersistChain = this.workspacePersistChain
+      .catch(() => {})
+      .then(async () => {
+        const nextWorkspace =
+          typeof nextWorkspaceOrUpdater === "function"
+            ? nextWorkspaceOrUpdater(this.workspace)
+            : nextWorkspaceOrUpdater;
+        this.workspace = await this.workspaceStore.saveWorkspace(nextWorkspace);
+        this.emitStateChange();
+        persistedWorkspace = this.workspace;
+        return this.workspace;
+      });
+
+    await this.workspacePersistChain;
+    return persistedWorkspace;
   }
 
-  async createRootFromInput(input) {
+  async createRootFromInput(input, options = {}) {
     const trimmed = input.trim();
 
     if (!trimmed) {
@@ -132,6 +149,22 @@ export class ChromeStateController extends EventTarget {
     const rootNode = findNode(nextWorkspace, nextWorkspace.selectedNodeId);
     const resolution = resolveOmniboxInput(trimmed, nextWorkspace.prefs.searchProvider);
     nextWorkspace = applyNodeNavigation(nextWorkspace, rootNode.id, resolution);
+
+    if (options.position) {
+      nextWorkspace = {
+        ...nextWorkspace,
+        nodes: nextWorkspace.nodes.map((node) =>
+          node.id === rootNode.id
+            ? {
+                ...node,
+                position: snapNodePosition(nextWorkspace, rootNode.id, options.position),
+                manualPosition: true
+              }
+            : node
+        )
+      };
+    }
+
     nextWorkspace = relayoutWorkspace(nextWorkspace);
     nextWorkspace = setSurfaceMode(nextWorkspace, "page");
     await this.persistWorkspace(nextWorkspace);
@@ -144,8 +177,8 @@ export class ChromeStateController extends EventTarget {
     });
   }
 
-  async createChildNode({ background = false, url = null, origin = "manual" } = {}) {
-    const parentNode = findNode(this.workspace, this.workspace.selectedNodeId);
+  async createChildNode({ background = false, parentNodeId = null, url = null, origin = "manual" } = {}) {
+    const parentNode = findNode(this.workspace, parentNodeId ?? this.workspace.selectedNodeId);
     const anchorNode = isArtifactNode(parentNode) ? findOwningPageNode(this.workspace, parentNode) : parentNode;
 
     if (!anchorNode) {
@@ -267,7 +300,13 @@ export class ChromeStateController extends EventTarget {
       transientStartupUrl: metadata.transientStartupUrl ?? null,
       runtimeState: metadata.runtimeState ?? currentNode.runtimeState
     });
-    const nextWorkspace = await this.persistWorkspace(updateNodeMetadata(this.workspace, nodeId, metadata));
+    const nextWorkspace = await this.persistWorkspace((workspace) => {
+      if (!findNode(workspace, nodeId)) {
+        return workspace;
+      }
+
+      return updateNodeMetadata(workspace, nodeId, metadata);
+    });
     if (nextWorkspace.selectedNodeId === nodeId) {
       await this.refreshSelectedPermissions(nextWorkspace, findNode(nextWorkspace, nodeId));
     }
@@ -356,18 +395,29 @@ export class ChromeStateController extends EventTarget {
       return;
     }
 
-    if (node.parentId === null) {
-      await this.deleteTree(node.id);
+    const {
+      workspace: nextWorkspace,
+      removedNodeIds,
+      invalidatedNodeIds = removedNodeIds
+    } = removeNodeFromWorkspace(this.workspace, node.id);
+
+    if (!removedNodeIds.length && !invalidatedNodeIds.length) {
       return;
     }
 
-    const { workspace: nextWorkspace, removedNodeIds } = removeNodeFromWorkspace(this.workspace, node.id);
-
-    if (!removedNodeIds.length) {
-      return;
+    if (invalidatedNodeIds.length) {
+      this.favorites = await this.favoritesStore.removeNodeFavorites(
+        this.workspace.id,
+        invalidatedNodeIds
+      );
     }
 
-    this.favorites = await this.favoritesStore.removeNodeFavorites(this.workspace.id, removedNodeIds);
+    if (node.parentId === null && !findNode(nextWorkspace, node.id)) {
+      this.favorites = await this.favoritesStore.removeFavorite(
+        buildTreeFavoriteId(this.workspace.id, node.id)
+      );
+    }
+
     const persistedWorkspace = await this.persistWorkspace(relayoutWorkspace(nextWorkspace));
     const selectedNode = findNode(persistedWorkspace, persistedWorkspace.selectedNodeId);
 
@@ -380,6 +430,7 @@ export class ChromeStateController extends EventTarget {
     this.trace("kill-node", {
       nodeId: node.id,
       removedNodeIds,
+      invalidatedNodeIds,
       selectedNodeId: persistedWorkspace.selectedNodeId
     });
   }
@@ -445,6 +496,10 @@ export class ChromeStateController extends EventTarget {
     await this.persistWorkspace(setSearchProvider(this.workspace, searchProvider));
   }
 
+  async setThemeMode(themeMode) {
+    await this.persistWorkspace(setThemeMode(this.workspace, themeMode));
+  }
+
   async setCaptureNextNavigation(captureNextNavigation) {
     await this.persistWorkspace(setCaptureNextNavigation(this.workspace, captureNextNavigation));
   }
@@ -496,16 +551,23 @@ export class ChromeStateController extends EventTarget {
 
     let nextWorkspace = this.workspace;
 
-    if (nextWorkspace.selectedNodeId !== nodeId) {
-      nextWorkspace = selectNode(nextWorkspace, nodeId);
-    }
+    if (
+      nextWorkspace.selectedNodeId !== nodeId ||
+      nextWorkspace.prefs.surfaceMode !== surfaceMode
+    ) {
+      nextWorkspace = await this.persistWorkspace((workspace) => {
+        let updatedWorkspace = workspace;
 
-    if (nextWorkspace.prefs.surfaceMode !== surfaceMode) {
-      nextWorkspace = setSurfaceMode(nextWorkspace, surfaceMode);
-    }
+        if (updatedWorkspace.selectedNodeId !== nodeId) {
+          updatedWorkspace = selectNode(updatedWorkspace, nodeId);
+        }
 
-    if (nextWorkspace !== this.workspace) {
-      nextWorkspace = await this.persistWorkspace(nextWorkspace);
+        if (updatedWorkspace.prefs.surfaceMode !== surfaceMode) {
+          updatedWorkspace = setSurfaceMode(updatedWorkspace, surfaceMode);
+        }
+
+        return updatedWorkspace;
+      });
     }
 
     const selectedNode = findNode(nextWorkspace, nodeId);
@@ -609,6 +671,10 @@ export class ChromeStateController extends EventTarget {
     this.basicsBridge.previewPrint?.();
   }
 
+  toggleFullscreen() {
+    this.basicsBridge.toggleFullscreen?.();
+  }
+
   toggleDevTools() {
     this.basicsBridge.toggleDevTools();
   }
@@ -630,8 +696,13 @@ export class ChromeStateController extends EventTarget {
       return;
     }
 
-    this.workspace = await this.workspaceStore.saveWorkspace(updateNodeMetadata(workspace, pageNode.id, { permissions }));
-    this.emitStateChange();
+    await this.persistWorkspace((currentWorkspace) => {
+      if (!findNode(currentWorkspace, pageNode.id)) {
+        return currentWorkspace;
+      }
+
+      return updateNodeMetadata(currentWorkspace, pageNode.id, { permissions });
+    });
   }
 
   async handleDownloadObserved(download) {
@@ -754,13 +825,16 @@ export class ChromeStateController extends EventTarget {
       return;
     }
 
-    this.workspace = await this.workspaceStore.saveWorkspace(
-      updateNodeMetadata(this.workspace, node.id, {
+    await this.persistWorkspace((currentWorkspace) => {
+      if (!findNode(currentWorkspace, node.id)) {
+        return currentWorkspace;
+      }
+
+      return updateNodeMetadata(currentWorkspace, node.id, {
         runtimeState: "crashed",
         errorMessage: "Content process crashed"
-      })
-    );
-    this.emitStateChange();
+      });
+    });
   }
 
   async openArtifactFile(nodeId = this.workspace?.selectedNodeId) {

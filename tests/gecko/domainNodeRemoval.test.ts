@@ -70,4 +70,60 @@ describe("killNode domain graph splicing", () => {
     ]);
     expect(result.workspace.selectedNodeId).toBe(rootId);
   });
+
+  it("promotes a root node's lone child to become the new root", () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+
+    workspace = createChildNode(workspace, rootId, "manual");
+    const childId = workspace.selectedNodeId as string;
+    workspace = createChildNode(workspace, childId, "manual", { selectChild: false });
+    const grandchildId = workspace.nodes.at(-1)?.id as string;
+    workspace = {
+      ...workspace,
+      selectedNodeId: rootId
+    };
+
+    const result = killNode(workspace, rootId);
+
+    expect(findNode(result.workspace, rootId)).toBeNull();
+    expect(findNode(result.workspace, childId)?.parentId).toBeNull();
+    expect(findNode(result.workspace, childId)?.rootId).toBe(childId);
+    expect(findNode(result.workspace, grandchildId)?.rootId).toBe(childId);
+    expect(result.workspace.selectedNodeId).toBe(childId);
+    expect(result.invalidatedNodeIds).toEqual(expect.arrayContaining([rootId]));
+  });
+
+  it("replaces a branching root with a dummy Origin node", () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+
+    workspace = createChildNode(workspace, rootId, "manual");
+    const firstChildId = workspace.selectedNodeId as string;
+    workspace = createChildNode(workspace, rootId, "manual", { selectChild: false });
+    const secondChildId = workspace.nodes.at(-1)?.id as string;
+    workspace = upsertArtifactNode(workspace, rootId, "download", {
+      transferId: "root-download",
+      fileName: "outline.pdf"
+    });
+    const artifactId =
+      workspace.nodes.find((node: { kind: string; parentId: string | null }) => node.kind === "download" && node.parentId === rootId)?.id ??
+      null;
+    workspace = {
+      ...workspace,
+      selectedNodeId: rootId
+    };
+
+    const result = killNode(workspace, rootId);
+    const originNode = findNode(result.workspace, rootId);
+
+    expect(originNode?.title).toBe("Origin");
+    expect(originNode?.url).toBeNull();
+    expect(findNode(result.workspace, artifactId)).toBeNull();
+    expect(findNode(result.workspace, firstChildId)?.parentId).toBe(rootId);
+    expect(findNode(result.workspace, secondChildId)?.parentId).toBe(rootId);
+    expect(result.workspace.selectedNodeId).toBe(firstChildId);
+    expect(result.removedNodeIds).toEqual(expect.arrayContaining([artifactId]));
+    expect(result.invalidatedNodeIds).toEqual(expect.arrayContaining([rootId, artifactId]));
+  });
 });

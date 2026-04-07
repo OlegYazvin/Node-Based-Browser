@@ -21,6 +21,11 @@ try {
 
 const ServicesRef = ServicesModule?.Services ?? globalThis.Services ?? null;
 const IOUtilsRef = IOUtilsModule?.IOUtils ?? globalThis.IOUtils ?? null;
+const ROOT_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Root%3C%2Ftitle%3E%3Ch1%3ERoot%3C%2Fh1%3E";
+const CHILD_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Child%3C%2Ftitle%3E%3Ch1%3EChild%3C%2Fh1%3E";
+const SMOKE_WAIT_TIMEOUT_MS = 15_000;
 let bootstrapRequested = false;
 let bootstrapComplete = false;
 
@@ -198,6 +203,25 @@ function configureNodelyStartupPrefs() {
   setPref("bool", "browser.newtabpage.enabled", false);
 }
 
+function waitForBrowserDelayedStartup() {
+  if (!ServicesRef?.obs || window.gBrowserInit?.delayedStartupFinished) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const observer = (subject, topic) => {
+      if (topic !== "browser-delayed-startup-finished" || subject !== window) {
+        return;
+      }
+
+      ServicesRef.obs.removeObserver(observer, topic);
+      resolve();
+    };
+
+    ServicesRef.obs.addObserver(observer, "browser-delayed-startup-finished");
+  });
+}
+
 function installTestBridge({ shell, controller, workspaceStore, favoritesStore, runtimeManager, basicsBridge }) {
   if (!testingEnabled()) {
     return;
@@ -273,8 +297,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
       return;
     }
 
-    const describeElement = (selector) => {
-      const element = document.querySelector(selector);
+    const describeNode = (element) => {
 
       if (!element) {
         return null;
@@ -285,18 +308,26 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
       return {
         left: Math.round(rect.left),
         top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
         visibility: style.visibility,
+        pointerEvents: style.pointerEvents,
         marginTop: style.marginTop,
         marginInlineStart: style.marginInlineStart
       };
     };
 
+    const describeElement = (selector) => describeNode(document.querySelector(selector));
+
     const state = controller.getState();
     const workspace = state.workspace;
     const selectedNode =
       workspace?.nodes?.find((node) => node.id === workspace.selectedNodeId) ?? null;
+    const selectedTab = window.gBrowser?.selectedTab ?? null;
+    const selectedTabNodeId = runtimeManager.nodeIdForTab(selectedTab);
+    const selectedTabUrl = selectedTab?.linkedBrowser?.currentURI?.spec ?? null;
     const selectedRoot =
       selectedNode == null ? null : workspace?.nodes?.find((node) => node.id === selectedNode.rootId) ?? null;
     const selectedTreeNodeCount =
@@ -308,6 +339,24 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const minimapEdges = minimap?.querySelectorAll(".nodely-graph-surface__minimap-edge");
     const minimapToolbar = document.querySelector(".nodely-graph-surface__minimap-toolbar");
     const surfaceCloseButton = document.querySelector(".nodely-shell__surface-close");
+    const pageToolbar = document.querySelector(".nodely-shell__address-form");
+    const pageToolbarButtons = pageToolbar?.querySelectorAll(".nodely-shell__icon-button") ?? [];
+    const branchNextButton = document.querySelector('[data-action="toggle-branch-next"]');
+    const newChildButton = document.querySelector('[data-action="create-child-node"]');
+    const treeFavoriteButton = document.querySelector('.nodely-shell__tree-strip [data-action="toggle-tree-favorite"]');
+    const topbarOrganizeButton = document.querySelector(".nodely-shell__topbar [data-action='auto-organize']");
+    const topbarFullscreenButton = document.querySelector(".nodely-shell__topbar [data-action='toggle-fullscreen']");
+    const graphOrganizeButton = minimapToolbar?.querySelector('[data-action="auto-organize"]');
+    const activeDrawerName = shell.drawer ?? null;
+    const activeDrawerElement = activeDrawerName
+      ? document.querySelector(`.nodely-shell__drawer--${activeDrawerName}`)
+      : null;
+    const activeDrawerTrigger = activeDrawerName
+      ? document.querySelector(
+          `.nodely-shell__topbar [data-action="toggle-drawer"][data-drawer="${activeDrawerName}"]`
+        )
+      : null;
+    const contextMenu = document.querySelector(".nodely-shell__menu");
     const snapshot = {
       reason,
       recordedAt: Date.now(),
@@ -346,16 +395,51 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
               title: selectedRoot.title,
               nodeCount: selectedTreeNodeCount
             },
+      runtime: {
+        selectedTabNodeId,
+        selectedTabUrl,
+        selectedTabMatchesSelection:
+          selectedNode == null ? selectedTabNodeId == null : selectedTabNodeId === selectedNode.id
+      },
       ui: {
+        surfaceClosePresent: Boolean(surfaceCloseButton),
         surfaceCloseLabel: surfaceCloseButton?.textContent?.trim() ?? "",
-        smokeActivationMethod: window.__nodelySmokeActivationMethod ?? null,
+        rootComposerPresent: Boolean(document.querySelector("input[name='root-input']")),
+        composerPlacement: shell.composer?.dataset?.placement ?? "",
+        pageToolbar: {
+          buttonCount: pageToolbarButtons.length,
+          svgCount: pageToolbar?.querySelectorAll(".nodely-shell__icon-button > svg")?.length ?? 0,
+          pathCount: pageToolbar?.querySelectorAll(".nodely-shell__icon-button > svg path")?.length ?? 0,
+          branchNextPresent: Boolean(branchNextButton)
+        },
+        treeStrip: {
+          newChildSvgCount: newChildButton?.querySelectorAll("svg")?.length ?? 0,
+          newChildPathCount: newChildButton?.querySelectorAll("svg path")?.length ?? 0,
+          treeFavoritePresent: Boolean(treeFavoriteButton)
+        },
+        windowFullscreen: Boolean(window.fullScreen),
         minimap: {
           visible: Boolean(minimap && !minimap.hidden),
           svgPresent: Boolean(minimapSvg),
           nodeShapeCount: minimapNodes?.length ?? 0,
           edgeCount: minimapEdges?.length ?? 0,
           viewportPresent: Boolean(minimapViewport),
-          toolbarButtonCount: minimapToolbar?.querySelectorAll("button")?.length ?? 0
+          toolbarButtonCount: minimapToolbar?.querySelectorAll("button")?.length ?? 0,
+          organizePresent: Boolean(graphOrganizeButton)
+        },
+        topbar: {
+          organizePresent: Boolean(topbarOrganizeButton),
+          fullscreenPresent: Boolean(topbarFullscreenButton)
+        },
+        treesDrawer: {
+          favoriteButtonCount:
+            shell.treesDrawer?.querySelectorAll?.('[data-action="toggle-tree-favorite"]')?.length ?? 0,
+          rootRowCount:
+            shell.treesDrawer?.querySelectorAll?.('form[data-root-id]')?.length ?? 0
+        },
+        contextMenu: {
+          visible: Boolean(contextMenu && !contextMenu.hidden),
+          actionCount: contextMenu?.querySelectorAll?.("[data-action]")?.length ?? 0
         }
       },
       layout: {
@@ -364,9 +448,13 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         tabpanels: describeElement("#tabbrowser-tabpanels"),
         appcontent: describeElement("#appcontent"),
         graph: describeElement("nodely-graph-surface"),
+        splitHandle: describeElement(".nodely-shell__split-handle"),
         topbar: describeElement(".nodely-shell__topbar"),
         composer: describeElement(".nodely-shell__composer"),
-        pagebar: describeElement(".nodely-shell__pagebar")
+        pagebar: describeElement(".nodely-shell__pagebar"),
+        activeDrawer: describeNode(activeDrawerElement),
+        activeDrawerTrigger: describeNode(activeDrawerTrigger),
+        contextMenu: describeNode(contextMenu)
       }
     };
 
@@ -388,15 +476,39 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
   });
 }
 
-async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenarioName }) {
+async function runSmokeScenario({ shell, writeSmokeSnapshot, scenarioName }) {
   try {
     switch (scenarioName) {
       case "graph-select-root":
-        await runGraphSelectRootScenario({ shell, controller });
+        await runGraphSelectRootScenario({ shell });
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "focus-close-and-select-root":
+        await runFocusCloseAndSelectRootScenario({ shell });
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       case "pagebar-new-child":
-        await runPagebarNewChildScenario({ shell, controller });
+        await runPagebarNewChildScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "pagebar-duplicate-tab":
+        await runPagebarDuplicateTabScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "graph-contextmenu-root-composer":
+        await runGraphContextMenuRootComposerScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "graph-contextmenu-kill-root":
+        await runGraphContextMenuKillRootScenario({ shell });
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "toggle-fullscreen":
+        await runToggleFullscreenScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "topbar-drawers":
+        await runTopbarDrawersScenario();
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       default:
@@ -409,15 +521,15 @@ async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenari
   }
 }
 
-async function runGraphSelectRootScenario({ shell, controller }) {
-  const readyState = await window.__nodelyTest.waitForState((state) => {
+async function runGraphSelectRootScenario({ shell }) {
+  const readyState = await waitForSmokeState((state) => {
     const selectedNode = state.workspace?.nodes?.find?.(
       (node) => node.id === state.workspace?.selectedNodeId
     );
 
     return (
       state.workspace?.nodes?.length >= 2 &&
-      selectedNode?.url === "https://example.org/" &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
       document.documentElement?.getAttribute("nodely-browser-surface") === "page"
     );
   }, "smoke graph ready");
@@ -441,13 +553,13 @@ async function runGraphSelectRootScenario({ shell, controller }) {
 
   synthesizeMouseActivation(nodeElement);
 
-  await window.__nodelyTest.waitForState((state) => {
+  await waitForSmokeState((state) => {
     const selectedNode =
       state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
 
     return (
       selectedNode?.id === rootNode.id &&
-      selectedNode?.url === "https://example.com/" &&
+      selectedNode?.url === ROOT_SMOKE_URL &&
       document.documentElement?.getAttribute("nodely-browser-surface") === "page"
     );
   }, "graph root selection");
@@ -456,14 +568,14 @@ async function runGraphSelectRootScenario({ shell, controller }) {
 }
 
 async function runPagebarNewChildScenario() {
-  const readyState = await window.__nodelyTest.waitForState((state) => {
+  const readyState = await waitForSmokeState((state) => {
     const selectedNode = state.workspace?.nodes?.find?.(
       (node) => node.id === state.workspace?.selectedNodeId
     );
 
     return (
       state.workspace?.nodes?.length === 2 &&
-      selectedNode?.url === "https://example.org/" &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
       document.documentElement?.getAttribute("nodely-browser-surface") === "page"
     );
   }, "smoke pagebar ready");
@@ -480,7 +592,7 @@ async function runPagebarNewChildScenario() {
 
   button.click();
 
-  await window.__nodelyTest.waitForState((state) => {
+  await waitForSmokeState((state) => {
     const selectedNode =
       state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
 
@@ -493,6 +605,310 @@ async function runPagebarNewChildScenario() {
       document.documentElement?.getAttribute("nodely-browser-surface") === "page"
     );
   }, "pagebar new child");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runPagebarDuplicateTabScenario() {
+  const readyState = await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length === 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke pagebar duplicate ready");
+  const parentNodeId = readyState.workspace?.selectedNodeId ?? null;
+  const selector = `.nodely-shell__tab[data-node-id="${escapeAttributeValue(parentNodeId)}"]`;
+  const tab = document.querySelector(selector);
+
+  if (!parentNodeId) {
+    throw new Error("Smoke pagebar-duplicate-tab scenario could not resolve the active tab node.");
+  }
+
+  if (!tab) {
+    throw new Error(`Smoke pagebar-duplicate-tab scenario could not find ${selector}.`);
+  }
+
+  dispatchSyntheticContextMenu(tab);
+  await waitForCondition(
+    () =>
+      !document.querySelector(".nodely-shell__menu")?.hidden &&
+      Boolean(document.querySelector('[data-action="duplicate-tab"]')),
+    "pagebar duplicate menu"
+  );
+  document.querySelector('[data-action="duplicate-tab"]')?.click();
+
+  await waitForSmokeState((state) => {
+    const selectedNode =
+      state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      state.workspace?.nodes?.length === 3 &&
+      state.workspace?.edgeCount === 2 &&
+      selectedNode?.id !== parentNodeId &&
+      selectedNode?.parentId === parentNodeId &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "pagebar duplicate tab");
+  await waitForCondition(
+    () => window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === CHILD_SMOKE_URL,
+    "duplicated tab runtime"
+  );
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runGraphContextMenuRootComposerScenario() {
+  await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length >= 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke graph contextmenu ready");
+
+  const stage = document.querySelector(".nodely-graph-surface__stage");
+
+  if (!stage) {
+    throw new Error("Smoke graph-contextmenu-root-composer scenario could not find the graph stage.");
+  }
+
+  dispatchSyntheticContextMenu(stage);
+
+  await waitForSmokeState(
+    () =>
+      !document.querySelector(".nodely-shell__composer")?.hidden &&
+      Boolean(document.querySelector("input[name='root-input']")),
+    "graph contextmenu composer"
+  );
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runGraphContextMenuKillRootScenario({ shell }) {
+  const readyState = await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length === 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke graph kill root ready");
+  const rootNode =
+    readyState.workspace?.nodes?.find?.((node) => node.parentId === null) ?? null;
+
+  if (!rootNode?.id) {
+    throw new Error("Smoke graph-contextmenu-kill-root scenario could not find a root node.");
+  }
+
+  shell.graph.centerOnNode(rootNode.id);
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  const selector = `.nodely-graph-node[data-node-id="${escapeAttributeValue(rootNode.id)}"]`;
+  const nodeElement = document.querySelector(selector);
+
+  if (!nodeElement) {
+    throw new Error(`Smoke graph-contextmenu-kill-root scenario could not find ${selector}.`);
+  }
+
+  dispatchSyntheticContextMenu(nodeElement);
+  await waitForCondition(
+    () =>
+      !document.querySelector(".nodely-shell__menu")?.hidden &&
+      Boolean(document.querySelector('[data-action="kill-node-context"]')),
+    "graph kill menu"
+  );
+  document.querySelector('[data-action="kill-node-context"]')?.click();
+
+  await waitForCondition(() => {
+    const state = window.__nodelyTest?.getState?.();
+    const selectedNode =
+      state?.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      state?.workspace?.nodes?.length === 1 &&
+      state?.workspace?.nodes?.filter?.((node) => node.parentId === null)?.length === 1 &&
+      selectedNode?.parentId === null &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === CHILD_SMOKE_URL
+    );
+  }, "graph contextmenu kill root");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runToggleFullscreenScenario() {
+  await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length >= 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke fullscreen ready");
+
+  const fullscreenButton = document.querySelector('[data-action="toggle-fullscreen"]');
+
+  if (!fullscreenButton) {
+    throw new Error("Smoke toggle-fullscreen scenario could not find the fullscreen button.");
+  }
+
+  fullscreenButton.click();
+
+  await waitForSmokeState(() => window.fullScreen === true, "window fullscreen");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runTopbarDrawersScenario() {
+  await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length >= 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke topbar drawers ready");
+
+  const treesButton = document.querySelector('[data-action="toggle-drawer"][data-drawer="trees"]');
+  if (!treesButton) {
+    throw new Error("Smoke topbar-drawers scenario could not find the Trees drawer toggle button.");
+  }
+
+  treesButton.click();
+  await waitForCondition(() => {
+    const drawer = document.querySelector(".nodely-shell__drawer--trees");
+    const trigger = document.querySelector('[data-action="toggle-drawer"][data-drawer="trees"]');
+    const drawerRect = drawer?.getBoundingClientRect?.();
+    const triggerRect = trigger?.getBoundingClientRect?.();
+    const favoriteButtons =
+      document.querySelectorAll('.nodely-shell__drawer--trees [data-action="toggle-tree-favorite"]')
+        ?.length ?? 0;
+    const treeRows =
+      document.querySelectorAll('.nodely-shell__drawer--trees form[data-root-id]')?.length ?? 0;
+
+    return (
+      document.documentElement?.getAttribute("nodely-drawer") === "trees" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      drawer &&
+      !drawer.hidden &&
+      trigger &&
+      favoriteButtons === treeRows &&
+      (drawerRect?.left ?? 0) <= (triggerRect?.right ?? 0) + 14 &&
+      (drawerRect?.right ?? 0) >= (triggerRect?.left ?? 0) - 14 &&
+      Math.abs((drawerRect?.top ?? 0) - ((triggerRect?.bottom ?? 0) + 8)) <= 14
+    );
+  }, "trees drawer anchored");
+
+  const downloadsButton = document.querySelector('[data-action="toggle-drawer"][data-drawer="downloads"]');
+
+  if (!downloadsButton) {
+    throw new Error("Smoke topbar-drawers scenario could not find the Downloads drawer toggle button.");
+  }
+
+  downloadsButton.click();
+  await waitForCondition(() => {
+    const drawer = document.querySelector(".nodely-shell__drawer--downloads");
+    const trigger = document.querySelector('[data-action="toggle-drawer"][data-drawer="downloads"]');
+    const drawerRect = drawer?.getBoundingClientRect?.();
+    const triggerRect = trigger?.getBoundingClientRect?.();
+
+    return (
+      document.documentElement?.getAttribute("nodely-drawer") === "downloads" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      drawer &&
+      !drawer.hidden &&
+      trigger &&
+      (drawerRect?.left ?? 0) <= (triggerRect?.right ?? 0) + 14 &&
+      (drawerRect?.right ?? 0) >= (triggerRect?.left ?? 0) - 14 &&
+      Math.abs((drawerRect?.top ?? 0) - ((triggerRect?.bottom ?? 0) + 8)) <= 14
+    );
+  }, "downloads drawer anchored");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runFocusCloseAndSelectRootScenario({ shell }) {
+  const readyState = await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length >= 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-view") === "focus" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === CHILD_SMOKE_URL
+    );
+  }, "smoke focus page ready");
+  const rootNode =
+    readyState.workspace?.nodes?.find?.((node) => node.parentId === null) ?? null;
+  const closeButton = document.querySelector(".nodely-shell__surface-close");
+
+  if (!rootNode?.id) {
+    throw new Error("Smoke focus-close-and-select-root scenario could not find a root node.");
+  }
+
+  if (!closeButton) {
+    throw new Error("Smoke focus-close-and-select-root scenario could not find the canvas close button.");
+  }
+
+  if (closeButton.textContent?.trim() !== "×") {
+    throw new Error("Smoke focus-close-and-select-root scenario expected an X close button in focus mode.");
+  }
+
+  closeButton.click();
+
+  await waitForSmokeState(
+    () => document.documentElement?.getAttribute("nodely-browser-surface") === "canvas",
+    "focus canvas"
+  );
+
+  shell.graph.centerOnNode(rootNode.id);
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  const selector = `.nodely-graph-node[data-node-id="${escapeAttributeValue(rootNode.id)}"]`;
+  const nodeElement = document.querySelector(selector);
+
+  if (!nodeElement) {
+    throw new Error(`Smoke focus-close-and-select-root scenario could not find ${selector}.`);
+  }
+
+  synthesizeMouseActivation(nodeElement);
+
+  await waitForSmokeState((state) => {
+    const selectedNode =
+      state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      selectedNode?.id === rootNode.id &&
+      selectedNode?.url === ROOT_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === ROOT_SMOKE_URL
+    );
+  }, "focus root selection");
   await nextAnimationFrame();
   await nextAnimationFrame();
 }
@@ -511,6 +927,49 @@ function nextAnimationFrame() {
   });
 }
 
+function waitForSmokeState(predicate, description) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(`Timed out waiting for ${description}.`));
+    }, SMOKE_WAIT_TIMEOUT_MS);
+
+    window.__nodelyTest
+      .waitForState(predicate, description)
+      .then((state) => {
+        window.clearTimeout(timeoutId);
+        resolve(state);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
+function waitForCondition(predicate, description) {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+
+    const tick = () => {
+      try {
+        if (predicate()) {
+          resolve(true);
+          return;
+        }
+      } catch {}
+
+      if (Date.now() - startedAt >= SMOKE_WAIT_TIMEOUT_MS) {
+        reject(new Error(`Timed out waiting for ${description}.`));
+        return;
+      }
+
+      window.setTimeout(tick, 100);
+    };
+
+    tick();
+  });
+}
+
 function synthesizeMouseActivation(element) {
   const rect = element.getBoundingClientRect();
   const clientX = rect.left + rect.width / 2;
@@ -520,7 +979,6 @@ function synthesizeMouseActivation(element) {
   const pointerId = utils?.DEFAULT_MOUSE_POINTER_ID ?? 1;
 
   if (!utils?.sendMouseEvent) {
-    window.__nodelySmokeActivationMethod = "dispatchEvent-fallback";
     dispatchSyntheticMouseActivation(element, clientX, clientY);
     return;
   }
@@ -534,9 +992,7 @@ function synthesizeMouseActivation(element) {
     utils.sendMouseEvent("mousedown", clientX, clientY, 0, 1, 0, false, 0, mouseSource, true, false, 1, pointerId);
     utils.sendMouseEvent("mouseup", clientX, clientY, 0, 1, 0, false, 0, mouseSource, true, false, 0, pointerId);
     utils.sendMouseEvent("click", clientX, clientY, 0, 1, 0, false, 0, mouseSource, true, false, 0, pointerId);
-    window.__nodelySmokeActivationMethod = "windowUtils";
   } catch {
-    window.__nodelySmokeActivationMethod = "dispatchEvent-fallback";
     dispatchSyntheticMouseActivation(element, clientX, clientY);
   }
 }
@@ -579,6 +1035,24 @@ function dispatchSyntheticMouseActivation(element, clientX, clientY) {
   );
 }
 
+function dispatchSyntheticContextMenu(element) {
+  const rect = element.getBoundingClientRect();
+  const clientX = rect.left + rect.width / 2;
+  const clientY = rect.top + rect.height / 2;
+
+  element.dispatchEvent(
+    new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX,
+      clientY,
+      button: 2,
+      buttons: 2
+    })
+  );
+}
+
 function initializeNodelyShell() {
   configureNodelyStartupPrefs();
   document.documentElement?.setAttribute("nodely-bootstrap-state", "loading");
@@ -615,8 +1089,8 @@ function initializeNodelyShell() {
       runtimeManager,
       basicsBridge
     });
-    controller
-      .initialize()
+    waitForBrowserDelayedStartup()
+      .then(() => controller.initialize())
       .then(() => {
         if (testingEnabled()) {
           window.dispatchEvent(new CustomEvent("nodely-ready", { detail: { shell } }));

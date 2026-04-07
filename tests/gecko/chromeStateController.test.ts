@@ -7,6 +7,7 @@ import {
   createEmptyWorkspace,
   createRootNode,
   findNode,
+  nodeRect,
   upsertArtifactNode
 } from "../../gecko/overlay/browser/base/content/nodely/domain.mjs";
 
@@ -37,6 +38,7 @@ function makeBasicsBridge() {
     showPermissions: vi.fn(),
     printPage: vi.fn(),
     previewPrint: vi.fn(),
+    toggleFullscreen: vi.fn(),
     toggleDevTools: vi.fn(),
     getPermissionSummary: vi.fn(() => ({
       activeCount: 0,
@@ -123,6 +125,59 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     expect(runtimeManager.loadNode).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: workspace.nodes[0].id }),
       expect.stringContaining("google.com/search")
+    );
+  });
+
+  it("places a contextual root near the requested point without overlapping an existing node", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const existingRootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, existingRootId, {
+      kind: "url",
+      url: "https://example.com/root",
+      input: "https://example.com/root",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    const anchoredRoot = findNode(workspace, existingRootId);
+
+    await controller.createRootFromInput("https://example.com/placed", {
+      position: anchoredRoot?.position
+    });
+
+    const newRoot = findNode(workspace, workspace.selectedNodeId as string);
+
+    expect(newRoot?.parentId).toBeNull();
+    expect(newRoot?.manualPosition).toBe(true);
+    expect(newRoot?.position).not.toEqual(anchoredRoot?.position);
+    expect(
+      rectsOverlap(
+        nodeRect(anchoredRoot as { position: { x: number; y: number } }),
+        nodeRect(newRoot as { position: { x: number; y: number } })
+      )
+    ).toBe(false);
+    expect(runtimeManager.loadNode).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: newRoot?.id }),
+      "https://example.com/placed"
     );
   });
 
@@ -514,6 +569,139 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     expect(runtimeManager.loadNode).not.toHaveBeenCalled();
   });
 
+  it("persists theme mode changes through the workspace store", async () => {
+    let workspace = createEmptyWorkspace();
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager: makeRuntimeManager(),
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    await controller.setThemeMode("dark");
+
+    expect(workspace.prefs.themeMode).toBe("dark");
+    expect(workspaceStore.saveWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prefs: expect.objectContaining({
+          themeMode: "dark"
+        })
+      })
+    );
+  });
+
+  it("forwards fullscreen toggles to the browser basics bridge", async () => {
+    const basicsBridge = makeBasicsBridge();
+    const controller = new ChromeStateController({
+      workspaceStore: {
+        loadWorkspace: vi.fn(async () => createEmptyWorkspace()),
+        saveWorkspace: vi.fn(async (nextWorkspace) => nextWorkspace)
+      },
+      favoritesStore: {
+        listFavorites: vi.fn(async () => [])
+      },
+      runtimeManager: makeRuntimeManager(),
+      basicsBridge
+    });
+
+    await controller.initialize();
+    controller.toggleFullscreen();
+
+    expect(basicsBridge.toggleFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a slow child metadata save overwrite a newer selected root node", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/root",
+      input: "https://example.com/root",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = createChildNode(workspace, rootId, "manual");
+    const childId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, childId, {
+      kind: "url",
+      url: "https://example.com/child",
+      input: "https://example.com/child",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    let releaseMetadataSave: (() => void) | null = null;
+    let metadataSavePending = false;
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        const childNode = findNode(nextWorkspace, childId);
+
+        if (
+          !metadataSavePending &&
+          nextWorkspace.selectedNodeId === childId &&
+          childNode?.title === "Child loaded"
+        ) {
+          metadataSavePending = true;
+          await new Promise<void>((resolve) => {
+            releaseMetadataSave = resolve;
+          });
+        }
+
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    runtimeManager.tabForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? { id: "root-tab" } : null
+    );
+    runtimeManager.currentUrlForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? "https://example.com/root" : null
+    );
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.selectNode.mockClear();
+
+    const metadataPromise = controller.handleNodeMetaChanged(childId, {
+      title: "Child loaded",
+      runtimeState: "live"
+    });
+
+    await vi.waitFor(() => {
+      expect(releaseMetadataSave).not.toBeNull();
+    });
+
+    const selectPromise = controller.selectNode(rootId);
+    releaseMetadataSave?.();
+
+    await Promise.all([metadataPromise, selectPromise]);
+
+    expect(workspace.selectedNodeId).toBe(rootId);
+    expect(findNode(workspace, childId)?.title).toBe("Child loaded");
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(rootId);
+  });
+
   it("reloads an existing mapped runtime when it no longer matches the node url", async () => {
     let workspace = createRootNode(createEmptyWorkspace());
     const rootId = workspace.selectedNodeId as string;
@@ -815,4 +1003,70 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
       expect.objectContaining({ background: true })
     );
   });
+
+  it("duplicates a tab from an explicit parent node when requested", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/source",
+      input: "https://example.com/source",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = createChildNode(workspace, rootId, "manual");
+    const selectedChildId = workspace.selectedNodeId as string;
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.loadNode.mockClear();
+
+    await controller.createChildNode({
+      parentNodeId: rootId,
+      url: "https://example.com/source",
+      origin: "tab-duplicate"
+    });
+
+    const duplicatedNode = workspace.nodes.find(
+      (node: { id: string; parentId: string | null }) =>
+        node.parentId === rootId && node.id !== selectedChildId
+    );
+
+    expect(duplicatedNode).toBeTruthy();
+    expect(workspace.selectedNodeId).toBe(duplicatedNode?.id);
+    expect(runtimeManager.loadNode).toHaveBeenCalledWith(
+      expect.objectContaining({ id: duplicatedNode?.id }),
+      "https://example.com/source",
+      expect.anything()
+    );
+  });
 });
+
+function rectsOverlap(
+  left: { x: number; y: number; width: number; height: number },
+  right: { x: number; y: number; width: number; height: number }
+) {
+  return (
+    left.x < right.x + right.width &&
+    left.x + left.width > right.x &&
+    left.y < right.y + right.height &&
+    left.y + left.height > right.y
+  );
+}

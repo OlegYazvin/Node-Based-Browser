@@ -6,65 +6,162 @@ import {
   findOwningPageNode,
   findRoots,
   isArtifactNode,
+  nodeDimensions,
   orderTreeNodesForTabs,
-  siteCategoryLabel,
   summarizeTreeContents,
   treeHasInitializedPage
 } from "./domain.mjs";
 import "./nodely-graph-surface.mjs";
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
+const SVG_NS = "http://www.w3.org/2000/svg";
+const CONTEXTUAL_COMPOSER_WIDTH = 360;
+const CONTEXTUAL_COMPOSER_HEIGHT = 72;
+const CONTEXTUAL_COMPOSER_MARGIN = 16;
+const CONTEXTUAL_COMPOSER_OFFSET = 12;
+const FLOATING_PANEL_MARGIN = 12;
+const FLOATING_PANEL_GAP = 8;
+const FLOATING_MENU_WIDTH = 192;
 
-function iconBranch() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4v8m0 0c0 2.2 1.8 4 4 4h4m-8-4c0-2.2 1.8-4 4-4h4m0-3.5A1.5 1.5 0 1 0 14 7a1.5 1.5 0 0 0 0-3Zm0 8A1.5 1.5 0 1 0 14 15a1.5 1.5 0 0 0 0-3ZM6 2.5A1.5 1.5 0 1 0 6 5.5a1.5 1.5 0 0 0 0-3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+function createIcon(paths, viewBox = "0 0 20 20") {
+  return {
+    viewBox,
+    paths
+  };
 }
 
 function iconStar(filled = false) {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 2.8 2.25 4.56 5.03.73-3.64 3.55.86 5.01L10 14.37 5.5 16.65l.86-5.01L2.72 8.1l5.03-.73L10 2.8Z" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.45" stroke-linejoin="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "m10 2.8 2.25 4.56 5.03.73-3.64 3.55.86 5.01L10 14.37 5.5 16.65l.86-5.01L2.72 8.1l5.03-.73L10 2.8Z",
+      fill: filled ? "currentColor" : "none",
+      stroke: "currentColor",
+      "stroke-width": "1.45",
+      "stroke-linejoin": "round"
+    }
+  ]);
 }
 
 function iconTree(filled = false) {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.2 6.6 6h2.1L5 10h2.25L4.4 14h4.35V17h2.5v-3h4.35l-2.85-4H15L11.3 6h2.1L10 2.2Z" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"></path></svg>`;
-}
-
-function iconCanvas() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4h12v12H4Zm6-1.2v14.4M2.8 10h14.4" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round"></path></svg>`;
-}
-
-function iconClose() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5.2 5.2 9.6 9.6m0-9.6-9.6 9.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>`;
-}
-
-function iconFolder() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.7 5.5A1.8 1.8 0 0 1 4.5 3.7h3.1l1.25 1.5h6.65a1.8 1.8 0 0 1 1.8 1.8v7.55a1.8 1.8 0 0 1-1.8 1.8H4.5a1.8 1.8 0 0 1-1.8-1.8Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "M10 2.2 6.6 6h2.1L5 10h2.25L4.4 14h4.35V17h2.5v-3h4.35l-2.85-4H15L11.3 6h2.1L10 2.2Z",
+      fill: filled ? "currentColor" : "none",
+      stroke: "currentColor",
+      "stroke-width": "1.35",
+      "stroke-linejoin": "round"
+    }
+  ]);
 }
 
 function iconDownload() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.2v8.5m0 0 3.2-3.2M10 11.7 6.8 8.5M3.4 14.7h13.2" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "M10 3.2v8.5m0 0 3.2-3.2M10 11.7 6.8 8.5M3.4 14.7h13.2",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.55",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
 }
 
 function iconUpload() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16.8V8.3m0 0 3.2 3.2M10 8.3 6.8 11.5M3.4 5.3h13.2" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "M10 16.8V8.3m0 0 3.2 3.2M10 8.3 6.8 11.5M3.4 5.3h13.2",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.55",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
 }
 
 function iconShield() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.6 15.7 4.7v4.6c0 3.5-2 6-5.7 8.1-3.7-2.1-5.7-4.6-5.7-8.1V4.7L10 2.6Z" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linejoin="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "M10 2.6 15.7 4.7v4.6c0 3.5-2 6-5.7 8.1-3.7-2.1-5.7-4.6-5.7-8.1V4.7L10 2.6Z",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.45",
+      "stroke-linejoin": "round"
+    }
+  ]);
 }
 
 function iconFind() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.7 3.1a5.6 5.6 0 1 1 0 11.2 5.6 5.6 0 0 1 0-11.2Zm7.1 12.7-3.1-3.1" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "M8.7 3.1a5.6 5.6 0 1 1 0 11.2 5.6 5.6 0 0 1 0-11.2Zm7.1 12.7-3.1-3.1",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.45",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
 }
 
 function iconPrint() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.3 6.2V3.5h9.4v2.7M4.2 9h11.6A1.8 1.8 0 0 1 17.6 10.8v2.5H14.7v3.2H5.3v-3.2H2.4v-2.5A1.8 1.8 0 0 1 4.2 9Zm1.8 4.3h8m-8 2.1h6.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "M5.3 6.2V3.5h9.4v2.7M4.2 9h11.6A1.8 1.8 0 0 1 17.6 10.8v2.5H14.7v3.2H5.3v-3.2H2.4v-2.5A1.8 1.8 0 0 1 4.2 9Zm1.8 4.3h8m-8 2.1h6.4",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.4",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
+}
+
+function iconFullscreen() {
+  return createIcon([
+    {
+      d: "M3.6 7.4V3.6h3.8M16.4 7.4V3.6h-3.8M3.6 12.6v3.8h3.8M16.4 12.6v3.8h-3.8",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.5",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
 }
 
 function iconNodeTabPlus() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.2 5.3v7.2m0 0c0 1.8 1.5 3.3 3.3 3.3h3.2m-6.5-3.3c0-1.8 1.5-3.3 3.3-3.3h3.2m-6.5-4.7A1.7 1.7 0 1 0 5.2 8a1.7 1.7 0 0 0 0-3.4Zm8.3 0A1.7 1.7 0 1 0 13.5 8a1.7 1.7 0 0 0 0-3.4Zm0 8A1.7 1.7 0 1 0 13.5 16a1.7 1.7 0 0 0 0-3.4Z" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"></path><path d="M16.8 3.2v3.8m1.9-1.9H15" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "M5.2 5.3v7.2m0 0c0 1.8 1.5 3.3 3.3 3.3h3.2m-6.5-3.3c0-1.8 1.5-3.3 3.3-3.3h3.2m-6.5-4.7A1.7 1.7 0 1 0 5.2 8a1.7 1.7 0 0 0 0-3.4Zm8.3 0A1.7 1.7 0 1 0 13.5 8a1.7 1.7 0 0 0 0-3.4Zm0 8A1.7 1.7 0 1 0 13.5 16a1.7 1.7 0 0 0 0-3.4Z",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.35",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    },
+    {
+      d: "M16.8 3.2v3.8m1.9-1.9H15",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.35",
+      "stroke-linecap": "round"
+    }
+  ]);
 }
 
 function iconWarning() {
-  return `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 3.1 7 12.3H3l7-12.3Zm0 4.1v4.4m0 2.8h.01" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+  return createIcon([
+    {
+      d: "m10 3.1 7 12.3H3l7-12.3Zm0 4.1v4.4m0 2.8h.01",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.45",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
 }
 
 export class NodelyShell extends HTMLElement {
@@ -73,7 +170,9 @@ export class NodelyShell extends HTMLElement {
     this.controller = null;
     this.state = { workspace: null, favorites: [], chrome: null };
     this.composerOpen = false;
+    this.composerAnchor = null;
     this.drawer = null;
+    this.contextMenuState = null;
     this.permissionsPanelOpen = false;
     this.findOpen = false;
     this.findQuery = "";
@@ -89,6 +188,8 @@ export class NodelyShell extends HTMLElement {
         })
         : null;
     this.boundWindowKeydown = (event) => this.handleWindowKeydown(event);
+    this.boundWindowClick = (event) => this.handleWindowClick(event);
+    this.boundWindowResize = () => this.scheduleLayoutSync();
     this.boundSplitResizeMove = (event) => this.handleSplitResizeMove(event);
     this.boundSplitResizeUp = (event) => this.handleSplitResizeUp(event);
     this.boundStateChange = (event) => {
@@ -139,6 +240,11 @@ export class NodelyShell extends HTMLElement {
       "aside",
       "nodely-shell__drawer nodely-shell__drawer--trees"
     );
+    this.contextMenu = createHtmlElement(
+      this.ownerDocument,
+      "aside",
+      "nodely-shell__menu"
+    );
     this.promptStack = createHtmlElement(
       this.ownerDocument,
       "section",
@@ -155,14 +261,16 @@ export class NodelyShell extends HTMLElement {
       this.favoritesDrawer,
       this.downloadsDrawer,
       this.recoverDrawer,
-      this.promptStack,
-      this.treesDrawer
+      this.treesDrawer,
+      this.contextMenu,
+      this.promptStack
     );
 
     this.topbar.addEventListener("click", (event) => this.handleTopbarClick(event));
     this.topbar.addEventListener("change", (event) => this.handleTopbarChange(event));
     this.composer.addEventListener("submit", (event) => this.handleComposerSubmit(event));
     this.pagebar.addEventListener("click", (event) => this.handlePagebarClick(event));
+    this.pagebar.addEventListener("contextmenu", (event) => this.handlePagebarContextMenu(event));
     this.pagebar.addEventListener("submit", (event) => this.handleAddressSubmit(event));
     this.pagebar.addEventListener("change", (event) => this.handlePagebarChange(event));
     this.pagebar.addEventListener("input", (event) => this.handlePagebarInput(event));
@@ -171,6 +279,7 @@ export class NodelyShell extends HTMLElement {
     this.recoverDrawer.addEventListener("click", (event) => this.handleRecoverClick(event));
     this.treesDrawer.addEventListener("click", (event) => this.handleTreesClick(event));
     this.treesDrawer.addEventListener("submit", (event) => this.handleTreesSubmit(event));
+    this.contextMenu.addEventListener("click", (event) => this.handleContextMenuClick(event));
     this.artifactSurface.addEventListener("click", (event) => this.handleArtifactSurfaceClick(event));
     this.promptStack.addEventListener("click", (event) => this.handlePromptStackClick(event));
     this.graph.addEventListener("nodely-select-node", (event) => {
@@ -178,13 +287,21 @@ export class NodelyShell extends HTMLElement {
     });
     this.graph.addEventListener("nodely-node-moved", (event) => this.controller?.updateNodePosition(event.detail.nodeId, event.detail.position));
     this.graph.addEventListener("nodely-viewport-change", (event) => this.controller?.setViewport(event.detail.viewport));
-    this.graph.addEventListener("nodely-open-composer", () => {
-      this.composerOpen = true;
-      this.render();
-      this.composer.querySelector("input")?.focus();
+    this.graph.addEventListener("nodely-open-composer", (event) => {
+      this.openComposer(event.detail?.anchor ?? null);
+    });
+    this.graph.addEventListener("nodely-auto-organize", () => this.controller?.autoOrganize());
+    this.graph.addEventListener("nodely-open-node-menu", (event) => {
+      this.openContextMenu({
+        kind: "node",
+        nodeId: event.detail?.nodeId ?? null,
+        anchor: event.detail?.anchor ?? null
+      });
     });
     this.splitHandle.addEventListener("pointerdown", (event) => this.handleSplitResizeStart(event));
     window.addEventListener("keydown", this.boundWindowKeydown);
+    window.addEventListener("click", this.boundWindowClick);
+    window.addEventListener("resize", this.boundWindowResize);
     this.layoutObserver?.observe(this.topbar);
     this.layoutObserver?.observe(this.composer);
     this.layoutObserver?.observe(this.pagebar);
@@ -192,6 +309,8 @@ export class NodelyShell extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener("keydown", this.boundWindowKeydown);
+    window.removeEventListener("click", this.boundWindowClick);
+    window.removeEventListener("resize", this.boundWindowResize);
 
     if (this.layoutSyncFrame != null) {
       window.cancelAnimationFrame(this.layoutSyncFrame);
@@ -236,7 +355,44 @@ export class NodelyShell extends HTMLElement {
     return hadOpenPanels;
   }
 
+  isContextualComposer(workspace = this.state.workspace) {
+    return Boolean(this.composerOpen && this.composerAnchor && workspace?.nodes?.length);
+  }
+
+  openComposer(anchor = null) {
+    this.drawer = null;
+    this.closeContextMenu();
+    this.closeInlinePanels();
+    this.composerOpen = true;
+    this.composerAnchor = anchor && this.state.workspace?.nodes?.length ? normalizeComposerAnchor(anchor) : null;
+    this.render();
+    this.composer.querySelector("input")?.focus();
+  }
+
+  closeComposer() {
+    this.composerOpen = false;
+    this.composerAnchor = null;
+  }
+
+  resolveContextualRootPosition() {
+    if (!this.isContextualComposer(this.state.workspace) || !this.composerAnchor || !this.graph?.worldFromClient) {
+      return null;
+    }
+
+    const anchorWorldPoint = this.graph.worldFromClient(
+      this.composerAnchor.clientX,
+      this.composerAnchor.clientY
+    );
+    const dimensions = nodeDimensions({ kind: "page" });
+
+    return {
+      x: Math.round(anchorWorldPoint.x - dimensions.width / 2),
+      y: Math.round(anchorWorldPoint.y - dimensions.height / 2)
+    };
+  }
+
   toggleDrawer(drawerName) {
+    this.closeContextMenu();
     this.closeInlinePanels();
     this.drawer = this.drawer === drawerName ? null : drawerName;
     this.render();
@@ -248,6 +404,7 @@ export class NodelyShell extends HTMLElement {
     }
 
     this.drawer = null;
+    this.closeContextMenu();
     this.permissionsPanelOpen = false;
     this.printSheetOpen = false;
     this.findOpen = true;
@@ -263,6 +420,7 @@ export class NodelyShell extends HTMLElement {
     }
 
     this.drawer = null;
+    this.closeContextMenu();
     this.permissionsPanelOpen = false;
 
     if (this.findOpen) {
@@ -290,6 +448,11 @@ export class NodelyShell extends HTMLElement {
   }
 
   dismissTransientUi() {
+    if (this.closeContextMenu()) {
+      this.render();
+      return true;
+    }
+
     if (this.drawer) {
       this.drawer = null;
       this.render();
@@ -303,12 +466,39 @@ export class NodelyShell extends HTMLElement {
     }
 
     if (this.composerOpen) {
-      this.composerOpen = false;
+      this.closeComposer();
       this.render();
       return true;
     }
 
     return false;
+  }
+
+  openContextMenu({ kind, nodeId = null, anchor = null } = {}) {
+    const normalizedAnchor = normalizeFloatingAnchor(anchor);
+
+    if (!kind || !normalizedAnchor) {
+      return;
+    }
+
+    this.drawer = null;
+    this.closeInlinePanels();
+    this.closeComposer();
+    this.contextMenuState = {
+      kind,
+      nodeId,
+      anchor: normalizedAnchor
+    };
+    this.render();
+  }
+
+  closeContextMenu() {
+    if (!this.contextMenuState) {
+      return false;
+    }
+
+    this.contextMenuState = null;
+    return true;
   }
 
   render() {
@@ -318,9 +508,9 @@ export class NodelyShell extends HTMLElement {
     const selectedRoot = selectedNode ? findNode(workspace, selectedNode.rootId) : null;
     const favoritePageNode = selectedNode && isArtifactNode(selectedNode) ? findOwningPageNode(workspace, selectedNode) : selectedNode;
     const activePageFavoriteId = favoritePageNode ? buildPageFavoriteId(workspace.id, favoritePageNode.id) : null;
-    const activeTreeFavoriteId = selectedRoot ? buildTreeFavoriteId(workspace.id, selectedRoot.id) : null;
     const activeFavoriteIds = new Set(this.state.favorites.map((favorite) => favorite.id));
     const showComposer = this.composerOpen || !workspace?.nodes?.length;
+    const contextualComposer = this.isContextualComposer(workspace);
 
     if (this.lastSelectedNodeId !== (selectedNode?.id ?? null)) {
       this.permissionsPanelOpen = false;
@@ -336,14 +526,19 @@ export class NodelyShell extends HTMLElement {
       this.findOpen = false;
     }
 
+    if (!contextualComposer && this.composerAnchor) {
+      this.composerAnchor = null;
+    }
+
     this.renderTopbar(workspace);
-    this.renderComposer(showComposer);
-    this.renderPagebar(workspace, selectedNode, selectedRoot, activeFavoriteIds, activePageFavoriteId, activeTreeFavoriteId);
+    this.renderComposer(workspace, showComposer);
+    this.renderPagebar(workspace, selectedNode, selectedRoot, activeFavoriteIds, activePageFavoriteId);
     this.renderArtifactSurface(workspace, selectedNode);
     this.renderFavoritesDrawer();
     this.renderDownloadsDrawer(workspace);
     this.renderRecoverDrawer(workspace);
-    this.renderTreesDrawer(workspace);
+    this.renderTreesDrawer(workspace, activeFavoriteIds);
+    this.renderContextMenu(workspace);
     this.renderPromptStack();
 
     const canvasVisible =
@@ -359,6 +554,7 @@ export class NodelyShell extends HTMLElement {
     this.graph.setWorkspace(workspace);
     this.graph.setSelectedNode(workspace?.selectedNodeId ?? null);
     this.syncDocumentLayout(workspace, selectedNode);
+    this.syncFloatingLayout();
     this.scheduleLayoutSync();
   }
 
@@ -386,7 +582,6 @@ export class NodelyShell extends HTMLElement {
     primaryActions.append(
       createActionButton(this.ownerDocument, "New Root", "nodely-shell__button", { action: "toggle-composer" }),
       createActionButton(this.ownerDocument, "Center", "nodely-shell__button", { action: "center-view" }),
-      createActionButton(this.ownerDocument, "Organize", "nodely-shell__button", { action: "auto-organize" }),
       createActionButton(this.ownerDocument, "Trees", `nodely-shell__button${this.drawer === "trees" ? " is-active" : ""}`, {
         action: "toggle-drawer",
         dataset: { drawer: "trees" }
@@ -416,8 +611,33 @@ export class NodelyShell extends HTMLElement {
         dataset: { view: "focus" }
       })
     );
+    const themeSegmented = createHtmlElement(
+      this.ownerDocument,
+      "div",
+      "nodely-shell__segmented nodely-shell__segmented--theme"
+    );
+    themeSegmented.append(
+      createActionButton(this.ownerDocument, "Light", workspace?.prefs.themeMode !== "dark" ? "is-active" : "", {
+        action: "set-theme",
+        dataset: { theme: "light" },
+        title: "Use light mode"
+      }),
+      createActionButton(this.ownerDocument, "Dark", workspace?.prefs.themeMode === "dark" ? "is-active" : "", {
+        action: "set-theme",
+        dataset: { theme: "dark" },
+        title: "Use dark mode"
+      })
+    );
     const utilities = createHtmlElement(this.ownerDocument, "div", "nodely-shell__topbar-utilities");
-    utilities.append(segmented);
+    utilities.append(
+      segmented,
+      themeSegmented,
+      createActionButton(this.ownerDocument, "", "nodely-shell__icon-button", {
+        action: "toggle-fullscreen",
+        title: "Toggle fullscreen",
+        icon: iconFullscreen()
+      })
+    );
 
     const searchLabel = createHtmlElement(this.ownerDocument, "label", "nodely-shell__search");
     const searchText = createHtmlElement(this.ownerDocument, "span");
@@ -441,13 +661,33 @@ export class NodelyShell extends HTMLElement {
     this.topbar.append(brand, actions);
   }
 
-  renderComposer(showComposer) {
+  renderComposer(workspace, showComposer) {
+    const contextualComposer = this.isContextualComposer(workspace);
     this.composer.hidden = !showComposer;
     this.composer.toggleAttribute("data-visible", showComposer);
+    this.composer.dataset.placement = contextualComposer ? "contextual" : "bar";
     this.composer.replaceChildren();
 
     if (!showComposer) {
+      this.composer.style.removeProperty("left");
+      this.composer.style.removeProperty("top");
+      this.composer.style.removeProperty("width");
       return;
+    }
+
+    if (contextualComposer) {
+      const composerPosition = resolveContextualComposerPosition(
+        this.composerAnchor,
+        this.ownerDocument?.defaultView ?? window,
+        Math.round(this.topbar?.getBoundingClientRect?.().height ?? 52)
+      );
+      this.composer.style.left = `${composerPosition.left}px`;
+      this.composer.style.top = `${composerPosition.top}px`;
+      this.composer.style.width = `${composerPosition.width}px`;
+    } else {
+      this.composer.style.removeProperty("left");
+      this.composer.style.removeProperty("top");
+      this.composer.style.removeProperty("width");
     }
 
     const form = createHtmlElement(this.ownerDocument, "form", "nodely-shell__composer-form");
@@ -460,7 +700,7 @@ export class NodelyShell extends HTMLElement {
     this.composer.append(form);
   }
 
-  renderPagebar(workspace, selectedNode, selectedRoot, activeFavoriteIds, activePageFavoriteId, activeTreeFavoriteId) {
+  renderPagebar(workspace, selectedNode, selectedRoot, activeFavoriteIds, activePageFavoriteId) {
     this.pagebar.hidden = !selectedNode || workspace?.prefs.surfaceMode === "canvas";
     this.pagebar.replaceChildren();
 
@@ -472,14 +712,19 @@ export class NodelyShell extends HTMLElement {
     const pageActionsHeader = createHtmlElement(this.ownerDocument, "div", "nodely-shell__page-actions-header");
     const treeCounts = selectedRoot ? summarizeTreeContents(workspace, selectedRoot.id) : { pageCount: 0, artifactCount: 0 };
     const activeTabNodeId = isArtifactNode(selectedNode) ? findOwningPageNode(workspace, selectedNode)?.id ?? null : selectedNode.id;
-    const closeSurfaceButton = createActionButton(this.ownerDocument, "", "nodely-shell__button nodely-shell__button--surface nodely-shell__surface-close", {
-      action: "set-surface",
-      dataset: { surface: "canvas" },
-      title: "Return to the canvas",
-      html: `${iconCanvas()}<span>Canvas</span>`
-    });
+    const isFocusView = workspace.prefs.viewMode === "focus";
     const selectedNodeActions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__inline-actions");
-    selectedNodeActions.append(closeSurfaceButton);
+
+    if (isFocusView) {
+      const closeSurfaceTitle = "Close the page and return to the canvas";
+      const closeSurfaceButton = createActionButton(this.ownerDocument, "×", "nodely-shell__icon-button nodely-shell__surface-close", {
+        action: "set-surface",
+        dataset: { surface: "canvas" },
+        title: closeSurfaceTitle
+      });
+      closeSurfaceButton.setAttribute("aria-label", closeSurfaceTitle);
+      selectedNodeActions.append(closeSurfaceButton);
+    }
 
     if (selectedNode.parentId !== null) {
       selectedNodeActions.append(
@@ -494,7 +739,11 @@ export class NodelyShell extends HTMLElement {
       const artifactBar = createHtmlElement(this.ownerDocument, "div", "nodely-shell__artifact-bar");
       const artifactSummary = createHtmlElement(this.ownerDocument, "div", "nodely-shell__artifact-summary");
       const artifactGlyph = createHtmlElement(this.ownerDocument, "span", "nodely-shell__artifact-glyph");
-      artifactGlyph.innerHTML = selectedNode.kind === "upload" ? iconUpload() : iconDownload();
+      appendSvgIcon(
+        this.ownerDocument,
+        artifactGlyph,
+        selectedNode.kind === "upload" ? iconUpload() : iconDownload()
+      );
       const artifactCopy = createHtmlElement(this.ownerDocument, "div");
       const artifactTitle = createHtmlElement(this.ownerDocument, "strong");
       artifactTitle.textContent = selectedNode.title || "Captured file";
@@ -519,7 +768,10 @@ export class NodelyShell extends HTMLElement {
       );
 
       artifactBar.append(artifactSummary, artifactActions);
-      pageActionsHeader.append(artifactBar, selectedNodeActions);
+      pageActionsHeader.append(artifactBar);
+      if (selectedNodeActions.childElementCount) {
+        pageActionsHeader.append(selectedNodeActions);
+      }
       pageActions.append(pageActionsHeader);
     } else {
       const surfaceMain = createHtmlElement(this.ownerDocument, "div", "nodely-shell__page-surface-main");
@@ -552,12 +804,7 @@ export class NodelyShell extends HTMLElement {
       const favoritePageButton = createActionButton(this.ownerDocument, "", `nodely-shell__icon-button${activeFavoriteIds.has(activePageFavoriteId) ? " is-active" : ""}`, {
         action: "toggle-page-favorite",
         title: "Favorite page",
-        html: iconStar(activeFavoriteIds.has(activePageFavoriteId))
-      });
-      const branchButton = createActionButton(this.ownerDocument, "", `nodely-shell__icon-button${workspace.prefs.captureNextNavigation ? " is-active" : ""}`, {
-        action: "toggle-branch-next",
-        title: "Branch next",
-        html: iconBranch()
+        icon: iconStar(activeFavoriteIds.has(activePageFavoriteId))
       });
       const permissionsButton = createActionButton(
         this.ownerDocument,
@@ -566,20 +813,19 @@ export class NodelyShell extends HTMLElement {
         {
           action: "toggle-permissions-panel",
           title: permissionSummaryLabel(selectedNode.permissions),
-          html: iconShield()
+          icon: iconShield()
         }
       );
       const findButton = createActionButton(this.ownerDocument, "", `nodely-shell__icon-button${this.findOpen ? " is-active" : ""}`, {
         action: "toggle-find",
         title: "Find in page",
-        html: iconFind()
+        icon: iconFind()
       });
       const printButton = createActionButton(this.ownerDocument, "", `nodely-shell__icon-button${this.printSheetOpen ? " is-active" : ""}`, {
         action: "toggle-print",
         title: "Print page",
-        html: iconPrint()
+        icon: iconPrint()
       });
-
       if (selectedNode.permissions?.activeCount) {
         const count = createHtmlElement(this.ownerDocument, "span", "nodely-shell__icon-count");
         count.textContent = String(selectedNode.permissions.activeCount);
@@ -589,14 +835,16 @@ export class NodelyShell extends HTMLElement {
       addressForm.append(
         addressInput,
         favoritePageButton,
-        branchButton,
         permissionsButton,
         findButton,
         printButton
       );
 
       surfaceMain.append(navGroup, addressForm);
-      pageActionsHeader.append(surfaceMain, selectedNodeActions);
+      pageActionsHeader.append(surfaceMain);
+      if (selectedNodeActions.childElementCount) {
+        pageActionsHeader.append(selectedNodeActions);
+      }
       pageActions.append(pageActionsHeader);
 
       if (this.permissionsPanelOpen) {
@@ -682,25 +930,17 @@ export class NodelyShell extends HTMLElement {
 
     const treeStrip = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tree-strip");
     const treeHeader = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tree-header");
-    const treeHeading = createHtmlElement(this.ownerDocument, "div");
+    const treeHeading = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tree-heading");
     const treeTitle = createHtmlElement(this.ownerDocument, "strong");
     treeTitle.textContent = selectedRoot?.title || "Tree";
     const treeMeta = createHtmlElement(this.ownerDocument, "span");
     treeMeta.textContent = `${treeCounts.pageCount} pages${treeCounts.artifactCount ? ` • ${treeCounts.artifactCount} files` : ""}`;
     treeHeading.append(treeTitle, treeMeta);
     treeHeader.append(treeHeading);
-    treeHeader.append(
-      createActionButton(this.ownerDocument, "", `nodely-shell__icon-button${activeFavoriteIds.has(activeTreeFavoriteId) ? " is-active" : ""}`, {
-        action: "toggle-tree-favorite",
-        disabled: !(selectedRoot && treeHasInitializedPage(workspace, selectedRoot.id)),
-        title: "Favorite tree",
-        html: iconTree(activeFavoriteIds.has(activeTreeFavoriteId))
-      })
-    );
 
-	    const tabs = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tabs");
-	    if (selectedRoot) {
-	      for (const node of orderTreeNodesForTabs(workspace, selectedRoot.id)) {
+    const tabs = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tabs");
+    if (selectedRoot) {
+      for (const node of orderTreeNodesForTabs(workspace, selectedRoot.id)) {
         const category = classifySiteCategory(node.url);
         const tab = createActionButton(
           this.ownerDocument,
@@ -713,29 +953,27 @@ export class NodelyShell extends HTMLElement {
         );
         const label = createHtmlElement(this.ownerDocument, "strong");
         label.textContent = node.title || "Untitled";
-        const categoryText = createHtmlElement(this.ownerDocument, "span");
-        categoryText.textContent = siteCategoryLabel(category);
-	        tab.append(label, categoryText);
-	        tabs.append(tab);
-	      }
-	    }
+        tab.append(label);
+        tabs.append(tab);
+      }
+    }
 
-      tabs.append(
-        createActionButton(
-          this.ownerDocument,
-          "",
-          "nodely-shell__tab nodely-shell__tab--new-child",
-          {
-            action: "create-child-node",
-            disabled: !activeTabNodeId,
-            title: "Create a new child node from the active page",
-            html: `${iconNodeTabPlus()}<span>New Node</span>`
-          }
-        )
+      const createChildButton = createActionButton(
+        this.ownerDocument,
+        "",
+        "nodely-shell__tab nodely-shell__tab--new-child",
+        {
+          action: "create-child-node",
+          disabled: !activeTabNodeId,
+          title: "Create a new child node from the active page",
+          icon: iconNodeTabPlus()
+        }
       );
+      createChildButton.setAttribute("aria-label", "Create a new child node from the active page");
+      tabs.append(createChildButton);
 
-	    treeStrip.append(treeHeader, tabs);
-	    this.pagebar.append(pageActions, treeStrip);
+    treeStrip.append(treeHeader, tabs);
+    this.pagebar.append(pageActions, treeStrip);
 
     if (workspace.prefs.viewMode === "focus" && workspace.prefs.showFocusHint !== false) {
       const focusHint = createHtmlElement(this.ownerDocument, "div", "nodely-shell__focus-hint");
@@ -743,7 +981,7 @@ export class NodelyShell extends HTMLElement {
       const hintTitle = createHtmlElement(this.ownerDocument, "strong");
       hintTitle.textContent = "Focus Mode";
       const hintText = createHtmlElement(this.ownerDocument, "p");
-      hintText.textContent = "The page now uses the full browser content area. Use the X button to hide the page and return to the canvas.";
+      hintText.textContent = "The page now uses the full browser content area. Use the close button to hide the page and return to the canvas.";
       hintCopy.append(hintTitle, hintText);
       focusHint.append(
         hintCopy,
@@ -773,7 +1011,12 @@ export class NodelyShell extends HTMLElement {
     const card = createHtmlElement(this.ownerDocument, "div", "nodely-shell__artifact-card");
     const heading = createHtmlElement(this.ownerDocument, "div", "nodely-shell__artifact-card-heading");
     const badge = createHtmlElement(this.ownerDocument, "span", "nodely-shell__artifact-card-badge");
-    badge.innerHTML = selectedNode.kind === "upload" ? `${iconUpload()} Upload` : `${iconDownload()} Download`;
+    appendSvgIcon(
+      this.ownerDocument,
+      badge,
+      selectedNode.kind === "upload" ? iconUpload() : iconDownload()
+    );
+    badge.append(` ${selectedNode.kind === "upload" ? "Upload" : "Download"}`);
     const titleBlock = createHtmlElement(this.ownerDocument, "div");
     const title = createHtmlElement(this.ownerDocument, "strong");
     title.textContent = selectedNode.title || "Captured file";
@@ -1036,7 +1279,7 @@ export class NodelyShell extends HTMLElement {
     this.recoverDrawer.append(header, body);
   }
 
-  renderTreesDrawer(workspace) {
+  renderTreesDrawer(workspace, activeFavoriteIds = new Set()) {
     this.treesDrawer.hidden = this.drawer !== "trees";
     this.treesDrawer.replaceChildren();
 
@@ -1054,23 +1297,85 @@ export class NodelyShell extends HTMLElement {
         const input = createHtmlElement(this.ownerDocument, "input", "nodely-shell__drawer-input");
         input.name = "title";
         input.value = root.title || "Untitled thread";
-        form.append(
-          input,
+        const treeFavoriteId = buildTreeFavoriteId(workspace.id, root.id);
+        const actions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-action-row");
+        actions.append(
           createActionButton(this.ownerDocument, "Show", "nodely-shell__drawer-pill", {
             action: "show-tree",
             dataset: { rootId: root.id }
           }),
+          createActionButton(
+            this.ownerDocument,
+            activeFavoriteIds.has(treeFavoriteId) ? "Favorited" : "Favorite",
+            `nodely-shell__drawer-pill${activeFavoriteIds.has(treeFavoriteId) ? " is-active" : ""}`,
+            {
+              action: "toggle-tree-favorite",
+              dataset: { rootId: root.id },
+              disabled: !treeHasInitializedPage(workspace, root.id)
+            }
+          ),
           createActionButton(this.ownerDocument, "Save", "nodely-shell__drawer-pill", { type: "submit" }),
           createActionButton(this.ownerDocument, "Kill", "nodely-shell__drawer-pill is-danger", {
             action: "delete-tree",
             dataset: { rootId: root.id }
           })
         );
+        form.append(input, actions);
         body.append(form);
       }
     }
 
     this.treesDrawer.append(header, body);
+  }
+
+  renderContextMenu(workspace) {
+    this.contextMenu.hidden = !this.contextMenuState;
+    this.contextMenu.replaceChildren();
+
+    if (!this.contextMenuState) {
+      this.contextMenu.style.removeProperty("left");
+      this.contextMenu.style.removeProperty("top");
+      return;
+    }
+
+    const node = findNode(workspace, this.contextMenuState.nodeId);
+
+    if (!node) {
+      this.contextMenu.hidden = true;
+      return;
+    }
+
+    const body = createHtmlElement(this.ownerDocument, "div", "nodely-shell__menu-body");
+
+    if (this.contextMenuState.kind === "tab" && !isArtifactNode(node) && node.url) {
+      body.append(
+        createActionButton(this.ownerDocument, "Duplicate As Child", "nodely-shell__menu-item", {
+          action: "duplicate-tab",
+          dataset: { nodeId: node.id }
+        })
+      );
+    }
+
+    if (this.contextMenuState.kind === "node") {
+      body.append(
+        createActionButton(
+          this.ownerDocument,
+          node.parentId === null ? "Kill Root" : "Kill Node",
+          "nodely-shell__menu-item nodely-shell__menu-item--danger",
+          {
+            action: "kill-node-context",
+            dataset: { nodeId: node.id }
+          }
+        )
+      );
+    }
+
+    if (!body.childElementCount) {
+      this.contextMenu.hidden = true;
+      return;
+    }
+
+    this.contextMenu.append(body);
   }
 
   renderPromptStack() {
@@ -1167,8 +1472,9 @@ export class NodelyShell extends HTMLElement {
   syncDocumentLayout(workspace, selectedNode) {
     const root = document.documentElement;
     const isEmptyWorkspace = !workspace?.nodes?.length;
+    const contextualComposer = this.isContextualComposer(workspace);
     const topbarHeight = Math.round(this.topbar?.getBoundingClientRect?.().height ?? 52);
-    const composerHeight = showComposerHeight(workspace, this.composerOpen) && !this.composer.hidden
+    const composerHeight = showComposerHeight(workspace, this.composerOpen, contextualComposer) && !this.composer.hidden
       ? Math.round(this.composer?.getBoundingClientRect?.().height ?? 52)
       : 0;
     const pagebarHeight =
@@ -1177,6 +1483,10 @@ export class NodelyShell extends HTMLElement {
         : 0;
     const splitWidth = this.splitWidthOverride ?? workspace?.prefs.splitWidth ?? 340;
     const surfaceMode = workspace?.prefs.surfaceMode ?? "page";
+    const splitPagebarAnchoredToPageSurface =
+      !isEmptyWorkspace && workspace?.prefs.viewMode === "split" && surfaceMode === "page";
+    const sharedSurfaceTop = topbarHeight + composerHeight;
+    const pageSurfaceTop = sharedSurfaceTop + pagebarHeight;
     const graphWidth =
       isEmptyWorkspace || surfaceMode === "canvas"
         ? "100vw"
@@ -1184,7 +1494,7 @@ export class NodelyShell extends HTMLElement {
           ? `${splitWidth}px`
           : "0px";
     const browserSurfaceMode =
-      this.drawer || (surfaceMode === "page" && selectedNode && isArtifactNode(selectedNode))
+      surfaceMode === "page" && selectedNode && isArtifactNode(selectedNode)
         ? "overlay"
         : isEmptyWorkspace || surfaceMode === "canvas"
           ? "canvas"
@@ -1192,17 +1502,28 @@ export class NodelyShell extends HTMLElement {
     root.setAttribute("nodely-active", "true");
     root.setAttribute("nodely-view", workspace?.prefs.viewMode ?? "split");
     root.setAttribute("nodely-surface-mode", surfaceMode);
+    root.setAttribute("nodely-theme", workspace?.prefs.themeMode === "dark" ? "dark" : "light");
     root.setAttribute("nodely-empty-workspace", isEmptyWorkspace ? "true" : "false");
     root.setAttribute("nodely-drawer", this.drawer ?? "");
     root.setAttribute("nodely-browser-surface", browserSurfaceMode);
+    root.setAttribute("nodely-composer-placement", contextualComposer ? "contextual" : "bar");
+    root.setAttribute(
+      "nodely-pagebar-layout",
+      splitPagebarAnchoredToPageSurface ? "page-pane" : "full-width"
+    );
     root.style.setProperty("--nodely-topbar-height", `${topbarHeight}px`);
     root.style.setProperty("--nodely-pagebar-height", `${pagebarHeight}px`);
     root.style.setProperty("--nodely-graph-width", graphWidth);
     root.style.setProperty("--nodely-composer-height", `${composerHeight}px`);
     this.graph.style.width = graphWidth;
-    this.graph.style.top = `${topbarHeight + composerHeight + pagebarHeight}px`;
-    this.splitHandle.style.top = `${topbarHeight + composerHeight + pagebarHeight}px`;
-    this.artifactSurface.style.top = `${topbarHeight + composerHeight + pagebarHeight}px`;
+    this.graph.style.top = `${splitPagebarAnchoredToPageSurface ? sharedSurfaceTop : pageSurfaceTop}px`;
+    this.splitHandle.style.top = `${splitPagebarAnchoredToPageSurface ? sharedSurfaceTop : pageSurfaceTop}px`;
+    this.artifactSurface.style.top = `${pageSurfaceTop}px`;
+  }
+
+  syncFloatingLayout() {
+    this.positionDrawer(this.drawer, this.getDrawerElement(this.drawer));
+    this.positionContextMenu();
   }
 
   scheduleLayoutSync() {
@@ -1215,7 +1536,76 @@ export class NodelyShell extends HTMLElement {
       const workspace = this.state.workspace;
       const selectedNode = findNode(workspace, workspace?.selectedNodeId);
       this.syncDocumentLayout(workspace, selectedNode);
+      this.syncFloatingLayout();
     });
+  }
+
+  getDrawerElement(drawerName) {
+    switch (drawerName) {
+      case "favorites":
+        return this.favoritesDrawer;
+      case "downloads":
+        return this.downloadsDrawer;
+      case "recover":
+        return this.recoverDrawer;
+      case "trees":
+        return this.treesDrawer;
+      default:
+        return null;
+    }
+  }
+
+  positionDrawer(drawerName, drawerElement) {
+    for (const drawer of [
+      this.favoritesDrawer,
+      this.downloadsDrawer,
+      this.recoverDrawer,
+      this.treesDrawer
+    ]) {
+      drawer?.style?.removeProperty("left");
+      drawer?.style?.removeProperty("top");
+    }
+
+    if (!drawerName || !drawerElement || drawerElement.hidden) {
+      return;
+    }
+
+    const trigger = this.topbar?.querySelector(
+      `[data-action="toggle-drawer"][data-drawer="${drawerName}"]`
+    );
+
+    if (!trigger) {
+      return;
+    }
+
+    const position = resolveDropdownPosition(
+      trigger.getBoundingClientRect(),
+      this.ownerDocument?.defaultView ?? window,
+      Math.round(drawerElement.getBoundingClientRect().width || 320),
+      Math.round(drawerElement.getBoundingClientRect().height || 360),
+      Math.round(this.topbar?.getBoundingClientRect?.().height ?? 52)
+    );
+    drawerElement.style.left = `${position.left}px`;
+    drawerElement.style.top = `${position.top}px`;
+  }
+
+  positionContextMenu() {
+    this.contextMenu.style.removeProperty("left");
+    this.contextMenu.style.removeProperty("top");
+
+    if (!this.contextMenuState || this.contextMenu.hidden) {
+      return;
+    }
+
+    const position = resolveFloatingMenuPosition(
+      this.contextMenuState.anchor,
+      this.ownerDocument?.defaultView ?? window,
+      Math.round(this.contextMenu.getBoundingClientRect().width || FLOATING_MENU_WIDTH),
+      Math.round(this.contextMenu.getBoundingClientRect().height || 120),
+      Math.round(this.topbar?.getBoundingClientRect?.().height ?? 52)
+    );
+    this.contextMenu.style.left = `${position.left}px`;
+    this.contextMenu.style.top = `${position.top}px`;
   }
 
   handleSplitResizeStart(event) {
@@ -1286,12 +1676,12 @@ export class NodelyShell extends HTMLElement {
     const action = button.dataset.action;
 
     if (action === "toggle-composer") {
-      this.composerOpen = !this.composerOpen;
       if (this.composerOpen) {
-        this.drawer = null;
+        this.closeComposer();
+        this.render();
+      } else {
+        this.openComposer();
       }
-      this.render();
-      this.composer.querySelector("input")?.focus();
       return;
     }
 
@@ -1321,6 +1711,16 @@ export class NodelyShell extends HTMLElement {
 
     if (action === "set-view") {
       this.controller?.setViewMode(button.dataset.view);
+      return;
+    }
+
+    if (action === "set-theme") {
+      this.controller?.setThemeMode(button.dataset.theme);
+      return;
+    }
+
+    if (action === "toggle-fullscreen") {
+      this.controller?.toggleFullscreen();
     }
   }
 
@@ -1338,8 +1738,10 @@ export class NodelyShell extends HTMLElement {
     const input = form?.querySelector("input[name='root-input']");
 
     if (input?.value.trim()) {
-      this.controller?.createRootFromInput(input.value);
-      this.composerOpen = false;
+      this.controller?.createRootFromInput(input.value, {
+        position: this.resolveContextualRootPosition()
+      });
+      this.closeComposer();
       this.render();
     }
   }
@@ -1382,19 +1784,6 @@ export class NodelyShell extends HTMLElement {
       this.controller?.togglePageFavorite();
       return;
     }
-
-    if (action === "toggle-tree-favorite") {
-      const selectedNode = findNode(this.state.workspace, this.state.workspace?.selectedNodeId);
-      if (selectedNode) {
-        this.controller?.toggleTreeFavorite(selectedNode.rootId);
-      }
-      return;
-    }
-
-	    if (action === "toggle-branch-next") {
-	      this.controller?.setCaptureNextNavigation(!this.state.workspace.prefs.captureNextNavigation);
-	      return;
-	    }
 
     if (action === "create-child-node") {
       this.controller?.createChildNode({ origin: "tab-button" });
@@ -1461,6 +1850,11 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if (action === "toggle-fullscreen") {
+      this.controller?.toggleFullscreen();
+      return;
+    }
+
     if (action === "open-artifact-file") {
       this.controller?.openSelectedArtifactFile();
       return;
@@ -1500,6 +1894,31 @@ export class NodelyShell extends HTMLElement {
     if (action === "hide-focus-hint") {
       this.controller?.setShowFocusHint(false);
     }
+  }
+
+  handlePagebarContextMenu(event) {
+    const tab = event.target.closest(".nodely-shell__tab[data-node-id]");
+
+    if (!tab) {
+      return;
+    }
+
+    const node = findNode(this.state.workspace, tab.dataset.nodeId);
+
+    if (!node || isArtifactNode(node) || !node.url) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.openContextMenu({
+      kind: "tab",
+      nodeId: node.id,
+      anchor: {
+        clientX: event.clientX,
+        clientY: event.clientY
+      }
+    });
   }
 
   handlePagebarChange(_event) {}
@@ -1612,6 +2031,41 @@ export class NodelyShell extends HTMLElement {
 
     if (button.dataset.action === "delete-tree") {
       this.controller?.deleteTree(button.dataset.rootId);
+      return;
+    }
+
+    if (button.dataset.action === "toggle-tree-favorite") {
+      this.controller?.toggleTreeFavorite(button.dataset.rootId);
+    }
+  }
+
+  handleContextMenuClick(event) {
+    const button = event.target.closest("[data-action]");
+
+    if (!button) {
+      return;
+    }
+
+    if (button.dataset.action === "duplicate-tab") {
+      const node = findNode(this.state.workspace, button.dataset.nodeId);
+
+      if (node?.url) {
+        this.controller?.createChildNode({
+          parentNodeId: node.id,
+          url: node.url,
+          origin: "tab-duplicate"
+        });
+      }
+
+      this.closeContextMenu();
+      this.render();
+      return;
+    }
+
+    if (button.dataset.action === "kill-node-context") {
+      this.controller?.killNode(button.dataset.nodeId);
+      this.closeContextMenu();
+      this.render();
     }
   }
 
@@ -1696,12 +2150,29 @@ export class NodelyShell extends HTMLElement {
       }
     }
   }
+
+  handleWindowClick(event) {
+    if (!this.contextMenuState) {
+      return;
+    }
+
+    if (this.contextMenu?.contains(event.target)) {
+      return;
+    }
+
+    this.closeContextMenu();
+    this.render();
+  }
 }
 
 function clampSplitWidth(value, windowWidth = 1366) {
   const safeWidth = Number.isFinite(value) ? value : 340;
   const maxWidth = Math.max(360, Math.min(640, Math.round(windowWidth * 0.5)));
   return Math.max(240, Math.min(maxWidth, Math.round(safeWidth)));
+}
+
+function clampToRange(value, minimum, maximum) {
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
 function escapeHtml(value) {
@@ -1731,7 +2202,19 @@ function createHtmlElement(documentRef, tagName, className = "") {
   return element;
 }
 
-function createActionButton(documentRef, text, className, { action = "", dataset = {}, title = "", html = "", type = "button", disabled = false } = {}) {
+function createSvgElement(documentRef, tagName, attributes = {}) {
+  const element = documentRef.createElementNS(SVG_NS, tagName);
+
+  for (const [name, value] of Object.entries(attributes)) {
+    if (value != null) {
+      element.setAttribute(name, String(value));
+    }
+  }
+
+  return element;
+}
+
+function createActionButton(documentRef, text, className, { action = "", dataset = {}, title = "", icon = null, type = "button", disabled = false } = {}) {
   const button = createHtmlElement(documentRef, "button", className);
   button.type = type;
 
@@ -1747,17 +2230,46 @@ function createActionButton(documentRef, text, className, { action = "", dataset
 
   if (title) {
     button.title = title;
+
+    if (!text) {
+      button.setAttribute("aria-label", title);
+    }
   }
 
   button.disabled = disabled;
 
-  if (html) {
-    button.innerHTML = html;
-  } else {
-    button.textContent = text;
+  if (icon) {
+    appendSvgIcon(documentRef, button, icon);
+  }
+
+  if (text) {
+    if (icon) {
+      const label = createHtmlElement(documentRef, "span");
+      label.textContent = text;
+      button.append(label);
+    } else {
+      button.textContent = text;
+    }
   }
 
   return button;
+}
+
+function appendSvgIcon(documentRef, element, icon) {
+  if (!icon?.paths?.length) {
+    return;
+  }
+
+  const svg = createSvgElement(documentRef, "svg", {
+    viewBox: icon.viewBox ?? "0 0 20 20",
+    "aria-hidden": "true"
+  });
+
+  for (const pathAttributes of icon.paths) {
+    svg.append(createSvgElement(documentRef, "path", pathAttributes));
+  }
+
+  element.append(svg);
 }
 
 function createCountButton(documentRef, text, count, className, options = {}) {
@@ -1813,7 +2325,7 @@ function createPromptCard(documentRef, { title, body, secondary, action, icon })
   const card = createHtmlElement(documentRef, "div", "nodely-shell__prompt-card");
   const header = createHtmlElement(documentRef, "div", "nodely-shell__prompt-card-header");
   const glyph = createHtmlElement(documentRef, "span", "nodely-shell__prompt-card-glyph");
-  glyph.innerHTML = icon;
+  appendSvgIcon(documentRef, glyph, icon);
   const copy = createHtmlElement(documentRef, "div");
   const strong = createHtmlElement(documentRef, "strong");
   strong.textContent = title;
@@ -1841,8 +2353,110 @@ function createPromptCard(documentRef, { title, body, secondary, action, icon })
   return card;
 }
 
-function showComposerHeight(workspace, composerOpen) {
-  return composerOpen || !workspace?.nodes?.length;
+function normalizeComposerAnchor(anchor) {
+  if (!anchor) {
+    return null;
+  }
+
+  return {
+    clientX: Math.round(Number(anchor.clientX) || 0),
+    clientY: Math.round(Number(anchor.clientY) || 0)
+  };
+}
+
+function normalizeFloatingAnchor(anchor) {
+  if (!anchor) {
+    return null;
+  }
+
+  return {
+    clientX: Math.round(Number(anchor.clientX) || 0),
+    clientY: Math.round(Number(anchor.clientY) || 0)
+  };
+}
+
+function resolveContextualComposerPosition(anchor, view, topbarHeight = 52) {
+  const viewportWidth = Math.max(
+    CONTEXTUAL_COMPOSER_WIDTH + CONTEXTUAL_COMPOSER_MARGIN * 2,
+    Math.round(view?.innerWidth ?? 1366)
+  );
+  const viewportHeight = Math.max(
+    CONTEXTUAL_COMPOSER_HEIGHT + topbarHeight + CONTEXTUAL_COMPOSER_MARGIN * 2,
+    Math.round(view?.innerHeight ?? 768)
+  );
+  const width = Math.min(
+    CONTEXTUAL_COMPOSER_WIDTH,
+    viewportWidth - CONTEXTUAL_COMPOSER_MARGIN * 2
+  );
+  const minimumTop = topbarHeight + 8;
+  const maximumLeft = Math.max(
+    CONTEXTUAL_COMPOSER_MARGIN,
+    viewportWidth - width - CONTEXTUAL_COMPOSER_MARGIN
+  );
+  const maximumTop = Math.max(
+    minimumTop,
+    viewportHeight - CONTEXTUAL_COMPOSER_HEIGHT - CONTEXTUAL_COMPOSER_MARGIN
+  );
+
+  return {
+    left: clampToRange(
+      (anchor?.clientX ?? 0) + CONTEXTUAL_COMPOSER_OFFSET,
+      CONTEXTUAL_COMPOSER_MARGIN,
+      maximumLeft
+    ),
+    top: clampToRange(
+      (anchor?.clientY ?? 0) + CONTEXTUAL_COMPOSER_OFFSET,
+      minimumTop,
+      maximumTop
+    ),
+    width
+  };
+}
+
+function resolveDropdownPosition(anchorRect, view, width = 320, height = 360, topbarHeight = 52) {
+  const viewportWidth = Math.max(width + FLOATING_PANEL_MARGIN * 2, Math.round(view?.innerWidth ?? 1366));
+  const viewportHeight = Math.max(height + topbarHeight + FLOATING_PANEL_MARGIN * 2, Math.round(view?.innerHeight ?? 768));
+  const minimumTop = topbarHeight + 8;
+  const maximumLeft = Math.max(
+    FLOATING_PANEL_MARGIN,
+    viewportWidth - width - FLOATING_PANEL_MARGIN
+  );
+  const maximumTop = Math.max(
+    minimumTop,
+    viewportHeight - height - FLOATING_PANEL_MARGIN
+  );
+  const preferredLeft =
+    anchorRect.left + width + FLOATING_PANEL_MARGIN <= viewportWidth
+      ? anchorRect.left
+      : anchorRect.right - width;
+
+  return {
+    left: clampToRange(preferredLeft, FLOATING_PANEL_MARGIN, maximumLeft),
+    top: clampToRange(anchorRect.bottom + FLOATING_PANEL_GAP, minimumTop, maximumTop)
+  };
+}
+
+function resolveFloatingMenuPosition(anchor, view, width = FLOATING_MENU_WIDTH, height = 120, topbarHeight = 52) {
+  const viewportWidth = Math.max(width + FLOATING_PANEL_MARGIN * 2, Math.round(view?.innerWidth ?? 1366));
+  const viewportHeight = Math.max(height + topbarHeight + FLOATING_PANEL_MARGIN * 2, Math.round(view?.innerHeight ?? 768));
+  const minimumTop = topbarHeight + 8;
+  const maximumLeft = Math.max(
+    FLOATING_PANEL_MARGIN,
+    viewportWidth - width - FLOATING_PANEL_MARGIN
+  );
+  const maximumTop = Math.max(
+    minimumTop,
+    viewportHeight - height - FLOATING_PANEL_MARGIN
+  );
+
+  return {
+    left: clampToRange((anchor?.clientX ?? 0) + FLOATING_PANEL_GAP, FLOATING_PANEL_MARGIN, maximumLeft),
+    top: clampToRange((anchor?.clientY ?? 0) + FLOATING_PANEL_GAP, minimumTop, maximumTop)
+  };
+}
+
+function showComposerHeight(workspace, composerOpen, contextualComposer = false) {
+  return !contextualComposer && (composerOpen || !workspace?.nodes?.length);
 }
 
 function permissionSummaryLabel(permissions) {

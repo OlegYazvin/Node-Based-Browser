@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import os from "node:os";
@@ -16,13 +15,19 @@ import {
   createEmptyWorkspace,
   createRootNode,
   relayoutWorkspace,
-  resolveOmniboxInput
+  resolveOmniboxInput,
+  setSurfaceMode,
+  setViewMode
 } from "../overlay/browser/base/content/nodely/domain.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(geckoRoot, "..");
 const refreshBrandingScriptPath = path.join(geckoRoot, "scripts", "refresh-artifact-branding.mjs");
+const ROOT_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Root%3C%2Ftitle%3E%3Ch1%3ERoot%3C%2Fh1%3E";
+const CHILD_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Child%3C%2Ftitle%3E%3Ch1%3EChild%3C%2Fh1%3E";
 
 function usage() {
   console.log(`Usage: node gecko/scripts/run-nodely-smoke.mjs [options]
@@ -87,9 +92,7 @@ function parseArguments(argv) {
   }
 
   if (!options.binary) {
-    const nodelyBinary = path.join(options.checkoutDir, "obj-nodely", "dist", "bin", "nodely");
-    const legacyBinary = path.join(options.checkoutDir, "obj-nodely", "dist", "bin", "firefox");
-    options.binary = existsSync(nodelyBinary) ? nodelyBinary : legacyBinary;
+    options.binary = path.join(options.checkoutDir, "obj-nodely", "dist", "nodely", "nodely");
   }
 
   return options;
@@ -127,30 +130,32 @@ async function refreshArtifactBranding(checkoutDir) {
   });
 }
 
-function buildSeedWorkspace() {
+function buildSeedWorkspace({ viewMode = "split", surfaceMode = "page" } = {}) {
   let workspace = createEmptyWorkspace("default", "Nodely Smoke Workspace");
   workspace = createRootNode(workspace);
   const rootId = workspace.selectedNodeId;
   workspace = applyNodeNavigation(
     workspace,
     rootId,
-    resolveOmniboxInput("https://example.com/", workspace.prefs.searchProvider)
+    resolveOmniboxInput(ROOT_SMOKE_URL, workspace.prefs.searchProvider)
   );
   workspace = createChildNode(workspace, rootId, "manual");
   const childId = workspace.selectedNodeId;
   workspace = applyNodeNavigation(
     workspace,
     childId,
-    resolveOmniboxInput("https://example.org/", workspace.prefs.searchProvider)
+    resolveOmniboxInput(CHILD_SMOKE_URL, workspace.prefs.searchProvider)
   );
   workspace = relayoutWorkspace(workspace);
+  workspace = setViewMode(workspace, viewMode);
+  workspace = setSurfaceMode(workspace, surfaceMode);
   return workspace;
 }
 
 async function writeSmokeProfile({ profileDir, namespace, smokeFile, scenario }) {
   const workspaceDirectory = path.join(profileDir, namespace);
   const workspacePath = path.join(workspaceDirectory, "default.json");
-  const workspace = buildSeedWorkspace();
+  const workspace = buildSeedWorkspace(seedWorkspaceOptionsForScenario(scenario));
 
   await mkdir(workspaceDirectory, { recursive: true });
   await writeFile(workspacePath, `${JSON.stringify(workspace, null, 2)}\n`, "utf8");
@@ -170,52 +175,186 @@ async function writeSmokeProfile({ profileDir, namespace, smokeFile, scenario })
   await writeFile(path.join(profileDir, "user.js"), `${userJs}\n`, "utf8");
 }
 
-function snapshotLooksReady(snapshot) {
+function seedWorkspaceOptionsForScenario(scenario = "") {
+  if (scenario === "focus-close-and-select-root") {
+    return {
+      viewMode: "focus",
+      surfaceMode: "page"
+    };
+  }
+
+  return {
+    viewMode: "split",
+    surfaceMode: "page"
+  };
+}
+
+function snapshotLooksReady(snapshot, scenario = "") {
+  const expectsSingleNodeTree = scenario === "graph-contextmenu-kill-root";
+  const minimumNodeCount = expectsSingleNodeTree ? 1 : 2;
+  const minimumEdgeCount = expectsSingleNodeTree ? 0 : 1;
+  const minimumTreeNodeCount = expectsSingleNodeTree ? 1 : 2;
+  const minimumMinimapNodeShapes = expectsSingleNodeTree ? 3 : 4;
+  const minimumMinimapEdges = expectsSingleNodeTree ? 0 : 1;
+  const composerHeightForLayout =
+    snapshot.ui?.composerPlacement === "contextual"
+      ? 0
+      : (snapshot.layout?.composer?.height ?? 0);
   const expectedTop =
     (snapshot.layout?.topbar?.height ?? 0) +
-    (snapshot.layout?.composer?.height ?? 0) +
+    composerHeightForLayout +
     (snapshot.layout?.pagebar?.height ?? 0);
+  const expectedSharedSurfaceTop =
+    (snapshot.layout?.topbar?.height ?? 0) + composerHeightForLayout;
   const pageContainer = snapshot.layout?.tabpanels ?? snapshot.layout?.appcontent ?? null;
   const expectedSplitLeft =
     snapshot.view === "split" && snapshot.browserSurface === "page"
       ? snapshot.layout?.graph?.width ?? 0
       : 0;
+  const splitPagebarAligned =
+    snapshot.view !== "split" ||
+    snapshot.browserSurface !== "page" ||
+    Math.abs((snapshot.layout?.pagebar?.left ?? 0) - expectedSplitLeft) <= 4;
+  const splitCanvasTopAligned =
+    snapshot.view !== "split" ||
+    snapshot.browserSurface !== "page" ||
+    Math.abs((snapshot.layout?.graph?.top ?? 0) - expectedSharedSurfaceTop) <= 4;
+  const splitHandleTopAligned =
+    snapshot.view !== "split" ||
+    snapshot.browserSurface !== "page" ||
+    Math.abs((snapshot.layout?.splitHandle?.top ?? 0) - expectedSharedSurfaceTop) <= 4;
   const layoutLooksStable =
     Math.abs((snapshot.layout?.browser?.top ?? 0) - expectedTop) <= 4 &&
     Math.abs((snapshot.layout?.tabbox?.left ?? 0) - expectedSplitLeft) <= 4 &&
+    splitPagebarAligned &&
+    splitCanvasTopAligned &&
+    splitHandleTopAligned &&
     pageContainer != null &&
     Math.abs((pageContainer.left ?? 0) - (snapshot.layout?.tabbox?.left ?? 0)) <= 4 &&
     Math.abs((pageContainer.top ?? 0) - (snapshot.layout?.tabbox?.top ?? 0)) <= 4;
   const minimapLooksReady =
     snapshot.ui?.minimap?.visible === true &&
     snapshot.ui?.minimap?.svgPresent === true &&
-    (snapshot.ui?.minimap?.nodeShapeCount ?? 0) >= 4 &&
-    (snapshot.ui?.minimap?.edgeCount ?? 0) >= 1 &&
+    (snapshot.ui?.minimap?.nodeShapeCount ?? 0) >= minimumMinimapNodeShapes &&
+    (snapshot.ui?.minimap?.edgeCount ?? 0) >= minimumMinimapEdges &&
     snapshot.ui?.minimap?.viewportPresent === true &&
-    (snapshot.ui?.minimap?.toolbarButtonCount ?? 0) >= 3;
+    (snapshot.ui?.minimap?.toolbarButtonCount ?? 0) >= 4 &&
+    snapshot.ui?.minimap?.organizePresent === true;
+  const pageToolbarIconsReady =
+    (snapshot.ui?.pageToolbar?.buttonCount ?? 0) === 0 ||
+    (
+      (snapshot.ui?.pageToolbar?.svgCount ?? 0) >= (snapshot.ui?.pageToolbar?.buttonCount ?? 0) &&
+      (snapshot.ui?.pageToolbar?.pathCount ?? 0) >= (snapshot.ui?.pageToolbar?.buttonCount ?? 0)
+    );
+  const branchNextRemoved = snapshot.ui?.pageToolbar?.branchNextPresent === false;
+  const topbarOrganizeMoved = snapshot.ui?.topbar?.organizePresent === false;
+  const topbarFullscreenPresent = snapshot.ui?.topbar?.fullscreenPresent === true;
+  const treeStripIconsReady =
+    (snapshot.ui?.treeStrip?.newChildSvgCount ?? 0) >= 1 &&
+    (snapshot.ui?.treeStrip?.newChildPathCount ?? 0) >= 1 &&
+    snapshot.ui?.treeStrip?.treeFavoritePresent === false;
+  const surfaceCloseMatchesView =
+    snapshot.view === "focus"
+      ? snapshot.ui?.surfaceClosePresent === true && snapshot.ui?.surfaceCloseLabel === "×"
+      : snapshot.ui?.surfaceClosePresent === false;
+  const graphPointerReady = graphSurfaceAcceptsPointerInput(snapshot);
+  const splitHandlePointerReady = splitHandleAcceptsPointerInput(snapshot);
 
   return (
     snapshot.bootstrapState === "ready" &&
     snapshot.active === "true" &&
-    (snapshot.workspace?.nodeCount ?? 0) >= 2 &&
-    (snapshot.workspace?.edgeCount ?? 0) >= 1 &&
-    (snapshot.selectedTree?.nodeCount ?? 0) >= 2 &&
-    snapshot.ui?.surfaceCloseLabel === "Canvas" &&
+    (snapshot.workspace?.nodeCount ?? 0) >= minimumNodeCount &&
+    (snapshot.workspace?.edgeCount ?? 0) >= minimumEdgeCount &&
+    (snapshot.selectedTree?.nodeCount ?? 0) >= minimumTreeNodeCount &&
+    surfaceCloseMatchesView &&
     minimapLooksReady &&
+    pageToolbarIconsReady &&
+    branchNextRemoved &&
+    topbarOrganizeMoved &&
+    topbarFullscreenPresent &&
+    treeStripIconsReady &&
+    graphPointerReady &&
+    splitHandlePointerReady &&
     layoutLooksStable
   );
 }
 
+function graphSurfaceAcceptsPointerInput(snapshot) {
+  const graphShouldBeInteractive =
+    snapshot.emptyWorkspace !== "true" &&
+    (snapshot.view === "split" || snapshot.browserSurface === "canvas");
+
+  if (!graphShouldBeInteractive) {
+    return true;
+  }
+
+  return snapshot.layout?.graph?.pointerEvents === "auto";
+}
+
+function splitHandleAcceptsPointerInput(snapshot) {
+  const splitHandleShouldBeInteractive =
+    snapshot.emptyWorkspace !== "true" &&
+    snapshot.view === "split" &&
+    snapshot.browserSurface === "page";
+
+  if (!splitHandleShouldBeInteractive) {
+    return true;
+  }
+
+  return snapshot.layout?.splitHandle?.pointerEvents === "auto";
+}
+
+function runtimeMatchesSelectedNode(snapshot) {
+  const selectedNode = snapshot.workspace?.selectedNode ?? null;
+  const selectedTabUrl = snapshot.runtime?.selectedTabUrl ?? null;
+
+  if (!selectedNode) {
+    return selectedTabUrl == null;
+  }
+
+  if (!selectedNode.url) {
+    return selectedTabUrl == null || selectedTabUrl === "about:blank";
+  }
+
+  return selectedTabUrl === selectedNode.url;
+}
+
 function snapshotMatchesScenario(snapshot, scenario) {
+  const selectedNodeId = snapshot.workspace?.selectedNode?.id ?? null;
+  const runtimeMatchesSelection =
+    selectedNodeId == null || snapshot.runtime?.selectedTabNodeId === selectedNodeId;
+  const runtimeMatchesNode = runtimeMatchesSelectedNode(snapshot);
+
   if (!scenario) {
-    return snapshot.workspace?.selectedNode?.url === "https://example.org/";
+    return (
+      snapshot.workspace?.selectedNode?.url === CHILD_SMOKE_URL &&
+      snapshot.workspace?.selectedNode?.runtimeState === "live" &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
   }
 
   if (scenario === "graph-select-root") {
     return (
       snapshot.browserSurface === "page" &&
       snapshot.workspace?.selectedNode?.parentId === null &&
-      snapshot.workspace?.selectedNode?.url === "https://example.com/"
+      snapshot.workspace?.selectedNode?.url === ROOT_SMOKE_URL &&
+      snapshot.workspace?.selectedNode?.runtimeState === "live" &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "focus-close-and-select-root") {
+    return (
+      snapshot.view === "focus" &&
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.selectedNode?.parentId === null &&
+      snapshot.workspace?.selectedNode?.url === ROOT_SMOKE_URL &&
+      snapshot.workspace?.selectedNode?.runtimeState === "live" &&
+      snapshot.ui?.surfaceCloseLabel === "×" &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
     );
   }
 
@@ -225,7 +364,78 @@ function snapshotMatchesScenario(snapshot, scenario) {
       snapshot.workspace?.nodeCount === 3 &&
       snapshot.workspace?.edgeCount === 2 &&
       snapshot.workspace?.selectedNode?.parentId != null &&
-      snapshot.workspace?.selectedNode?.kind === "page"
+      snapshot.workspace?.selectedNode?.kind === "page" &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "pagebar-duplicate-tab") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.nodeCount === 3 &&
+      snapshot.workspace?.edgeCount === 2 &&
+      snapshot.workspace?.selectedNode?.parentId != null &&
+      snapshot.workspace?.selectedNode?.url === CHILD_SMOKE_URL &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "graph-contextmenu-root-composer") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.selectedNode?.url === CHILD_SMOKE_URL &&
+      snapshot.ui?.rootComposerPresent === true &&
+      snapshot.ui?.composerPlacement === "contextual" &&
+      (snapshot.layout?.composer?.height ?? 0) > 0 &&
+      (snapshot.layout?.composer?.width ?? 0) <= 420 &&
+      (snapshot.layout?.composer?.left ?? 0) >= 12 &&
+      (snapshot.layout?.composer?.top ?? 0) >
+        ((snapshot.layout?.topbar?.height ?? 0) + 12) &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "graph-contextmenu-kill-root") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.nodeCount === 1 &&
+      snapshot.workspace?.rootCount === 1 &&
+      snapshot.workspace?.selectedNode?.parentId === null &&
+      snapshot.workspace?.selectedNode?.url === CHILD_SMOKE_URL &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "toggle-fullscreen") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.selectedNode?.url === CHILD_SMOKE_URL &&
+      snapshot.ui?.windowFullscreen === true &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "topbar-drawers") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.drawer === "downloads" &&
+      (snapshot.ui?.treesDrawer?.favoriteButtonCount ?? 0) ===
+        (snapshot.ui?.treesDrawer?.rootRowCount ?? 0) &&
+      (snapshot.layout?.activeDrawer?.left ?? 0) <=
+        (snapshot.layout?.activeDrawerTrigger?.right ?? 0) + 14 &&
+      (snapshot.layout?.activeDrawer?.right ?? 0) >=
+        (snapshot.layout?.activeDrawerTrigger?.left ?? 0) - 14 &&
+      Math.abs(
+        (snapshot.layout?.activeDrawer?.top ?? 0) -
+          ((snapshot.layout?.activeDrawerTrigger?.bottom ?? 0) + 8)
+      ) <= 14 &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
     );
   }
 
@@ -241,7 +451,7 @@ async function waitForSnapshot(smokeFile, timeoutMs, scenario = "") {
       try {
         const snapshot = JSON.parse(await readFile(smokeFile, "utf8"));
         const looksReady =
-          snapshotLooksReady(snapshot) &&
+          snapshotLooksReady(snapshot, scenario) &&
           snapshotMatchesScenario(snapshot, scenario);
 
         if (scenario && snapshot.reason === `scenario:${scenario}:error`) {
