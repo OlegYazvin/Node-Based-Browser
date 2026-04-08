@@ -254,12 +254,25 @@ fi
 ${shellMozBackendSetup()}
 
 if [[ "$version_only" -eq 1 ]]; then
-  exec env \
-    MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
-    MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
-    MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
-    "${installRoot}/nodely" \
-    "$@"
+  set +e
+  version="$(
+    env \
+      MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
+      MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
+      MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
+      "${installRoot}/nodely-bin" \
+      "$@" 2>&1
+  )"
+  status=$?
+  set -e
+
+  if [[ "$status" -ne 0 ]]; then
+    printf '%s\n' "$version" >&2
+    exit "$status"
+  fi
+
+  printf '%s\n' "$version" | sed 's/^Mozilla Firefox /Nodely /'
+  exit 0
 fi
 
 profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
@@ -298,12 +311,25 @@ fi
 ${shellMozBackendSetup()}
 
 if [[ "$version_only" -eq 1 ]]; then
-  exec env \
-    MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
-    MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
-    MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
-    /app/lib/nodely/nodely \
-    "$@"
+  set +e
+  version="$(
+    env \
+      MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
+      MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
+      MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
+      /app/lib/nodely/nodely-bin \
+      "$@" 2>&1
+  )"
+  status=$?
+  set -e
+
+  if [[ "$status" -ne 0 ]]; then
+    printf '%s\n' "$version" >&2
+    exit "$status"
+  fi
+
+  printf '%s\n' "$version" | sed 's/^Mozilla Firefox /Nodely /'
+  exit 0
 fi
 
 profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
@@ -546,7 +572,7 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 %postun
-if command -v update-deskop-database >/dev/null 2>&1; then
+if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
 fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
@@ -596,7 +622,7 @@ async function runCommand(command, args, options = {}) {
       reject(
         new Error(
           `${command} ${args.join(" ")} failed with exit code ${code}\n${stderr || stdout || "(no output)"}`
-         )
+        )
       );
     });
   });

@@ -24,8 +24,11 @@ describe("build-installers wrappers", () => {
 
     expect(wrapper).toContain('if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then');
     expect(wrapper).toContain('if [[ "$version_only" -eq 1 ]]; then');
-    expect(wrapper).toContain('"/opt/nodely-browser/app/nodely"');
-    expect(wrapper).toContain('"$@"');
+    expect(wrapper).toContain('set +e');
+    expect(wrapper).toContain('"/opt/nodely-browser/app/nodely-bin"');
+    expect(wrapper).toContain('status=$?');
+    expect(wrapper).toContain("printf '%s");
+    expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
     expect(wrapper).toContain('-new-instance');
   });
 
@@ -44,8 +47,11 @@ describe("build-installers wrappers", () => {
 
     expect(wrapper).toContain('if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then');
     expect(wrapper).toContain('if [[ "$version_only" -eq 1 ]]; then');
-    expect(wrapper).toContain('/app/lib/nodely/nodely');
-    expect(wrapper).toContain('"$@"');
+    expect(wrapper).toContain('set +e');
+    expect(wrapper).toContain('/app/lib/nodely/nodely-bin');
+    expect(wrapper).toContain('status=$?');
+    expect(wrapper).toContain("printf '%s");
+    expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
     expect(wrapper).toContain('-new-instance');
   });
 
