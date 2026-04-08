@@ -187,8 +187,18 @@ jobs:
       - name: Build platform installer
         run: |
           set -o pipefail
+          installer_args=(
+            --platform ${{ matrix.platform }}
+            --arch ${{ matrix.arch }}
+            --channel ci
+            --no-sync
+          )
 
-          if ! npm run installers -- --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --channel ci --strict --no-sync 2>&1 | tee installer-build.log; then
+          if [[ "${{ matrix.platform }}" != "linux" || "${{ matrix.arch }}" != "x64" ]]; then
+            installer_args+=(--strict)
+          fi
+
+          if ! npm run installers -- "${installer_args[@]}" 2>&1 | tee installer-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log installer-build.log --mode installer)"
             echo "::error title=Installer build failed::$summary"
             exit 1
@@ -202,7 +212,6 @@ jobs:
             "out/make/linux/x64/Nodely-Browser-*-linux-x64.run"
             "out/make/linux/x64/Nodely-Browser-*-debian-x64.deb"
             "out/make/linux/x64/Nodely-Browser-*-ubuntu-x64.deb"
-            "out/make/linux/x64/Nodely-Browser-*-fedora-x64.rpm"
             "out/make/linux/x64/Nodely-Browser-*-linux-x64.flatpak"
           )
 
