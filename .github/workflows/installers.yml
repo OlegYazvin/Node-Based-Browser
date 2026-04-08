@@ -142,6 +142,8 @@ jobs:
               cd "$GITHUB_WORKSPACE"
               npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR"
               npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode compat
+              cd "$GECKO_CHECKOUT_DIR"
+              python ./mach build faster
             else
               python ./mach build faster
             fi
