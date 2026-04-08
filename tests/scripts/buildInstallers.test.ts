@@ -16,6 +16,19 @@ describe("build-installers wrappers", () => {
     expect(wrapper).not.toContain('MOZ_ENABLE_WAYLAND="${MOZ_ENABLE_WAYLAND:-1}"');
   });
 
+  it("routes system wrapper version checks through the packaged app directly", () => {
+    const wrapper = buildSystemWrapper({
+      installRoot: "/opt/nodely-browser/app",
+      desktopFileName: "nodely-browser.desktop"
+    });
+
+    expect(wrapper).toContain('if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then');
+    expect(wrapper).toContain('if [[ "$version_only" -eq 1 ]]; then');
+    expect(wrapper).toContain('"/opt/nodely-browser/app/nodely"');
+    expect(wrapper).toContain('"$@"');
+    expect(wrapper).toContain('-new-instance');
+  });
+
   it("uses session-aware backend detection for flatpak installs", () => {
     const wrapper = buildFlatpakWrapper();
 
@@ -24,6 +37,16 @@ describe("build-installers wrappers", () => {
     expect(wrapper).toContain('XDG_SESSION_TYPE');
     expect(wrapper).toContain('MOZ_ENABLE_WAYLAND="$moz_enable_wayland"');
     expect(wrapper).not.toContain('MOZ_ENABLE_WAYLAND="${MOZ_ENABLE_WAYLAND:-1}"');
+  });
+
+  it("routes flatpak wrapper version checks through the packaged app directly", () => {
+    const wrapper = buildFlatpakWrapper();
+
+    expect(wrapper).toContain('if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then');
+    expect(wrapper).toContain('if [[ "$version_only" -eq 1 ]]; then');
+    expect(wrapper).toContain('/app/lib/nodely/nodely');
+    expect(wrapper).toContain('"$@"');
+    expect(wrapper).toContain('-new-instance');
   });
 
   it("declares the Gecko runtime libraries needed by Ubuntu and Mint", () => {

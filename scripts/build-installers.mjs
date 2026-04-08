@@ -245,6 +245,23 @@ fi`;
 export function buildSystemWrapper({ installRoot, desktopFileName }) {
   return `#!/usr/bin/env bash
 set -euo pipefail
+version_only=0
+
+if [[ "\${1:-}" == "--version" || "\${1:-}" == "-v" ]]; then
+  version_only=1
+fi
+
+${shellMozBackendSetup()}
+
+if [[ "$version_only" -eq 1 ]]; then
+  exec env \
+    MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
+    MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
+    MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
+    "${installRoot}/nodely" \
+    "$@"
+fi
+
 profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
 mkdir -p "$profile_dir"
 cat >"$profile_dir/user.js" <<'PREFS'
@@ -257,7 +274,6 @@ user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.newtabpage.enabled", false);
 user_pref("nodely.shell.enabled", true);
 PREFS
-${shellMozBackendSetup()}
 exec env \
   MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
   MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
@@ -273,6 +289,23 @@ exec env \
 export function buildFlatpakWrapper() {
   return `#!/usr/bin/env bash
 set -euo pipefail
+version_only=0
+
+if [[ "\${1:-}" == "--version" || "\${1:-}" == "-v" ]]; then
+  version_only=1
+fi
+
+${shellMozBackendSetup()}
+
+if [[ "$version_only" -eq 1 ]]; then
+  exec env \
+    MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
+    MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
+    MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
+    /app/lib/nodely/nodely \
+    "$@"
+fi
+
 profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
 mkdir -p "$profile_dir"
 cat >"$profile_dir/user.js" <<'PREFS'
@@ -285,7 +318,6 @@ user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.newtabpage.enabled", false);
 user_pref("nodely.shell.enabled", true);
 PREFS
-${shellMozBackendSetup()}
 exec env \
   MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
   MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
@@ -514,7 +546,7 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 %postun
-if command -v update-desktop-database >/dev/null 2>&1; then
+if command -v update-deskop-database >/dev/null 2>&1; then
   update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
 fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
@@ -564,7 +596,7 @@ async function runCommand(command, args, options = {}) {
       reject(
         new Error(
           `${command} ${args.join(" ")} failed with exit code ${code}\n${stderr || stdout || "(no output)"}`
-        )
+         )
       );
     });
   });
