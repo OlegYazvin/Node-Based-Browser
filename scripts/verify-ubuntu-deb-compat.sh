@@ -42,16 +42,23 @@ deb_dir=$(dirname -- "$deb_path")
 deb_file=$(basename -- "$deb_path")
 
 podman run --rm \
-  -v "$deb_dir:/artifacts:ro" \
+  -v "$deb_dir:/artifacts:ro,z" \
   "$image" \
   bash -lc "
     set -euo pipefail
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y /artifacts/$deb_file
+    dpkg -i /artifacts/$deb_file >/tmp/nodely-dpkg.log 2>&1 || true
+    if ! apt-get install -f -y >/tmp/nodely-apt-fix.log 2>&1; then
+      cat /tmp/nodely-dpkg.log >&2 || true
+      cat /tmp/nodely-apt-fix.log >&2 || true
+      exit 1
+    fi
     test -x /usr/bin/nodely-browser
     test -f /usr/share/applications/nodely-browser.desktop
     if ! /usr/bin/nodely-browser --version >/tmp/nodely-version.txt 2>/tmp/nodely-version.err; then
+      cat /tmp/nodely-dpkg.log >&2 || true
+      cat /tmp/nodely-apt-fix.log >&2 || true
       cat /tmp/nodely-version.err >&2 || true
       ldd /opt/nodely-browser/app/nodely-bin >&2 || true
       ldd /opt/nodely-browser/app/libxul.so >&2 || true
