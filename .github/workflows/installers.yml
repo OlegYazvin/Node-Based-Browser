@@ -61,8 +61,8 @@ jobs:
       - name: Install Linux build prerequisites
         if: matrix.platform == 'linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get update
+          sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -o Dpkg::Use-Pty=0 \
             gcc \
             g++ \
             make \
