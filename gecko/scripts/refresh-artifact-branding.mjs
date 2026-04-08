@@ -253,8 +253,17 @@ EOF
   fi
 fi
 
+moz_enable_wayland="\${MOZ_ENABLE_WAYLAND:-}"
+if [[ -z "$moz_enable_wayland" ]]; then
+  if [[ -n "\${WAYLAND_DISPLAY:-}" || "\${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+    moz_enable_wayland=1
+  else
+    moz_enable_wayland=0
+  fi
+fi
+
 exec env \\
-  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \\
+  MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \\
   MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \\
   MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-$desktop_file_name}" \\
   "$target" "$@"

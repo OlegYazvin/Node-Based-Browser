@@ -5,6 +5,7 @@ import { access, chmod, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } f
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 import {
   currentArch,
@@ -172,7 +173,18 @@ MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme
 `;
 }
 
-function buildSystemWrapper({ installRoot, desktopFileName }) {
+function shellMozBackendSetup() {
+  return `moz_enable_wayland="\${MOZ_ENABLE_WAYLAND:-}"
+if [[ -z "$moz_enable_wayland" ]]; then
+  if [[ -n "\${WAYLAND_DISPLAY:-}" || "\${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+    moz_enable_wayland=1
+  else
+    moz_enable_wayland=0
+  fi
+fi`;
+}
+
+export function buildSystemWrapper({ installRoot, desktopFileName }) {
   return `#!/usr/bin/env bash
 set -euo pipefail
 profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
@@ -187,8 +199,9 @@ user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.newtabpage.enabled", false);
 user_pref("nodely.shell.enabled", true);
 PREFS
+${shellMozBackendSetup()}
 exec env \
-  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \
+  MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
   MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
   MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
   "${installRoot}/nodely" \
@@ -199,7 +212,7 @@ exec env \
 `;
 }
 
-function buildFlatpakWrapper() {
+export function buildFlatpakWrapper() {
   return `#!/usr/bin/env bash
 set -euo pipefail
 profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
@@ -214,8 +227,9 @@ user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.newtabpage.enabled", false);
 user_pref("nodely.shell.enabled", true);
 PREFS
+${shellMozBackendSetup()}
 exec env \
-  MOZ_ENABLE_WAYLAND="\${MOZ_ENABLE_WAYLAND:-1}" \
+  MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
   MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
   MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
   /app/lib/nodely/nodely \
@@ -766,7 +780,6 @@ async function buildFlatpakInstaller({ version, outputDirectory, arch, payloadRo
       "--socket=pulseaudio",
       "--device=dri",
       "--filesystem=home",
-      "--env=MOZ_ENABLE_WAYLAND=1",
       "--env=MOZ_APP_REMOTINGNAME=nodely",
       `--env=MOZ_DESKTOP_FILE_NAME=${flatpakAppId}.desktop`,
       buildDirectory
@@ -967,9 +980,11 @@ async function main() {
   }
 }
 
-try {
-  await main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    await main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
