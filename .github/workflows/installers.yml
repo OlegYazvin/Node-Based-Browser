@@ -237,7 +237,11 @@ jobs:
             printf '  %s\n' "${debs[@]}" >&2 || true
             exit 1
           fi
-          bash scripts/verify-ubuntu-deb-compat.sh --deb "${debs[0]}"
+          if ! bash scripts/verify-ubuntu-deb-compat.sh --deb "${debs[0]}" 2>&1 | tee ubuntu-compat.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log ubuntu-compat.log --mode installer)"
+            echo "::error title=Ubuntu 22.04 / Linux Mint 21.3 compatibility failed::$summary"
+            exit 1
+          fi
 
       - name: Upload installer output
         uses: actions/upload-artifact@v4
@@ -256,6 +260,7 @@ jobs:
             gecko-build.log
             gecko-package.log
             installer-build.log
+            ubuntu-compat.log
           if-no-files-found: ignore
 
   assemble-installer-directory:
