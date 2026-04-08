@@ -51,7 +51,12 @@ podman run --rm \
     apt-get install -y /artifacts/$deb_file
     test -x /usr/bin/nodely-browser
     test -f /usr/share/applications/nodely-browser.desktop
-    /opt/nodely-browser/app/nodely --version >/tmp/nodely-version.txt
+    if ! /usr/bin/nodely-browser --version >/tmp/nodely-version.txt 2>/tmp/nodely-version.err; then
+      cat /tmp/nodely-version.err >&2 || true
+      ldd /opt/nodely-browser/app/nodely-bin >&2 || true
+      ldd /opt/nodely-browser/app/libxul.so >&2 || true
+      exit 127
+    fi
     grep -q 'Mozilla Firefox\\|Nodely' /tmp/nodely-version.txt
     apt-get remove -y nodely-browser
     test ! -e /usr/bin/nodely-browser

@@ -154,6 +154,42 @@ function packageReleaseVersion(version) {
   return `${version}-1`;
 }
 
+const linuxDebRuntimeDependencies = [
+  "libasound2",
+  "libatk1.0-0",
+  "libcairo-gobject2",
+  "libcairo2",
+  "libdbus-1-3",
+  "libdbus-glib-1-2",
+  "libfontconfig1",
+  "libfreetype6",
+  "libgdk-pixbuf-2.0-0",
+  "libglib2.0-0",
+  "libgtk-3-0",
+  "libnspr4",
+  "libnss3",
+  "libpango-1.0-0",
+  "libpangocairo-1.0-0",
+  "libpulse0",
+  "libstdc++6",
+  "libx11-6",
+  "libx11-xcb1",
+  "libxcb-shm0",
+  "libxcb1",
+  "libxcomposite1",
+  "libxcursor1",
+  "libxdamage1",
+  "libxext6",
+  "libxfixes3",
+  "libxi6",
+  "libxrandr2",
+  "libxrender1",
+  "libxt6",
+  "libffi8 | libffi7",
+  "libgcc-s1",
+  "zlib1g"
+];
+
 function buildDesktopEntry({ name, exec, icon }) {
   return `[Desktop Entry]
 Version=1.0
@@ -390,7 +426,7 @@ __NODELY_ARCHIVE_BELOW__
 `;
 }
 
-function debControl({ version, arch, distribution }) {
+export function debControl({ version, arch, distribution }) {
   const distributionLabel = distribution === "ubuntu" ? "Ubuntu" : "Debian";
   return `Package: nodely-browser
 Version: ${packageReleaseVersion(version)}
@@ -398,7 +434,7 @@ Section: web
 Priority: optional
 Architecture: ${debArchNames[arch] ?? arch}
 Maintainer: Nodely Browser <noreply@nodely.invalid>
-Depends: libasound2, libdbus-glib-1-2, libgtk-3-0, libpulse0, libx11-xcb1, libxt6, libffi8 | libffi7
+Depends: ${linuxDebRuntimeDependencies.join(", ")}
 Homepage: https://nodely.invalid/
 Description: Nodely Browser for ${distributionLabel}
  Node-based Gecko browser for research workflows packaged for ${distributionLabel}.
