@@ -16,7 +16,7 @@ Generated from `Installer/manifest.json` at 2026-04-08T20:33:50.713Z.
 
 ## Windows 10 and 11
 
-Use this on Intel/AMD Windows 10 or Windows 11 PCs.
+Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does not target Windows on ARM.
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |

@@ -42,7 +42,7 @@ const installerSupportSections = [
     platform: "win32",
     arch: "x64",
     title: "Windows 10 and 11",
-    description: "Use this on Intel/AMD Windows 10 or Windows 11 PCs."
+    description: "Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does not target Windows on ARM."
   },
   {
     platform: "darwin",
