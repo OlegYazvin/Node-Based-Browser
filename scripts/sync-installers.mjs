@@ -8,16 +8,22 @@ function usage() {
   console.log(`Usage: node scripts/sync-installers.mjs [options]
 
 Options:
-  --platform <platform>   linux | win32 | darwin
-  --arch <arch>           x64 | arm64
-  --help                  Show this help text
+  --platform <platform>      linux | win32 | darwin
+  --arch <arch>              x64 | arm64
+  --built-by <source>        local | github-actions (default: local)
+  --build-workflow <path>    Optional workflow path or label for promoted builds
+  --build-run-url <url>      Optional workflow run URL for promoted builds
+  --help                     Show this help text
 `);
 }
 
 function parseArguments(argv) {
   const options = {
     platform: currentPlatform(),
-    arch: currentArch()
+    arch: currentArch(),
+    builtBy: "local",
+    buildWorkflow: null,
+    buildRunUrl: null
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -29,6 +35,15 @@ function parseArguments(argv) {
         break;
       case "--arch":
         options.arch = normalizeArch(argv[++index]);
+        break;
+      case "--built-by":
+        options.builtBy = argv[++index];
+        break;
+      case "--build-workflow":
+        options.buildWorkflow = argv[++index];
+        break;
+      case "--build-run-url":
+        options.buildRunUrl = argv[++index];
         break;
       case "--help":
         usage();

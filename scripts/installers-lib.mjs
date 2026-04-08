@@ -70,12 +70,24 @@ const installerSupportSections = [
   }
 ];
 
+const installerBuildSources = new Set(["local", "github-actions"]);
+
 export function normalizePlatform(platform) {
   return platformAliases[platform] ?? platform;
 }
 
 export function normalizeArch(arch) {
   return archAliases[arch] ?? arch;
+}
+
+export function normalizeInstallerBuildSource(buildSource) {
+  const normalized = (buildSource ?? "local").trim().toLowerCase();
+
+  if (!installerBuildSources.has(normalized)) {
+    throw new Error(`Unsupported installer build source: ${buildSource}`);
+  }
+
+  return normalized;
 }
 
 export function currentPlatform() {
@@ -366,6 +378,22 @@ function installerLinkPath(relativePath) {
   return relativePath.replaceAll("\\", "/");
 }
 
+function installerBuildSourceText(entry) {
+  const buildSource = normalizeInstallerBuildSource(entry.builtBy);
+
+  if (buildSource === "github-actions") {
+    const workflowLabel = entry.buildWorkflow ? ` (\`${path.basename(entry.buildWorkflow)}\`)` : "";
+
+    if (entry.buildRunUrl) {
+      return `[GitHub Actions](${entry.buildRunUrl})${workflowLabel}`;
+    }
+
+    return `GitHub Actions${workflowLabel}`;
+  }
+
+  return "Local build";
+}
+
 export function renderInstallerReadme(manifest) {
   const installers = [...(manifest.installers ?? [])].sort((left, right) => {
     const platformOrder = ["win32", "darwin", "linux"];
@@ -400,13 +428,13 @@ export function renderInstallerReadme(manifest) {
         return lines.join("\n");
       }
 
-      lines.push("| File | Type | Supported systems |");
-      lines.push("| --- | --- | --- |");
+      lines.push("| File | Type | Supported systems | Built by |");
+      lines.push("| --- | --- | --- | --- |");
 
       for (const entry of sectionInstallers) {
         const linkPath = installerLinkPath(entry.path);
         lines.push(
-          `| [${entry.fileName}](./${linkPath}) | ${installerDisplayType(entry)} | ${installerSupportText(entry)} |`
+          `| [${entry.fileName}](./${linkPath}) | ${installerDisplayType(entry)} | ${installerSupportText(entry)} | ${installerBuildSourceText(entry)} |`
         );
       }
 
@@ -426,6 +454,7 @@ This directory contains the installers that actually exist in this repo right no
 - Use **Linux x64** on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs.
 - Use **Linux arm64** only on ARM64 Linux hardware.
 - Windows and macOS installers are produced on native GitHub Actions runners and only show up here after a real native build has been promoted into this directory.
+- Each staged installer records whether it came from a local build or GitHub Actions promotion.
 - If a section below says no installers are staged, there is nothing in this repo for that target today.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
@@ -481,10 +510,14 @@ export async function syncInstallers({
   platform,
   arch,
   makeDirectory = outMakeDirectory,
-  targetDirectory = installerDirectory
+  targetDirectory = installerDirectory,
+  builtBy = "local",
+  buildWorkflow = null,
+  buildRunUrl = null
 }) {
   const normalizedPlatform = normalizePlatform(platform);
   const normalizedArch = normalizeArch(arch);
+  const normalizedBuildSource = normalizeInstallerBuildSource(builtBy);
   const outputs = await listInstallerOutputs(normalizedPlatform, normalizedArch, makeDirectory);
 
   if (!outputs.length) {
@@ -569,6 +602,9 @@ export async function syncInstallers({
       variant: classification.variant,
       distribution: classification.distribution,
       compatibility: classification.compatibility,
+      builtBy: normalizedBuildSource,
+      ...(buildWorkflow ? { buildWorkflow } : {}),
+      ...(buildRunUrl ? { buildRunUrl } : {}),
       path: relativeDestination,
       fileName: path.basename(destinationPath),
       source: path.relative(repositoryRoot, outputPath),

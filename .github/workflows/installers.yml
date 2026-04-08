@@ -276,6 +276,7 @@ jobs:
       - name: Prune managed installer slices before sync
         run: >
           npm run installers:prune --
+          --target linux:arm64
           --target linux:x64
           --target win32:x64
           --target darwin:x64
@@ -291,7 +292,12 @@ jobs:
 
             if [[ -d "out/make/$platform/$arch" ]]; then
               found_any=1
-              npm run installers:sync -- --platform "$platform" --arch "$arch"
+              npm run installers:sync -- \
+                --platform "$platform" \
+                --arch "$arch" \
+                --built-by github-actions \
+                --build-workflow .github/workflows/installers.yml \
+                --build-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             fi
           done
 

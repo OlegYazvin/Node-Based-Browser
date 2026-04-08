@@ -34,6 +34,7 @@ describe("installers-lib", () => {
           fileName: "Nodely-Browser-0.1.0-linux-arm64.run",
           source: "out/make/linux/arm64/Nodely-Browser-0.1.0-linux-arm64.run",
           size: 7,
+          builtBy: "local",
           syncedAt: "2026-04-05T00:00:00.000Z"
         },
         {
@@ -47,6 +48,9 @@ describe("installers-lib", () => {
           fileName: "Nodely-Browser-0.1.0-macos-arm64.dmg",
           source: "out/make/darwin/arm64/Nodely-Browser-0.1.0-macos-arm64.dmg",
           size: 9,
+          builtBy: "github-actions",
+          buildWorkflow: ".github/workflows/installers.yml",
+          buildRunUrl: "https://github.com/example/repo/actions/runs/123",
           syncedAt: "2026-04-05T00:00:00.000Z"
         }
       ]
@@ -57,6 +61,9 @@ describe("installers-lib", () => {
     expect(readme).toContain("[Nodely-Browser-0.1.0-linux-arm64.run](./linux/Nodely-Browser-0.1.0-linux-arm64.run)");
     expect(readme).toContain("Ubuntu, Debian; arm64 only");
     expect(readme).toContain("macOS Apple Silicon");
+    expect(readme).toContain("Built by");
+    expect(readme).toContain("Local build");
+    expect(readme).toContain("[GitHub Actions](https://github.com/example/repo/actions/runs/123) (`installers.yml`)");
   });
 
   it("replaces stale installer entries for the synced platform and architecture", async () => {
@@ -109,18 +116,25 @@ describe("installers-lib", () => {
         platform: "linux",
         arch: "arm64",
         makeDirectory,
-        targetDirectory
+        targetDirectory,
+        builtBy: "github-actions",
+        buildWorkflow: ".github/workflows/installers.yml",
+        buildRunUrl: "https://github.com/example/repo/actions/runs/456"
       });
 
       expect(manifest.installers).toHaveLength(1);
       expect(manifest.installers[0].version).toBe("140.10.0");
       expect(manifest.installers[0].fileName).toBe("Nodely-Browser-140.10.0-linux-arm64.run");
+      expect(manifest.installers[0].builtBy).toBe("github-actions");
+      expect(manifest.installers[0].buildWorkflow).toBe(".github/workflows/installers.yml");
+      expect(manifest.installers[0].buildRunUrl).toBe("https://github.com/example/repo/actions/runs/456");
       await expect(
         access(path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-debian-arm64.deb"))
       ).rejects.toThrow();
 
       const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
       expect(readme).toContain("Nodely-Browser-140.10.0-linux-arm64.run");
+      expect(readme).toContain("[GitHub Actions](https://github.com/example/repo/actions/runs/456) (`installers.yml`)");
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }
