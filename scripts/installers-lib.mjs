@@ -30,7 +30,7 @@ const linuxVariantCompatibility = {
   generic: ["Ubuntu", "Debian", "Fedora", "Linux Mint", "other common desktop Linux distros"],
   flatpak: ["Linux Mint", "Fedora", "Ubuntu", "Debian", "other Flatpak-enabled Linux distros"],
   debian: ["Debian"],
-  ubuntu: ["Ubuntu"],
+  ubuntu: ["Ubuntu", "Linux Mint"],
   fedora: ["Fedora"],
   deb: ["Ubuntu", "Debian", "Linux Mint", "Pop!_OS", "other Debian-family Linux distros"],
   rpm: ["Fedora", "RHEL", "Rocky Linux", "openSUSE", "other RPM-family Linux distros"],
@@ -60,13 +60,13 @@ const installerSupportSections = [
     platform: "linux",
     arch: "x64",
     title: "Linux x64",
-    description: "Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/AMD processors."
+    description: "Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/AMD processors. On Linux Mint, prefer the Ubuntu DEB for easy install and uninstall through Software Manager."
   },
   {
     platform: "linux",
     arch: "arm64",
     title: "Linux arm64",
-    description: "Use this only on ARM64 Linux hardware."
+    description: "Use this only on ARM64 Linux hardware. On Linux Mint ARM64, prefer the Ubuntu DEB for easy install and uninstall through Software Manager."
   }
 ];
 
@@ -453,6 +453,7 @@ This directory contains the installers that actually exist in this repo right no
 
 - Use **Linux x64** on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs.
 - Use **Linux arm64** only on ARM64 Linux hardware.
+- On **Linux Mint**, prefer the **Ubuntu DEB** package if you want the cleanest install and uninstall experience.
 - Windows and macOS installers are produced on native GitHub Actions runners and only show up here after a real native build has been promoted into this directory.
 - Each staged installer records whether it came from a local build or GitHub Actions promotion.
 - If a section below says no installers are staged, there is nothing in this repo for that target today.

@@ -194,6 +194,38 @@ describe("installers-lib", () => {
     }
   });
 
+  it("marks Ubuntu DEB installers as Linux Mint-compatible", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-installers-lib-mint-"));
+    const makeDirectory = path.join(tempDirectory, "out", "make");
+    const targetDirectory = path.join(tempDirectory, "Installer");
+
+    try {
+      await mkdir(path.join(makeDirectory, "linux", "x64"), { recursive: true });
+      await writeFile(
+        path.join(makeDirectory, "linux", "x64", "Nodely-Browser-140.10.0-ubuntu-x64.deb"),
+        "payload",
+        "utf8"
+      );
+
+      const manifest = await syncInstallers({
+        platform: "linux",
+        arch: "x64",
+        makeDirectory,
+        targetDirectory
+      });
+
+      expect(manifest.installers).toHaveLength(1);
+      expect(manifest.installers[0].fileName).toBe("Nodely-Browser-140.10.0-ubuntu-x64.deb");
+      expect(manifest.installers[0].compatibility).toContain("Linux Mint");
+
+      const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
+      expect(readme).toContain("On **Linux Mint**, prefer the **Ubuntu DEB** package");
+      expect(readme).toContain("Ubuntu, Linux Mint; x64 only");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("prunes only the targeted installer slices and preserves unrelated entries", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-prune-installers-"));
     const targetDirectory = path.join(tempDirectory, "Installer");

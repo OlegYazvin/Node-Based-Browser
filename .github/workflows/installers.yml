@@ -218,6 +218,18 @@ jobs:
             fi
           done
 
+      - name: Verify Ubuntu 22.04 / Linux Mint 21.3 compatibility
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        run: |
+          shopt -s nullglob
+          debs=(out/make/linux/x64/Nodely-Browser-*-ubuntu-x64.deb)
+          if [[ ${#debs[@]} -ne 1 ]]; then
+            echo "Expected exactly one Ubuntu DEB for Linux x64, found ${#debs[@]}." >&2
+            printf '  %s\n' "${debs[@]}" >&2 || true
+            exit 1
+          fi
+          bash scripts/verify-ubuntu-deb-compat.sh --deb "${debs[0]}"
+
       - name: Upload installer output
         uses: actions/upload-artifact@v4
         with:
