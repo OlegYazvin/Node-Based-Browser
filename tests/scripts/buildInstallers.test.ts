@@ -127,4 +127,20 @@ describe("build-installers wrappers", () => {
 
     await expect(resolveExtractedLinuxAppDirectory(extractedDirectory)).resolves.toBe(appDirectory);
   });
+
+  it("ignores a metadata-only wrapper directory and keeps descending to the runnable app", async () => {
+    const extractedDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-"));
+    tempDirectories.push(extractedDirectory);
+
+    const outerDirectory = path.join(extractedDirectory, "nodely-browser");
+    const metadataOnlyDirectory = path.join(outerDirectory, "nodely");
+    const appDirectory = path.join(metadataOnlyDirectory, "nodely");
+
+    await mkdir(appDirectory, { recursive: true });
+    await writeFile(path.join(metadataOnlyDirectory, "application.ini"), "");
+    await writeFile(path.join(appDirectory, "application.ini"), "");
+    await writeFile(path.join(appDirectory, "nodely-bin"), "");
+
+    await expect(resolveExtractedLinuxAppDirectory(extractedDirectory)).resolves.toBe(appDirectory);
+  });
 });

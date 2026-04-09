@@ -656,9 +656,23 @@ async function extractLinuxArtifact(sourceArtifactPath, destinationDirectory) {
 }
 
 async function directoryContainsLinuxApp(candidateDirectory) {
-  const markers = ["nodely-bin", "firefox-bin", "application.ini", "libxul.so"];
+  const metadataMarkers = ["application.ini", "platform.ini"];
+  const browserBinaries = ["nodely-bin", "firefox-bin"];
 
-  for (const marker of markers) {
+  let hasMetadata = false;
+
+  for (const marker of metadataMarkers) {
+    if (await pathExists(path.join(candidateDirectory, marker))) {
+      hasMetadata = true;
+      break;
+    }
+  }
+
+  if (!hasMetadata) {
+    return false;
+  }
+
+  for (const marker of browserBinaries) {
     if (await pathExists(path.join(candidateDirectory, marker))) {
       return true;
     }
@@ -681,17 +695,19 @@ async function refineExtractedLinuxAppDirectory(candidateDirectory) {
     }
 
     const nestedDirectory = path.join(candidateDirectory, preferredName);
+    const refinedDirectory = await refineExtractedLinuxAppDirectory(nestedDirectory);
 
-    if (await directoryContainsLinuxApp(nestedDirectory)) {
-      return nestedDirectory;
+    if (refinedDirectory !== nestedDirectory || (await directoryContainsLinuxApp(refinedDirectory))) {
+      return refinedDirectory;
     }
   }
 
   if (directories.length === 1) {
     const nestedDirectory = path.join(candidateDirectory, directories[0]);
+    const refinedDirectory = await refineExtractedLinuxAppDirectory(nestedDirectory);
 
-    if (await directoryContainsLinuxApp(nestedDirectory)) {
-      return nestedDirectory;
+    if (refinedDirectory !== nestedDirectory || (await directoryContainsLinuxApp(refinedDirectory))) {
+      return refinedDirectory;
     }
   }
 
