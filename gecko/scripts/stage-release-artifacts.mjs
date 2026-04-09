@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -118,6 +119,58 @@ async function findPackagedArtifacts(checkoutDir, platform) {
   return files.filter((filePath) => matchers.some((matcher) => matcher.test(path.basename(filePath))));
 }
 
+function linuxArtifactNamePriority(filePath) {
+  const fileName = path.basename(filePath);
+
+  if (/^nodely-.*\.(?:tar\.xz|tar\.bz2|tar\.gz)$/iu.test(fileName)) {
+    return 3;
+  }
+
+  if (/^firefox-.*\.(?:tar\.xz|tar\.bz2|tar\.gz)$/iu.test(fileName)) {
+    return 2;
+  }
+
+  if (/^nodely-browser-.*\.(?:tar\.xz|tar\.bz2|tar\.gz)$/iu.test(fileName)) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function linuxArtifactContainsRunnableBundle(filePath) {
+  try {
+    const listing = execFileSync("tar", ["-tf", filePath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+
+    return /(^|\/)(?:nodely-bin|firefox-bin|libxul\.so)$/mu.test(listing);
+  } catch {
+    return false;
+  }
+}
+
+export function selectPackagedArtifact(artifacts, platform) {
+  if (platform !== "linux") {
+    const [selectedArtifact] = [...artifacts].sort((left, right) => right.localeCompare(left));
+    return selectedArtifact ?? null;
+  }
+
+  const runnableArtifacts = artifacts.filter((artifact) => linuxArtifactContainsRunnableBundle(artifact));
+  const candidates = runnableArtifacts.length ? runnableArtifacts : artifacts;
+  const [selectedArtifact] = [...candidates].sort((left, right) => {
+    const priorityDifference = linuxArtifactNamePriority(right) - linuxArtifactNamePriority(left);
+
+    if (priorityDifference !== 0) {
+      return priorityDifference;
+    }
+
+    return right.localeCompare(left);
+  });
+
+  return selectedArtifact ?? null;
+}
+
 async function readManifest(stageDir) {
   const manifestPath = path.join(stageDir, "manifest.json");
 
@@ -146,7 +199,12 @@ async function stageArtifacts(options) {
     );
   }
 
-  const [selectedArtifact] = artifacts.sort((left, right) => right.localeCompare(left));
+  const selectedArtifact = selectPackagedArtifact(artifacts, options.platform);
+
+  if (!selectedArtifact) {
+    throw new Error(`Unable to select a packaged Gecko artifact for ${options.platform}.`);
+  }
+
   const destinationDirectory = path.join(options.stageDir, options.platform, options.arch, options.channel);
   const destinationPath = path.join(destinationDirectory, normalizeArtifactBaseName(path.basename(selectedArtifact)));
 
@@ -185,9 +243,11 @@ async function stageArtifacts(options) {
   console.log(destinationPath);
 }
 
-try {
-  await stageArtifacts(parseArguments(process.argv.slice(2)));
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (!process.env.VITEST) {
+  try {
+    await stageArtifacts(parseArguments(process.argv.slice(2)));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
