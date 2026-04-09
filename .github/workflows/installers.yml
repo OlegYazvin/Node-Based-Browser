@@ -77,7 +77,8 @@ jobs:
             libx11-xcb-dev \
             libasound2-dev \
             libpulse-dev \
-            libffi-dev
+            libffi-dev \
+            wasi-libc
           flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
 
       - name: Install npm dependencies
@@ -150,7 +151,7 @@ jobs:
               cd "$GECKO_CHECKOUT_DIR"
               python ./mach build faster
             elif [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
-              python ./mach build
+              WASI_SYSROOT=/usr python ./mach build
             else
               python ./mach build faster
             fi
