@@ -86,6 +86,7 @@ podman run --rm \
       cat /tmp/nodely-dpkg.log >&2 || true
       cat /tmp/nodely-apt-fix.log >&2 || true
       cat /tmp/nodely-version.err >&2 || true
+      find /opt/nodely-browser -maxdepth 4 -mindepth 1 -printf '%P\n' | sort >&2 || true
       ldd /opt/nodely-browser/app/nodely-bin >&2 || true
       ldd /opt/nodely-browser/app/libxul.so >&2 || true
       exit 127
