@@ -253,6 +253,26 @@ fi
 
 ${shellMozBackendSetup()}
 
+app_candidates=(
+  "${installRoot}/nodely"
+  "${installRoot}/nodely-bin"
+  "${installRoot}/firefox"
+  "${installRoot}/firefox-bin"
+)
+app_executable=""
+
+for candidate in "\${app_candidates[@]}"; do
+  if [[ -x "$candidate" && ! -d "$candidate" ]]; then
+    app_executable="$candidate"
+    break
+  fi
+done
+
+if [[ -z "$app_executable" ]]; then
+  printf 'Unable to find a runnable Nodely executable in %s\\n' "${installRoot}" >&2
+  exit 127
+fi
+
 if [[ "$version_only" -eq 1 ]]; then
   set +e
   version="$(
@@ -260,7 +280,7 @@ if [[ "$version_only" -eq 1 ]]; then
       MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
       MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
       MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
-      "${installRoot}/nodely-bin" \
+      "$app_executable" \
       "$@" 2>&1
   )"
   status=$?
@@ -291,7 +311,7 @@ exec env \
   MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
   MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
   MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
-  "${installRoot}/nodely" \
+  "$app_executable" \
   -new-instance \
   -no-remote \
   -profile "$profile_dir" \
@@ -310,6 +330,26 @@ fi
 
 ${shellMozBackendSetup()}
 
+app_candidates=(
+  /app/lib/nodely/nodely
+  /app/lib/nodely/nodely-bin
+  /app/lib/nodely/firefox
+  /app/lib/nodely/firefox-bin
+)
+app_executable=""
+
+for candidate in "\${app_candidates[@]}"; do
+  if [[ -x "$candidate" && ! -d "$candidate" ]]; then
+    app_executable="$candidate"
+    break
+  fi
+done
+
+if [[ -z "$app_executable" ]]; then
+  printf 'Unable to find a runnable Nodely executable in %s\\n' "/app/lib/nodely" >&2
+  exit 127
+fi
+
 if [[ "$version_only" -eq 1 ]]; then
   set +e
   version="$(
@@ -317,7 +357,7 @@ if [[ "$version_only" -eq 1 ]]; then
       MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
       MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
       MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
-      /app/lib/nodely/nodely-bin \
+      "$app_executable" \
       "$@" 2>&1
   )"
   status=$?
@@ -348,7 +388,7 @@ exec env \
   MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
   MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
   MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
-  /app/lib/nodely/nodely \
+  "$app_executable" \
   -new-instance \
   -no-remote \
   -profile "$profile_dir" \

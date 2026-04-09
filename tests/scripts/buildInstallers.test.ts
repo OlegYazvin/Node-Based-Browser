@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,12 +40,57 @@ describe("build-installers wrappers", () => {
 
     expect(wrapper).toContain('if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then');
     expect(wrapper).toContain('if [[ "$version_only" -eq 1 ]]; then');
+    expect(wrapper).toContain("app_candidates=(");
+    expect(wrapper).toContain('"/opt/nodely-browser/app/nodely"');
     expect(wrapper).toContain('set +e');
     expect(wrapper).toContain('"/opt/nodely-browser/app/nodely-bin"');
+    expect(wrapper).toContain('"/opt/nodely-browser/app/firefox-bin"');
+    expect(wrapper).toContain('"$app_executable"');
     expect(wrapper).toContain('status=$?');
     expect(wrapper).toContain("printf '%s");
     expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
     expect(wrapper).toContain('-new-instance');
+  });
+
+  it("falls back to a runnable packaged executable for system wrapper version checks", async () => {
+    const rootDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-"));
+    tempDirectories.push(rootDirectory);
+
+    const appDirectory = path.join(rootDirectory, "app");
+    const wrapperPath = path.join(rootDirectory, "nodely-browser");
+
+    await mkdir(appDirectory, { recursive: true });
+    await writeFile(
+      path.join(appDirectory, "nodely"),
+      [
+        "#!/usr/bin/env bash",
+        'if [[ "${1:-}" == "--version" ]]; then',
+        "  echo 'Mozilla Firefox 140.10.0esr'",
+        "  exit 0",
+        "fi",
+        "echo launched"
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+    await writeFile(
+      path.join(appDirectory, "nodely-bin"),
+      ['#!/usr/bin/env bash', 'script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)', 'exec "$script_dir/firefox-bin" "$@"'].join("\n"),
+      { mode: 0o755 }
+    );
+    await writeFile(
+      wrapperPath,
+      buildSystemWrapper({
+        installRoot: appDirectory,
+        desktopFileName: "nodely-browser.desktop"
+      }),
+      { mode: 0o755 }
+    );
+
+    const version = execFileSync(wrapperPath, ["--version"], {
+      encoding: "utf8"
+    });
+
+    expect(version.trim()).toBe("Nodely 140.10.0esr");
   });
 
   it("uses session-aware backend detection for flatpak installs", () => {
@@ -62,8 +108,12 @@ describe("build-installers wrappers", () => {
 
     expect(wrapper).toContain('if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then');
     expect(wrapper).toContain('if [[ "$version_only" -eq 1 ]]; then');
+    expect(wrapper).toContain("app_candidates=(");
+    expect(wrapper).toContain("/app/lib/nodely/nodely");
     expect(wrapper).toContain('set +e');
     expect(wrapper).toContain('/app/lib/nodely/nodely-bin');
+    expect(wrapper).toContain('/app/lib/nodely/firefox-bin');
+    expect(wrapper).toContain('"$app_executable"');
     expect(wrapper).toContain('status=$?');
     expect(wrapper).toContain("printf '%s");
     expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");

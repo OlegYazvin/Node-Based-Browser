@@ -131,26 +131,6 @@ jobs:
             exit 1
           fi
 
-      - name: Patch Linux installer wrapper version path
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          target = Path("scripts/build-installers.mjs")
-          contents = target.read_text(encoding="utf-8")
-          replacements = [
-              ('      "${installRoot}/nodely-bin" \\\n', '      "${installRoot}/nodely" \\\n'),
-              ('      /app/lib/nodely/nodely-bin \\\n', '      /app/lib/nodely/nodely \\\n')
-          ]
-
-          for old, new in replacements:
-              if old not in contents:
-                  raise SystemExit(f"Expected snippet not found: {old!r}")
-              contents = contents.replace(old, new, 1)
-
-          target.write_text(contents, encoding="utf-8")
-          PY
-
       - name: Build platform installer
         run: |
           set -o pipefail
