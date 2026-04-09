@@ -144,6 +144,8 @@ jobs:
               npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode compat
               cd "$GECKO_CHECKOUT_DIR"
               python ./mach build faster
+            elif [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
+              python ./mach build
             else
               python ./mach build faster
             fi
@@ -262,6 +264,7 @@ jobs:
             gecko-bootstrap.log
             gecko-build.log
             gecko-package.log
+            gecko-stage-release.log
             installer-build.log
             ubuntu-compat.log
           if-no-files-found: ignore
