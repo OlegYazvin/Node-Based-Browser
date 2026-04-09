@@ -12,7 +12,7 @@ This directory contains the installers that actually exist in this repo right no
 - If a section below says no installers are staged, there is nothing in this repo for that target today.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
-Generated from `Installer/manifest.json` at 2026-04-08T23:58:36.035Z.
+Generated from `Installer/manifest.json` at 2026-04-09T00:26:25.909Z.
 
 ## Windows 10 and 11
 
@@ -20,7 +20,7 @@ Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |
-| [nodely-browser-140.10.0.en-US.win64.installer.exe](./windows/nodely-browser-140.10.0.en-US.win64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24164249901) (`installers.yml`) |
+| [nodely-browser-140.10.0.en-US.win64.installer.exe](./windows/nodely-browser-140.10.0.en-US.win64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24165005113) (`installers.yml`) |
 
 ## macOS Intel
 
