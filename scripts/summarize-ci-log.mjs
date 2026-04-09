@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import process from "node:process";
 
 function usage() {
-  console.log(`Usage: node scripts/summarize-ci-log.mjs --log <path> --mode <bootstrap|build|package|installer|compat>`);
+  console.log(`Usage: node scripts/summarize-ci-log.mjs --log <path> --mode <bootstrap|build|package|installer|compat|stage>`);
 }
 
 function parseArguments(argv) {
@@ -109,6 +109,20 @@ function modeConfig(mode) {
       before: 6,
       after: 32,
       fallback: 120
+    };
+  }
+
+  if (mode === "stage") {
+    return {
+      patterns: [
+        "Unable to select a packaged Gecko artifact",
+        "No packaged Gecko artifacts were found",
+        "Candidates:",
+        "error:"
+      ],
+      before: 2,
+      after: 12,
+      fallback: 40
     };
   }
 

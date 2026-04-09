@@ -178,11 +178,14 @@ jobs:
           fi
 
       - name: Stage Gecko release artifact
-        run: >
-          npm run gecko:stage-release -- --checkout-dir "$GECKO_CHECKOUT_DIR"
-          --platform ${{ matrix.platform }}
-          --arch ${{ matrix.arch }}
-          --channel ci
+        run: |
+          set -o pipefail
+
+          if ! npm run gecko:stage-release -- --checkout-dir "$GECKO_CHECKOUT_DIR" --platform ${{ matrix.platform }} --arch ${{ matrix.arch }} --channel ci 2>&1 | tee gecko-stage-release.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-stage-release.log --mode stage)"
+            echo "::error title=Gecko release artifact staging failed::$summary"
+            exit 1
+          fi
 
       - name: Build platform installer
         run: |
