@@ -674,7 +674,7 @@ async function directoryContainsLinuxApp(candidateDirectory) {
 
   for (const marker of browserBinaries) {
     if (await pathExists(path.join(candidateDirectory, marker))) {
-      return true;
+      return pathExists(path.join(candidateDirectory, "libxul.so"));
     }
   }
 

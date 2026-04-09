@@ -146,8 +146,9 @@ function linuxArtifactContainsRunnableBundle(filePath) {
 
     const hasMetadata = /(^|\/)(?:application\.ini|platform\.ini)$/mu.test(listing);
     const hasBrowserBinary = /(^|\/)(?:nodely-bin|firefox-bin)$/mu.test(listing);
+    const hasLibxul = /(^|\/)libxul\.so$/mu.test(listing);
 
-    return hasMetadata && hasBrowserBinary;
+    return hasMetadata && hasBrowserBinary && hasLibxul;
   } catch {
     return false;
   }

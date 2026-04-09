@@ -35,6 +35,7 @@ describe("stage-release-artifacts", () => {
 
     const partialArtifact = await createTarball(tempDirectory, "nodely-browser-140.10.0.en-US.linux-x86_64.tar.xz", [
       { path: "nodely/application.ini" },
+      { path: "nodely/nodely-bin" },
       { path: "nodely/omni.ja" }
     ]);
     const runnableArtifact = await createTarball(tempDirectory, "nodely-140.10.0.en-US.linux-x86_64.tar.xz", [

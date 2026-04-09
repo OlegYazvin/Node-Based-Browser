@@ -124,6 +124,7 @@ describe("build-installers wrappers", () => {
     await mkdir(appDirectory, { recursive: true });
     await writeFile(path.join(appDirectory, "nodely-bin"), "");
     await writeFile(path.join(appDirectory, "application.ini"), "");
+    await writeFile(path.join(appDirectory, "libxul.so"), "");
 
     await expect(resolveExtractedLinuxAppDirectory(extractedDirectory)).resolves.toBe(appDirectory);
   });
@@ -140,6 +141,7 @@ describe("build-installers wrappers", () => {
     await writeFile(path.join(metadataOnlyDirectory, "application.ini"), "");
     await writeFile(path.join(appDirectory, "application.ini"), "");
     await writeFile(path.join(appDirectory, "nodely-bin"), "");
+    await writeFile(path.join(appDirectory, "libxul.so"), "");
 
     await expect(resolveExtractedLinuxAppDirectory(extractedDirectory)).resolves.toBe(appDirectory);
   });
