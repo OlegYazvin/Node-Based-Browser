@@ -154,6 +154,28 @@ function linuxArtifactContainsRunnableBundle(filePath) {
   }
 }
 
+function inspectLinuxArtifactBundle(filePath) {
+  try {
+    const listing = execFileSync("tar", ["-tf", filePath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+
+    return {
+      hasMetadata: /(^|\/)(?:application\.ini|platform\.ini)$/mu.test(listing),
+      hasBrowserBinary: /(^|\/)(?:nodely-bin|firefox-bin)$/mu.test(listing),
+      hasLibxul: /(^|\/)libxul\.so$/mu.test(listing)
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+      hasMetadata: false,
+      hasBrowserBinary: false,
+      hasLibxul: false
+    };
+  }
+}
+
 export function selectPackagedArtifact(artifacts, platform) {
   if (platform !== "linux") {
     const [selectedArtifact] = [...artifacts].sort((left, right) => right.localeCompare(left));
@@ -210,6 +232,24 @@ async function stageArtifacts(options) {
   const selectedArtifact = selectPackagedArtifact(artifacts, options.platform);
 
   if (!selectedArtifact) {
+    if (options.platform === "linux") {
+      const artifactSummary = artifacts
+        .map((artifact) => {
+          const inspection = inspectLinuxArtifactBundle(artifact);
+
+          if (inspection.error) {
+            return `${path.basename(artifact)} [error=${inspection.error}]`;
+          }
+
+          return `${path.basename(artifact)} [metadata=${inspection.hasMetadata} binary=${inspection.hasBrowserBinary} libxul=${inspection.hasLibxul}]`;
+        })
+        .join(", ");
+
+      throw new Error(
+        `Unable to select a packaged Gecko artifact for ${options.platform}. Candidates: ${artifactSummary || "(none)"}.`
+      );
+    }
+
     throw new Error(`Unable to select a packaged Gecko artifact for ${options.platform}.`);
   }
 
