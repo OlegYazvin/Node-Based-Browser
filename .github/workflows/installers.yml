@@ -125,7 +125,12 @@ jobs:
           fi
 
       - name: Write Gecko mozconfig
-        run: npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+        run: |
+          if [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
+            npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode full
+          else
+            npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+          fi
 
       - name: Build Gecko overlay target
         env:
