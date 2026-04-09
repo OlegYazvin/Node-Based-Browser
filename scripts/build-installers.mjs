@@ -697,7 +697,7 @@ async function refineExtractedLinuxAppDirectory(candidateDirectory) {
     const nestedDirectory = path.join(candidateDirectory, preferredName);
     const refinedDirectory = await refineExtractedLinuxAppDirectory(nestedDirectory);
 
-    if (refinedDirectory !== nestedDirectory || (await directoryContainsLinuxApp(refinedDirectory))) {
+    if (refinedDirectory) {
       return refinedDirectory;
     }
   }
@@ -706,12 +706,12 @@ async function refineExtractedLinuxAppDirectory(candidateDirectory) {
     const nestedDirectory = path.join(candidateDirectory, directories[0]);
     const refinedDirectory = await refineExtractedLinuxAppDirectory(nestedDirectory);
 
-    if (refinedDirectory !== nestedDirectory || (await directoryContainsLinuxApp(refinedDirectory))) {
+    if (refinedDirectory) {
       return refinedDirectory;
     }
   }
 
-  return candidateDirectory;
+  return null;
 }
 
 export async function resolveExtractedLinuxAppDirectory(extractedDirectory) {
@@ -720,12 +720,20 @@ export async function resolveExtractedLinuxAppDirectory(extractedDirectory) {
 
   for (const preferredName of ["nodely", "firefox"]) {
     if (directories.includes(preferredName)) {
-      return refineExtractedLinuxAppDirectory(path.join(extractedDirectory, preferredName));
+      const refinedDirectory = await refineExtractedLinuxAppDirectory(path.join(extractedDirectory, preferredName));
+
+      if (refinedDirectory) {
+        return refinedDirectory;
+      }
     }
   }
 
   if (directories.length === 1) {
-    return refineExtractedLinuxAppDirectory(path.join(extractedDirectory, directories[0]));
+    const refinedDirectory = await refineExtractedLinuxAppDirectory(path.join(extractedDirectory, directories[0]));
+
+    if (refinedDirectory) {
+      return refinedDirectory;
+    }
   }
 
   throw new Error(

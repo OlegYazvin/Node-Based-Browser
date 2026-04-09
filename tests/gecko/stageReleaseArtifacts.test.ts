@@ -46,4 +46,17 @@ describe("stage-release-artifacts", () => {
 
     expect(selectPackagedArtifact([partialArtifact, runnableArtifact], "linux")).toBe(runnableArtifact);
   });
+
+  it("rejects Linux tarballs that do not contain a runnable app bundle", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-stage-release-"));
+    tempDirectories.push(tempDirectory);
+
+    const partialArtifact = await createTarball(tempDirectory, "nodely-browser-140.10.0.en-US.linux-x86_64.tar.xz", [
+      { path: "nodely/application.ini" },
+      { path: "nodely/nodely-bin" },
+      { path: "nodely/omni.ja" }
+    ]);
+
+    expect(selectPackagedArtifact([partialArtifact], "linux")).toBeNull();
+  });
 });

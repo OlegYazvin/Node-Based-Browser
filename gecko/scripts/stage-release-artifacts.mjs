@@ -161,8 +161,12 @@ export function selectPackagedArtifact(artifacts, platform) {
   }
 
   const runnableArtifacts = artifacts.filter((artifact) => linuxArtifactContainsRunnableBundle(artifact));
-  const candidates = runnableArtifacts.length ? runnableArtifacts : artifacts;
-  const [selectedArtifact] = [...candidates].sort((left, right) => {
+
+  if (!runnableArtifacts.length) {
+    return null;
+  }
+
+  const [selectedArtifact] = [...runnableArtifacts].sort((left, right) => {
     const priorityDifference = linuxArtifactNamePriority(right) - linuxArtifactNamePriority(left);
 
     if (priorityDifference !== 0) {

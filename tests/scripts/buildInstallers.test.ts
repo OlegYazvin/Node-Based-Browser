@@ -145,4 +145,19 @@ describe("build-installers wrappers", () => {
 
     await expect(resolveExtractedLinuxAppDirectory(extractedDirectory)).resolves.toBe(appDirectory);
   });
+
+  it("rejects a Linux bundle that never reaches a runnable app directory", async () => {
+    const extractedDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-"));
+    tempDirectories.push(extractedDirectory);
+
+    const outerDirectory = path.join(extractedDirectory, "nodely-browser");
+    const metadataOnlyDirectory = path.join(outerDirectory, "nodely");
+
+    await mkdir(metadataOnlyDirectory, { recursive: true });
+    await writeFile(path.join(metadataOnlyDirectory, "application.ini"), "");
+
+    await expect(resolveExtractedLinuxAppDirectory(extractedDirectory)).rejects.toThrow(
+      "Unable to determine the packaged Linux app directory"
+    );
+  });
 });
