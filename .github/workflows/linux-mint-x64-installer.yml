@@ -83,7 +83,11 @@ jobs:
       - name: Write Gecko mozconfig
         run: |
           npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode full
-          printf '%s\n' 'ac_add_options --without-wasm-sandboxed-libraries' >> "$GECKO_CHECKOUT_DIR/mozconfig.nodely"
+          {
+            printf '%s\n' 'ac_add_options --without-wasm-sandboxed-libraries'
+            printf '%s\n' 'mk_add_options MOZ_MAKE_FLAGS=-j2'
+            printf '%s\n' 'export CARGO_BUILD_JOBS=2'
+          } >> "$GECKO_CHECKOUT_DIR/mozconfig.nodely"
 
       - name: Build Gecko overlay target
         env:
