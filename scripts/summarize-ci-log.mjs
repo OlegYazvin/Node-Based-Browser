@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import process from "node:process";
 
 function usage() {
-  console.log(`Usage: node scripts/summarize-ci-log.mjs --log <path> --mode <bootstrap|build|package|installer>`);
+  console.log(`Usage: node scripts/summarize-ci-log.mjs --log <path> --mode <bootstrap|build|package|installer|compat>`);
 }
 
 function parseArguments(argv) {
@@ -89,6 +89,25 @@ function modeConfig(mode) {
       ],
       before: 10,
       after: 28,
+      fallback: 120
+    };
+  }
+
+  if (mode === "compat") {
+    return {
+      patterns: [
+        "error while loading shared libraries",
+        "cannot open shared object file",
+        "symbol lookup error",
+        "version `GLIBC",
+        "No such file or directory",
+        "not found",
+        "Permission denied",
+        "ldd",
+        "env:"
+      ],
+      before: 6,
+      after: 32,
       fallback: 120
     };
   }

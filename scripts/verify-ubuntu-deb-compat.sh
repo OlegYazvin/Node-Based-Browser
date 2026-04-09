@@ -4,6 +4,7 @@ set -euo pipefail
 
 deb_path=""
 image="ubuntu:22.04"
+container_platform=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,7 +42,32 @@ deb_path=$(cd -- "$(dirname -- "$deb_path")" && pwd)/$(basename -- "$deb_path")
 deb_dir=$(dirname -- "$deb_path")
 deb_file=$(basename -- "$deb_path")
 
+if command -v dpkg-deb >/dev/null 2>&1; then
+  deb_architecture=$(dpkg-deb -f "$deb_path" Architecture)
+elif [[ "$deb_file" == *-x64.deb ]]; then
+  deb_architecture="amd64"
+elif [[ "$deb_file" == *-arm64.deb ]]; then
+  deb_architecture="arm64"
+else
+  echo "Unable to determine the DEB architecture for $deb_file." >&2
+  exit 1
+fi
+
+case "$deb_architecture" in
+  amd64)
+    container_platform="linux/amd64"
+    ;;
+  arm64)
+    container_platform="linux/arm64"
+    ;;
+  *)
+    echo "Unsupported DEB architecture for compatibility verification: $deb_architecture" >&2
+    exit 1
+    ;;
+esac
+
 podman run --rm \
+  --platform "$container_platform" \
   -v "$deb_dir:/artifacts:ro,z" \
   "$image" \
   bash -lc "
@@ -49,7 +75,7 @@ podman run --rm \
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
     dpkg -i /artifacts/$deb_file >/tmp/nodely-dpkg.log 2>&1 || true
-    if ! apt-get install -f -y >/tmp/nodely-apt-fix.log 2>&1; then
+    if ! apt-get install -f -y --no-install-recommends >/tmp/nodely-apt-fix.log 2>&1; then
       cat /tmp/nodely-dpkg.log >&2 || true
       cat /tmp/nodely-apt-fix.log >&2 || true
       exit 1

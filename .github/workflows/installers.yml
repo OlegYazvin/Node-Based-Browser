@@ -238,7 +238,7 @@ jobs:
             exit 1
           fi
           if ! bash scripts/verify-ubuntu-deb-compat.sh --deb "${debs[0]}" 2>&1 | tee ubuntu-compat.log; then
-            summary="$(node scripts/summarize-ci-log.mjs --log ubuntu-compat.log --mode installer)"
+            summary="$(node scripts/summarize-ci-log.mjs --log ubuntu-compat.log --mode compat)"
             echo "::error title=Ubuntu 22.04 / Linux Mint 21.3 compatibility failed::$summary"
             exit 1
           fi
