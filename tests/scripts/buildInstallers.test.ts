@@ -1,6 +1,21 @@
-import { describe, expect, it } from "vitest";
+import os from "node:os";
+import path from "node:path";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 
-import { buildFlatpakWrapper, buildSystemWrapper, debControl } from "../../scripts/build-installers.mjs";
+import { afterEach, describe, expect, it } from "vitest";
+
+import {
+  buildFlatpakWrapper,
+  buildSystemWrapper,
+  debControl,
+  resolveExtractedLinuxAppDirectory
+} from "../../scripts/build-installers.mjs";
+
+const tempDirectories = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+});
 
 describe("build-installers wrappers", () => {
   it("uses session-aware backend detection for system installs", () => {
@@ -97,5 +112,19 @@ describe("build-installers wrappers", () => {
     expect(control).toContain("libxcb-shm0");
     expect(control).toContain("libgcc-s1");
     expect(control).toContain("zlib1g");
+  });
+
+  it("finds the packaged app inside an extra wrapper directory", async () => {
+    const extractedDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-"));
+    tempDirectories.push(extractedDirectory);
+
+    const outerDirectory = path.join(extractedDirectory, "nodely-browser");
+    const appDirectory = path.join(outerDirectory, "nodely");
+
+    await mkdir(appDirectory, { recursive: true });
+    await writeFile(path.join(appDirectory, "nodely-bin"), "");
+    await writeFile(path.join(appDirectory, "application.ini"), "");
+
+    await expect(resolveExtractedLinuxAppDirectory(extractedDirectory)).resolves.toBe(appDirectory);
   });
 });

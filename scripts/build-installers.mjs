@@ -655,18 +655,61 @@ async function extractLinuxArtifact(sourceArtifactPath, destinationDirectory) {
   await runCommand("tar", [tarballExtractArgument(sourceArtifactPath), sourceArtifactPath, "-C", destinationDirectory]);
 }
 
-async function resolveExtractedLinuxAppDirectory(extractedDirectory) {
+async function directoryContainsLinuxApp(candidateDirectory) {
+  const markers = ["nodely-bin", "firefox-bin", "application.ini", "libxul.so"];
+
+  for (const marker of markers) {
+    if (await pathExists(path.join(candidateDirectory, marker))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function refineExtractedLinuxAppDirectory(candidateDirectory) {
+  if (await directoryContainsLinuxApp(candidateDirectory)) {
+    return candidateDirectory;
+  }
+
+  const entries = await readdir(candidateDirectory, { withFileTypes: true });
+  const directories = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+
+  for (const preferredName of ["nodely", "firefox"]) {
+    if (!directories.includes(preferredName)) {
+      continue;
+    }
+
+    const nestedDirectory = path.join(candidateDirectory, preferredName);
+
+    if (await directoryContainsLinuxApp(nestedDirectory)) {
+      return nestedDirectory;
+    }
+  }
+
+  if (directories.length === 1) {
+    const nestedDirectory = path.join(candidateDirectory, directories[0]);
+
+    if (await directoryContainsLinuxApp(nestedDirectory)) {
+      return nestedDirectory;
+    }
+  }
+
+  return candidateDirectory;
+}
+
+export async function resolveExtractedLinuxAppDirectory(extractedDirectory) {
   const entries = await readdir(extractedDirectory, { withFileTypes: true });
   const directories = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 
   for (const preferredName of ["nodely", "firefox"]) {
     if (directories.includes(preferredName)) {
-      return path.join(extractedDirectory, preferredName);
+      return refineExtractedLinuxAppDirectory(path.join(extractedDirectory, preferredName));
     }
   }
 
   if (directories.length === 1) {
-    return path.join(extractedDirectory, directories[0]);
+    return refineExtractedLinuxAppDirectory(path.join(extractedDirectory, directories[0]));
   }
 
   throw new Error(
