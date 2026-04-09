@@ -77,8 +77,7 @@ jobs:
             libx11-xcb-dev \
             libasound2-dev \
             libpulse-dev \
-            libffi-dev \
-            wasi-libc
+            libffi-dev
           flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
 
       - name: Install npm dependencies
@@ -129,6 +128,7 @@ jobs:
         run: |
           if [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
             npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode full
+            printf '%s\n' 'ac_add_options --without-wasm-sandboxed-libraries' >> "$GECKO_CHECKOUT_DIR/mozconfig.nodely"
           else
             npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
           fi
@@ -151,7 +151,7 @@ jobs:
               cd "$GECKO_CHECKOUT_DIR"
               python ./mach build faster
             elif [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
-              WASI_SYSROOT=/usr python ./mach build
+              python ./mach build
             else
               python ./mach build faster
             fi
