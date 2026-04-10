@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-10T02:21:37.563Z",
+  "generatedAt": "2026-04-10T03:14:25.728Z",
   "installers": [
     {
       "version": "140.9.1esr",
@@ -12,12 +12,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/linux-mint-x64-installer.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24224090950",
       "path": "linux/Nodely-Browser-140.9.1esr-debian-x64.deb",
       "fileName": "Nodely-Browser-140.9.1esr-debian-x64.deb",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-debian-x64.deb",
-      "size": 77520762,
-      "syncedAt": "2026-04-10T02:21:37.357Z"
+      "size": 77519514,
+      "syncedAt": "2026-04-10T03:14:25.527Z"
     },
     {
       "version": "140.9.1esr",
@@ -34,12 +34,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/linux-mint-x64-installer.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24224090950",
       "path": "linux/Nodely-Browser-140.9.1esr-linux-x64.flatpak",
       "fileName": "Nodely-Browser-140.9.1esr-linux-x64.flatpak",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-linux-x64.flatpak",
-      "size": 76389544,
-      "syncedAt": "2026-04-10T02:21:37.429Z"
+      "size": 76380096,
+      "syncedAt": "2026-04-10T03:14:25.596Z"
     },
     {
       "version": "140.9.1esr",
@@ -56,12 +56,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/linux-mint-x64-installer.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24224090950",
       "path": "linux/Nodely-Browser-140.9.1esr-linux-x64.run",
       "fileName": "Nodely-Browser-140.9.1esr-linux-x64.run",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-linux-x64.run",
-      "size": 77533217,
-      "syncedAt": "2026-04-10T02:21:37.497Z"
+      "size": 77529269,
+      "syncedAt": "2026-04-10T03:14:25.661Z"
     },
     {
       "version": "140.9.1esr",
@@ -75,12 +75,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/linux-mint-x64-installer.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24224090950",
       "path": "linux/Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
       "fileName": "Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
-      "size": 77520602,
-      "syncedAt": "2026-04-10T02:21:37.563Z"
+      "size": 77524522,
+      "syncedAt": "2026-04-10T03:14:25.728Z"
     }
   ]
 }
