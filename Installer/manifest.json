@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-10T17:20:01.565Z",
+  "generatedAt": "2026-04-10T18:42:20.744Z",
   "installers": [
     {
       "version": "140.9.1esr",
@@ -12,12 +12,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24254017308",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24257442073",
       "path": "linux/Nodely-Browser-140.9.1esr-debian-x64.deb",
       "fileName": "Nodely-Browser-140.9.1esr-debian-x64.deb",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-debian-x64.deb",
-      "size": 77515502,
-      "syncedAt": "2026-04-10T17:20:01.474Z"
+      "size": 77526962,
+      "syncedAt": "2026-04-10T18:42:20.652Z"
     },
     {
       "version": "140.9.1esr",
@@ -30,12 +30,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24254017308",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24257442073",
       "path": "linux/Nodely-Browser-140.9.1esr-fedora-x64.rpm",
       "fileName": "Nodely-Browser-140.9.1esr-fedora-x64.rpm",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-fedora-x64.rpm",
-      "size": 83217862,
-      "syncedAt": "2026-04-10T17:20:01.484Z"
+      "size": 83217834,
+      "syncedAt": "2026-04-10T18:42:20.664Z"
     },
     {
       "version": "140.9.1esr",
@@ -52,12 +52,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24254017308",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24257442073",
       "path": "linux/Nodely-Browser-140.9.1esr-linux-x64.flatpak",
       "fileName": "Nodely-Browser-140.9.1esr-linux-x64.flatpak",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-linux-x64.flatpak",
-      "size": 75938504,
-      "syncedAt": "2026-04-10T17:20:01.493Z"
+      "size": 76386416,
+      "syncedAt": "2026-04-10T18:42:20.678Z"
     },
     {
       "version": "140.9.1esr",
@@ -74,12 +74,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24254017308",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24257442073",
       "path": "linux/Nodely-Browser-140.9.1esr-linux-x64.run",
       "fileName": "Nodely-Browser-140.9.1esr-linux-x64.run",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-linux-x64.run",
-      "size": 77520640,
-      "syncedAt": "2026-04-10T17:20:01.505Z"
+      "size": 77522160,
+      "syncedAt": "2026-04-10T18:42:20.689Z"
     },
     {
       "version": "140.9.1esr",
@@ -93,12 +93,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24254017308",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24257442073",
       "path": "linux/Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
       "fileName": "Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
       "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
-      "size": 77529070,
-      "syncedAt": "2026-04-10T17:20:01.518Z"
+      "size": 77519842,
+      "syncedAt": "2026-04-10T18:42:20.699Z"
     },
     {
       "version": "140.9.1esr",
@@ -112,12 +112,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24254017308",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24257442073",
       "path": "windows/Nodely-Browser-140.9.1esr-windows-x64.installer.exe",
       "fileName": "Nodely-Browser-140.9.1esr-windows-x64.installer.exe",
       "source": "out/make/win32/x64/Nodely-Browser-140.9.1esr-windows-x64.installer.exe",
-      "size": 72466030,
-      "syncedAt": "2026-04-10T17:20:01.565Z"
+      "size": 72460449,
+      "syncedAt": "2026-04-10T18:42:20.743Z"
     }
   ]
 }
