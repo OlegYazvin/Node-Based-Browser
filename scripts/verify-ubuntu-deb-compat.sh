@@ -115,7 +115,7 @@ podman run --rm \
       exit 1
     fi
     run_as_test_user rm -rf \"\$test_user_home/.local/share/nodely-browser\"
-    if ! timeout 45s xvfb-run -a runuser -u nodelytester -- env HOME=\"\$test_user_home\" /usr/bin/nodely-browser --headless --screenshot /tmp/nodely-headless.png about:blank >/tmp/nodely-headless.out 2>/tmp/nodely-headless.err; then
+    if ! run_as_test_user timeout 45s xvfb-run -a /usr/bin/nodely-browser --headless --screenshot /tmp/nodely-headless.png about:blank >/tmp/nodely-headless.out 2>/tmp/nodely-headless.err; then
       cat /tmp/nodely-headless.out >&2 || true
       cat /tmp/nodely-headless.err >&2 || true
       find \"\$test_user_home/.local/share/nodely-browser\" -maxdepth 4 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
@@ -123,7 +123,7 @@ podman run --rm \
     fi
     test -s /tmp/nodely-headless.png
     run_as_test_user rm -rf \"\$test_user_home/.local/share/nodely-browser\"
-    if ! timeout 60s xvfb-run -a runuser -u nodelytester -- env HOME=\"\$test_user_home\" bash -lc '
+    if ! run_as_test_user timeout 60s xvfb-run -a bash -lc '
       set -euo pipefail
       smoke_url=\"data:text/html,%3Ctitle%3ENodely%20Desktop%20Smoke%3C%2Ftitle%3E%3Ch1%3ENodely%20Desktop%20Smoke%3C%2Fh1%3E\"
       /usr/bin/nodely-browser \"\$smoke_url\" >/tmp/nodely-window.out 2>/tmp/nodely-window.err &
