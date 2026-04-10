@@ -24,6 +24,7 @@ import {
 const systemDesktopFileName = "nodely-browser.desktop";
 const systemIconName = "nodely-browser";
 const systemInstallRoot = "/opt/nodely-browser/app";
+const linuxPackageRelease = "2";
 const flatpakAppId = "io.nodely.Browser";
 const flatpakRuntime = "org.freedesktop.Platform";
 const flatpakSdk = "org.freedesktop.Sdk";
@@ -189,7 +190,7 @@ export async function copyTreePreservingSymlinks(source, destination) {
 }
 
 function packageReleaseVersion(version) {
-  return `${version}-1`;
+  return `${version}-${linuxPackageRelease}`;
 }
 
 const linuxDebRuntimeDependencies = [
@@ -685,7 +686,7 @@ export function rpmSpec({ version, arch }) {
 %global __os_install_post %{nil}
 Name:           nodely-browser
 Version:        ${version}
-Release:        1
+Release:        ${linuxPackageRelease}
 Summary:        Node-based Gecko browser for research workflows
 License:        MPL-2.0
 Source0:        nodely-browser-payload.tar.gz
