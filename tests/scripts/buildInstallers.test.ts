@@ -173,6 +173,7 @@ describe("build-installers wrappers", () => {
     });
 
     expect(spec).toContain("BuildArch:      x86_64");
+    expect(spec).toContain("%global __os_install_post %{nil}");
     expect(spec).toContain("Requires:       gtk3");
     expect(spec).toContain("Requires:       dbus-glib");
     expect(spec).toContain("Requires:       nspr");
