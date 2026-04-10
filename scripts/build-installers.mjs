@@ -648,6 +648,7 @@ Version:        ${version}
 Release:        1
 Summary:        Node-based Gecko browser for research workflows
 License:        MPL-2.0
+Source0:        nodely-browser-payload.tar.gz
 BuildArch:      ${rpmArchNames[arch] ?? arch}
 ${requires}
 
@@ -661,7 +662,7 @@ Nodely Browser is a node-based Gecko browser for research workflows.
 %install
 rm -rf %{buildroot}
 mkdir -p %{buildroot}
-cp -R -P /payload/opt /payload/usr %{buildroot}/
+tar --no-same-owner --no-same-permissions -xzf %{SOURCE0} -C %{buildroot}
 
 %post
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -941,12 +942,25 @@ async function buildRpmInstaller({ version, outputDirectory, arch, payloadRoot }
   const rpmDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-fedora-rpm-"));
   const rpmbuildRoot = path.join(rpmDirectory, "rpmbuild");
   const specsDirectory = path.join(rpmbuildRoot, "SPECS");
+  const sourcesDirectory = path.join(rpmbuildRoot, "SOURCES");
   const specPath = path.join(specsDirectory, "nodely-browser.spec");
+  const sourceTarPath = path.join(sourcesDirectory, "nodely-browser-payload.tar.gz");
   const finalPath = path.join(outputDirectory, linuxRpmFileName(version, arch));
 
   try {
     await ensureDirectory(specsDirectory);
+    await ensureDirectory(sourcesDirectory);
     await writeFile(specPath, rpmSpec({ version, arch }), "utf8");
+    await runCommand("tar", [
+      "--owner=0",
+      "--group=0",
+      "--numeric-owner",
+      "-czf",
+      sourceTarPath,
+      "-C",
+      payloadRoot,
+      "."
+    ]);
 
     await runCommand("podman", [
       "run",
@@ -955,8 +969,6 @@ async function buildRpmInstaller({ version, outputDirectory, arch, payloadRoot }
       rpmContainerPlatforms[arch] ?? `linux/${arch}`,
       "-v",
       `${rpmDirectory}:/workspace:Z`,
-      "-v",
-      `${payloadRoot}:/payload:ro,Z`,
       "-v",
       `${outputDirectory}:/out:Z`,
       "quay.io/fedora/fedora:43",

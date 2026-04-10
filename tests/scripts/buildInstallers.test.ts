@@ -174,6 +174,7 @@ describe("build-installers wrappers", () => {
 
     expect(spec).toContain("BuildArch:      x86_64");
     expect(spec).toContain("%global __os_install_post %{nil}");
+    expect(spec).toContain("Source0:        nodely-browser-payload.tar.gz");
     expect(spec).toContain("Requires:       gtk3");
     expect(spec).toContain("Requires:       dbus-glib");
     expect(spec).toContain("Requires:       nspr");
@@ -183,7 +184,7 @@ describe("build-installers wrappers", () => {
     expect(spec).toContain("Requires:       libxkbcommon");
     expect(spec).toContain("Requires:       wayland-libs");
     expect(spec).toContain("Requires:       zlib");
-    expect(spec).toContain("cp -R -P /payload/opt /payload/usr %{buildroot}/");
+    expect(spec).toContain("tar --no-same-owner --no-same-permissions -xzf %{SOURCE0} -C %{buildroot}");
   });
 
   it("copies native installers to canonical platform and architecture names", async () => {
