@@ -124,6 +124,34 @@ function runCommand(command, args, { cwd = repositoryRoot, input = null } = {}) 
   return result.stdout ?? "";
 }
 
+function readZipEntry(archivePath, entryPath) {
+  const result = spawnSync("unzip", ["-p", archivePath, entryPath], {
+    cwd: repositoryRoot,
+    encoding: "utf8"
+  });
+
+  if (result.status === 0 || result.stdout) {
+    return result.stdout ?? "";
+  }
+
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
+  throw new Error(`unzip -p ${archivePath} ${entryPath} failed${output ? `: ${output}` : ""}`);
+}
+
+function normalizeZipArchive(archivePath) {
+  const fixedArchivePath = path.join(
+    os.tmpdir(),
+    `nodely-fixed-${path.basename(archivePath)}-${process.pid}-${Date.now()}`
+  );
+
+  try {
+    runCommand("zip", ["-FF", archivePath, "--out", fixedArchivePath], { input: "\n" });
+    cpSync(fixedArchivePath, archivePath, { force: true });
+  } finally {
+    rmSync(fixedArchivePath, { force: true });
+  }
+}
+
 function patchBrowserXhtmlContents(contents) {
   let next = contents;
 
@@ -450,6 +478,7 @@ function syncRuntimeOmniArchive(archivePath) {
     return false;
   }
 
+  normalizeZipArchive(archivePath);
   const stagingDirectory = mkdtempSync(path.join(os.tmpdir(), "nodely-omni-sync-"));
 
   try {
@@ -474,13 +503,13 @@ function syncRuntimeOmniArchive(archivePath) {
     }
 
     const browserXhtmlEntry = "chrome/browser/content/browser/browser.xhtml";
-    const browserXhtml = runCommand("unzip", ["-p", archivePath, browserXhtmlEntry]);
+    const browserXhtml = readZipEntry(archivePath, browserXhtmlEntry);
     stagedEntries.push(
       stageArchiveEntry(stagingDirectory, browserXhtmlEntry, patchBrowserXhtmlContents(browserXhtml))
     );
 
     const firefoxDefaultsEntry = "defaults/preferences/firefox.js";
-    const firefoxDefaults = runCommand("unzip", ["-p", archivePath, firefoxDefaultsEntry]);
+    const firefoxDefaults = readZipEntry(archivePath, firefoxDefaultsEntry);
     stagedEntries.push(
       stageArchiveEntry(
         stagingDirectory,

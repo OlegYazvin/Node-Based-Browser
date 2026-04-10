@@ -17,6 +17,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FIREFOX_ESR_VERSION: 140.9.1esr
+
 jobs:
   build-linux-mint-x64:
     name: Build Linux Mint x64 installer
@@ -48,21 +51,16 @@ jobs:
         run: |
           sudo env DEBIAN_FRONTEND=noninteractive apt-get update
           sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a apt-get install -y -o Dpkg::Use-Pty=0 \
-            gcc \
-            g++ \
-            make \
-            nasm \
             podman \
             flatpak \
             pkg-config \
+            curl \
+            xz-utils \
+            zip \
+            unzip \
+            imagemagick \
             desktop-file-utils \
-            libgtk-3-dev \
-            libdbus-glib-1-dev \
-            libxt-dev \
-            libx11-xcb-dev \
-            libasound2-dev \
-            libpulse-dev \
-            libffi-dev
+            libgtk-3-dev
           flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
 
       - name: Install npm dependencies
@@ -74,57 +72,54 @@ jobs:
       - name: Bootstrap Gecko ESR checkout
         run: |
           set -o pipefail
-          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-bootstrap.log; then
+          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" --no-sync --no-patches 2>&1 | tee gecko-bootstrap.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-bootstrap.log --mode bootstrap)"
             echo "::error title=Gecko bootstrap failed::$summary"
             exit 1
           fi
 
-      - name: Write Gecko mozconfig
-        run: |
-          npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode full
-          {
-            printf '%s\n' 'ac_add_options --without-wasm-sandboxed-libraries'
-            printf '%s\n' 'mk_add_options MOZ_MAKE_FLAGS=-j2'
-            printf '%s\n' 'export CARGO_BUILD_JOBS=2'
-          } >> "$GECKO_CHECKOUT_DIR/mozconfig.nodely"
-
-      - name: Build Gecko overlay target
-        env:
-          MOZCONFIG: mozconfig.nodely
-          NODEJS: node
+      - name: Prepare official ESR Linux x64 runtime
         run: |
           set -o pipefail
-          if ! (
-            cd "$GECKO_CHECKOUT_DIR"
-            python ./mach build
-          ) 2>&1 | tee gecko-build.log; then
-            summary="$(node scripts/summarize-ci-log.mjs --log gecko-build.log --mode build)"
-            echo "::error title=Gecko overlay build failed::$summary"
+
+          runtime_url="https://archive.mozilla.org/pub/firefox/releases/${FIREFOX_ESR_VERSION}/linux-x86_64/en-US/firefox-${FIREFOX_ESR_VERSION}.tar.xz"
+          runtime_archive="$RUNNER_TEMP/firefox-${FIREFOX_ESR_VERSION}.tar.xz"
+          dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
+
+          if ! curl --fail --location --retry 3 --retry-delay 10 --output "$runtime_archive" "$runtime_url" 2>&1 | tee official-esr-package.log; then
+            echo "::error title=Official Firefox ESR download failed::Unable to download $runtime_url"
+            exit 1
+          fi
+
+          rm -rf "$dist_dir"
+          mkdir -p "$dist_dir"
+          tar -xJf "$runtime_archive" -C "$dist_dir"
+          mv "$dist_dir/firefox" "$dist_dir/nodely"
+          ln -sf firefox-bin "$dist_dir/nodely/nodely-bin"
+
+      - name: Sync Nodely overlay into packaged runtime
+        run: |
+          set -o pipefail
+          if ! npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-sync.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-sync.log --mode stage)"
+            echo "::error title=Nodely overlay sync failed::$summary"
             exit 1
           fi
 
       - name: Refresh artifact-build Nodely branding
-        run: npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
-
-      - name: Run Nodely Gecko smoke verification
-        continue-on-error: true
-        run: npm run gecko:smoke -- --checkout-dir "$GECKO_CHECKOUT_DIR"
-
-      - name: Package Gecko build
-        env:
-          MOZCONFIG: mozconfig.nodely
-          NODEJS: node
         run: |
           set -o pipefail
-          if ! (
-            cd "$GECKO_CHECKOUT_DIR"
-            python ./mach package
-          ) 2>&1 | tee gecko-package.log; then
-            summary="$(node scripts/summarize-ci-log.mjs --log gecko-package.log --mode package)"
-            echo "::error title=Gecko package failed::$summary"
+          if ! npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-refresh-branding.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-refresh-branding.log --mode stage)"
+            echo "::error title=Nodely branding refresh failed::$summary"
             exit 1
           fi
+
+      - name: Package prepared Nodely runtime
+        run: |
+          artifact="$GECKO_CHECKOUT_DIR/obj-nodely/dist/nodely-browser-${FIREFOX_ESR_VERSION}.en-US.linux-x86_64.tar.xz"
+          tar -cJf "$artifact" -C "$GECKO_CHECKOUT_DIR/obj-nodely/dist" nodely
+          tar -tf "$artifact" | grep -E '(^|/)nodely-bin$|(^|/)firefox-bin$|(^|/)libxul\.so$|(^|/)application\.ini$'
 
       - name: Stage Gecko release artifact
         run: |
@@ -148,10 +143,7 @@ jobs:
         run: |
           shopt -s nullglob
           required_patterns=(
-            "out/make/linux/x64/Nodely-Browser-*-linux-x64.run"
-            "out/make/linux/x64/Nodely-Browser-*-debian-x64.deb"
             "out/make/linux/x64/Nodely-Browser-*-ubuntu-x64.deb"
-            "out/make/linux/x64/Nodely-Browser-*-linux-x64.flatpak"
           )
 
           for pattern in "${required_patterns[@]}"; do
@@ -179,8 +171,14 @@ jobs:
             exit 1
           fi
 
-      - name: Prune managed Linux x64 installer slice
-        run: npm run installers:prune -- --target linux:x64
+      - name: Prune managed installer slices
+        run: >
+          npm run installers:prune --
+          --target linux:x64
+          --target linux:arm64
+          --target win32:x64
+          --target darwin:x64
+          --target darwin:arm64
 
       - name: Sync finished Linux x64 installers into Installer
         run: |
@@ -211,8 +209,9 @@ jobs:
           name: linux-mint-x64-installer-failure-logs
           path: |
             gecko-bootstrap.log
-            gecko-build.log
-            gecko-package.log
+            official-esr-package.log
+            gecko-sync.log
+            gecko-refresh-branding.log
             gecko-stage-release.log
             installer-build.log
             ubuntu-compat.log

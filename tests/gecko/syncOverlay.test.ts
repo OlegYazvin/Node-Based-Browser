@@ -117,6 +117,7 @@ describe("sync-overlay", () => {
       });
 
       expect(zipResult.status).toBe(0);
+      await writeFile(archivePath, Buffer.concat([Buffer.from("MOZLZ40\0"), await readFile(archivePath)]));
       expect(syncPackagedRuntimeOmniOverlay(tempDirectory)).toBe(true);
 
       const browserXhtml = spawnSync("unzip", ["-p", archivePath, "chrome/browser/content/browser/browser.xhtml"], {
