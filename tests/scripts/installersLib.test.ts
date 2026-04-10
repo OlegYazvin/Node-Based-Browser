@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -221,6 +221,42 @@ describe("installers-lib", () => {
       const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
       expect(readme).toContain("On **Linux Mint**, prefer the **Ubuntu DEB** package");
       expect(readme).toContain("Ubuntu, Linux Mint; x64 only");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("skips oversized installers that cannot be committed to the GitHub repo", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-installers-lib-oversized-"));
+    const makeDirectory = path.join(tempDirectory, "out", "make");
+    const targetDirectory = path.join(tempDirectory, "Installer");
+
+    try {
+      const outputPath = path.join(makeDirectory, "darwin", "x64", "Nodely-Browser-140.10.0-macos-x64.dmg");
+      await mkdir(path.dirname(outputPath), { recursive: true });
+      await writeFile(outputPath, "", "utf8");
+      await truncate(outputPath, 100_000_001);
+
+      const manifest = await syncInstallers({
+        platform: "darwin",
+        arch: "x64",
+        makeDirectory,
+        targetDirectory,
+        builtBy: "github-actions",
+        buildWorkflow: ".github/workflows/installers.yml",
+        buildRunUrl: "https://github.com/example/repo/actions/runs/789"
+      });
+
+      expect(manifest.installers).toHaveLength(0);
+
+      await expect(
+        access(path.join(targetDirectory, "macos", "Nodely-Browser-140.10.0-macos-x64.dmg"))
+      ).rejects.toThrow();
+
+      const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
+      expect(readme).toContain("## macOS Intel");
+      expect(readme).toContain("No installers are currently staged in this repo for this target.");
+      expect(readme).toContain("check the [GitHub Releases]");
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }

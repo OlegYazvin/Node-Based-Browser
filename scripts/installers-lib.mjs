@@ -10,6 +10,7 @@ export const geckoReleaseDirectory = path.join(repositoryRoot, "gecko", "release
 export const installerDirectory = path.join(repositoryRoot, "Installer");
 export const outMakeDirectory = path.join(repositoryRoot, "out", "make");
 export const installerReadmeName = "README.MD";
+export const gitHubGitFileSizeLimitBytes = 100_000_000;
 
 const platformAliases = {
   linux: "linux",
@@ -589,13 +590,21 @@ export async function syncInstallers({
       continue;
     }
 
+    const outputStats = await stat(outputPath);
+
+    if (outputStats.size > gitHubGitFileSizeLimitBytes) {
+      console.warn(
+        `Skipping ${fileName} for Installer/ staging because ${outputStats.size} bytes exceeds GitHub's git file limit. Keep it on GitHub Releases instead.`
+      );
+      continue;
+    }
+
     const relativeDestination = stagedInstallerRelativePath(normalizedPlatform, fileName);
     const destinationPath = path.join(targetDirectory, relativeDestination);
     await ensureDirectory(path.dirname(destinationPath));
     await rm(destinationPath, { force: true });
     await cp(outputPath, destinationPath);
-
-    const outputStats = await stat(destinationPath);
+    const stagedStats = await stat(destinationPath);
     nextInstallers.push({
       version,
       platform: normalizedPlatform,
@@ -609,7 +618,7 @@ export async function syncInstallers({
       path: relativeDestination,
       fileName: path.basename(destinationPath),
       source: path.relative(repositoryRoot, outputPath),
-      size: outputStats.size,
+      size: stagedStats.size,
       syncedAt: new Date().toISOString()
     });
   }

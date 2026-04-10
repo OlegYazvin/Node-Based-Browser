@@ -12,7 +12,7 @@ This directory is the small, machine-readable installer index used by release au
 - If a section below says no installers are staged, check the [GitHub Releases](https://github.com/OlegYazvin/Node-Based-Browser/releases) page for published CI assets for the current version.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
-Generated from `Installer/manifest.json` at 2026-04-10T20:03:01.133Z.
+Generated from `Installer/manifest.json` at 2026-04-10T22:26:06.147Z.
 
 ## Windows 10 and 11
 
@@ -20,7 +20,7 @@ Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |
-| [Nodely-Browser-140.9.1esr-windows-x64.installer.exe](./windows/Nodely-Browser-140.9.1esr-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24259981436) (`installers.yml`) |
+| [Nodely-Browser-140.9.1esr-windows-x64.installer.exe](./windows/Nodely-Browser-140.9.1esr-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24263266469) (`installers.yml`) |
 
 ## macOS Intel
 
@@ -40,11 +40,11 @@ Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/A
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |
-| [Nodely-Browser-140.9.1esr-debian-x64.deb](./linux/Nodely-Browser-140.9.1esr-debian-x64.deb) | Debian DEB package | Debian; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24259981436) (`installers.yml`) |
-| [Nodely-Browser-140.9.1esr-fedora-x64.rpm](./linux/Nodely-Browser-140.9.1esr-fedora-x64.rpm) | Fedora RPM package | Fedora; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24259981436) (`installers.yml`) |
-| [Nodely-Browser-140.9.1esr-linux-x64.flatpak](./linux/Nodely-Browser-140.9.1esr-linux-x64.flatpak) | Flatpak bundle | Linux Mint, Fedora, Ubuntu, Debian, other Flatpak-enabled Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24259981436) (`installers.yml`) |
-| [Nodely-Browser-140.9.1esr-linux-x64.run](./linux/Nodely-Browser-140.9.1esr-linux-x64.run) | Self-extracting installer (`.run`) | Ubuntu, Debian, Fedora, Linux Mint, other common desktop Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24259981436) (`installers.yml`) |
-| [Nodely-Browser-140.9.1esr-ubuntu-x64.deb](./linux/Nodely-Browser-140.9.1esr-ubuntu-x64.deb) | Ubuntu DEB package | Ubuntu, Linux Mint; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24259981436) (`installers.yml`) |
+| [Nodely-Browser-140.9.1esr-debian-x64.deb](./linux/Nodely-Browser-140.9.1esr-debian-x64.deb) | Debian DEB package | Debian; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24263266469) (`installers.yml`) |
+| [Nodely-Browser-140.9.1esr-fedora-x64.rpm](./linux/Nodely-Browser-140.9.1esr-fedora-x64.rpm) | Fedora RPM package | Fedora; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24263266469) (`installers.yml`) |
+| [Nodely-Browser-140.9.1esr-linux-x64.flatpak](./linux/Nodely-Browser-140.9.1esr-linux-x64.flatpak) | Flatpak bundle | Linux Mint, Fedora, Ubuntu, Debian, other Flatpak-enabled Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24263266469) (`installers.yml`) |
+| [Nodely-Browser-140.9.1esr-linux-x64.run](./linux/Nodely-Browser-140.9.1esr-linux-x64.run) | Self-extracting installer (`.run`) | Ubuntu, Debian, Fedora, Linux Mint, other common desktop Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24263266469) (`installers.yml`) |
+| [Nodely-Browser-140.9.1esr-ubuntu-x64.deb](./linux/Nodely-Browser-140.9.1esr-ubuntu-x64.deb) | Ubuntu DEB package | Ubuntu, Linux Mint; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24263266469) (`installers.yml`) |
 
 ## Linux arm64
 
