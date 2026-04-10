@@ -11,6 +11,14 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FIREFOX_ESR_VERSION: 140.9.1esr
+  FIREFOX_ESR_REF: FIREFOX_140_9_1esr_RELEASE
+
 jobs:
   build-native-installers:
     name: Build ${{ matrix.label }}
@@ -69,6 +77,7 @@ jobs:
             nasm \
             podman \
             flatpak \
+            rpm \
             pkg-config \
             desktop-file-utils \
             libgtk-3-dev \
@@ -118,26 +127,39 @@ jobs:
         run: |
           set -o pipefail
 
-          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-bootstrap.log; then
+          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" --ref "$FIREFOX_ESR_REF" --no-sync --no-patches 2>&1 | tee gecko-bootstrap.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-bootstrap.log --mode bootstrap)"
             echo "::error title=Gecko bootstrap failed::$summary"
             exit 1
           fi
 
-      - name: Write Gecko mozconfig
+      - name: Prepare official ESR Linux x64 runtime
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
         run: |
-          if [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
-            npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode full
-            {
-              printf '%s\n' 'ac_add_options --without-wasm-sandboxed-libraries'
-              printf '%s\n' 'mk_add_options MOZ_MAKE_FLAGS=-j2'
-              printf '%s\n' 'export CARGO_BUILD_JOBS=2'
-            } >> "$GECKO_CHECKOUT_DIR/mozconfig.nodely"
-          else
-            npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+          set -o pipefail
+
+          runtime_url="https://archive.mozilla.org/pub/firefox/releases/${FIREFOX_ESR_VERSION}/linux-x86_64/en-US/firefox-${FIREFOX_ESR_VERSION}.tar.xz"
+          runtime_archive="$RUNNER_TEMP/firefox-${FIREFOX_ESR_VERSION}.tar.xz"
+          dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
+
+          if ! curl --fail --location --retry 3 --retry-delay 10 --output "$runtime_archive" "$runtime_url" 2>&1 | tee official-esr-package.log; then
+            echo "::error title=Official Firefox ESR download failed::Unable to download $runtime_url"
+            exit 1
           fi
 
+          rm -rf "$dist_dir"
+          mkdir -p "$dist_dir"
+          tar -xJf "$runtime_archive" -C "$dist_dir"
+          mv "$dist_dir/firefox" "$dist_dir/nodely"
+          ln -sf firefox-bin "$dist_dir/nodely/nodely-bin"
+
+      - name: Write Gecko mozconfig
+        if: matrix.platform != 'linux'
+        run: |
+          npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+
       - name: Build Gecko overlay target
+        if: matrix.platform != 'linux'
         env:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
@@ -146,27 +168,37 @@ jobs:
 
           if ! (
             cd "$GECKO_CHECKOUT_DIR"
-            if [[ "${{ matrix.platform }}" == "darwin" ]]; then
-              python ./mach configure
-              python ./mach artifact install
-              cd "$GITHUB_WORKSPACE"
-              npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR"
-              npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode compat
-              cd "$GECKO_CHECKOUT_DIR"
-              python ./mach build faster
-            elif [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
-              python ./mach build
-            else
-              python ./mach build faster
-            fi
+            python ./mach configure
+            python ./mach artifact install
+            cd "$GITHUB_WORKSPACE"
+            npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+            npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode compat
+            cd "$GECKO_CHECKOUT_DIR"
+            python ./mach build faster
           ) 2>&1 | tee gecko-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-build.log --mode build)"
             echo "::error title=Gecko overlay build failed::$summary"
             exit 1
           fi
 
+      - name: Sync Nodely overlay into packaged Linux runtime
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        run: |
+          set -o pipefail
+          if ! npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-sync.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-sync.log --mode stage)"
+            echo "::error title=Nodely overlay sync failed::$summary"
+            exit 1
+          fi
+
       - name: Refresh artifact-build Nodely branding
-        run: npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+        run: |
+          set -o pipefail
+          if ! npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-refresh-branding.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-refresh-branding.log --mode stage)"
+            echo "::error title=Nodely branding refresh failed::$summary"
+            exit 1
+          fi
 
       - name: Run Nodely Gecko smoke verification
         if: matrix.platform == 'linux'
@@ -174,6 +206,7 @@ jobs:
         run: npm run gecko:smoke -- --checkout-dir "$GECKO_CHECKOUT_DIR"
 
       - name: Package Gecko build
+        if: matrix.platform != 'linux'
         env:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
@@ -188,6 +221,13 @@ jobs:
             echo "::error title=Gecko package failed::$summary"
             exit 1
           fi
+
+      - name: Package prepared Nodely Linux runtime
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        run: |
+          artifact="$GECKO_CHECKOUT_DIR/obj-nodely/dist/nodely-browser-${FIREFOX_ESR_VERSION}.en-US.linux-x86_64.tar.xz"
+          tar -cJf "$artifact" -C "$GECKO_CHECKOUT_DIR/obj-nodely/dist" nodely
+          tar -tf "$artifact" | grep -E '(^|/)nodely-bin$|(^|/)firefox-bin$|(^|/)libxul\.so$|(^|/)application\.ini$'
 
       - name: Stage Gecko release artifact
         run: |
@@ -207,11 +247,8 @@ jobs:
             --arch ${{ matrix.arch }}
             --channel ci
             --no-sync
+            --strict
           )
-
-          if [[ "${{ matrix.platform }}" != "linux" || "${{ matrix.arch }}" != "x64" ]]; then
-            installer_args+=(--strict)
-          fi
 
           if ! npm run installers -- "${installer_args[@]}" 2>&1 | tee installer-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log installer-build.log --mode installer)"
@@ -226,6 +263,7 @@ jobs:
           required_patterns=(
             "out/make/linux/x64/Nodely-Browser-*-linux-x64.run"
             "out/make/linux/x64/Nodely-Browser-*-debian-x64.deb"
+            "out/make/linux/x64/Nodely-Browser-*-fedora-x64.rpm"
             "out/make/linux/x64/Nodely-Browser-*-ubuntu-x64.deb"
             "out/make/linux/x64/Nodely-Browser-*-linux-x64.flatpak"
           )
@@ -242,6 +280,28 @@ jobs:
             fi
           done
 
+      - name: Verify Windows installer set
+        if: matrix.platform == 'win32' && matrix.arch == 'x64'
+        run: |
+          shopt -s nullglob
+          installers=(out/make/win32/x64/*.exe)
+          if [[ ${#installers[@]} -ne 1 ]]; then
+            echo "Expected exactly one Windows x64 installer, found ${#installers[@]}." >&2
+            printf '  %s\n' "${installers[@]}" >&2 || true
+            exit 1
+          fi
+
+      - name: Verify macOS installer set
+        if: matrix.platform == 'darwin'
+        run: |
+          shopt -s nullglob
+          installers=(out/make/darwin/${{ matrix.arch }}/*.dmg out/make/darwin/${{ matrix.arch }}/*.pkg)
+          if [[ ${#installers[@]} -ne 1 ]]; then
+            echo "Expected exactly one macOS ${{ matrix.arch }} installer, found ${#installers[@]}." >&2
+            printf '  %s\n' "${installers[@]}" >&2 || true
+            exit 1
+          fi
+
       - name: Verify Ubuntu 22.04 / Linux Mint 21.3 compatibility
         if: matrix.platform == 'linux' && matrix.arch == 'x64'
         run: |
@@ -255,6 +315,38 @@ jobs:
           if ! bash scripts/verify-ubuntu-deb-compat.sh --deb "${debs[0]}" 2>&1 | tee ubuntu-compat.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log ubuntu-compat.log --mode compat)"
             echo "::error title=Ubuntu 22.04 / Linux Mint 21.3 compatibility failed::$summary"
+            exit 1
+          fi
+
+      - name: Verify Debian compatibility
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        run: |
+          shopt -s nullglob
+          debs=(out/make/linux/x64/Nodely-Browser-*-debian-x64.deb)
+          if [[ ${#debs[@]} -ne 1 ]]; then
+            echo "Expected exactly one Debian DEB for Linux x64, found ${#debs[@]}." >&2
+            printf '  %s\n' "${debs[@]}" >&2 || true
+            exit 1
+          fi
+          if ! bash scripts/verify-ubuntu-deb-compat.sh --deb "${debs[0]}" --image debian:12 2>&1 | tee debian-compat.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log debian-compat.log --mode compat)"
+            echo "::error title=Debian compatibility failed::$summary"
+            exit 1
+          fi
+
+      - name: Verify Fedora compatibility
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        run: |
+          shopt -s nullglob
+          rpms=(out/make/linux/x64/Nodely-Browser-*-fedora-x64.rpm)
+          if [[ ${#rpms[@]} -ne 1 ]]; then
+            echo "Expected exactly one Fedora RPM for Linux x64, found ${#rpms[@]}." >&2
+            printf '  %s\n' "${rpms[@]}" >&2 || true
+            exit 1
+          fi
+          if ! bash scripts/verify-fedora-rpm-compat.sh --rpm "${rpms[0]}" 2>&1 | tee fedora-compat.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log fedora-compat.log --mode compat)"
+            echo "::error title=Fedora compatibility failed::$summary"
             exit 1
           fi
 
@@ -275,15 +367,20 @@ jobs:
             gecko-build.log
             gecko-package.log
             gecko-stage-release.log
+            gecko-sync.log
+            gecko-refresh-branding.log
+            official-esr-package.log
             installer-build.log
             ubuntu-compat.log
+            debian-compat.log
+            fedora-compat.log
           if-no-files-found: ignore
 
   assemble-installer-directory:
     name: Assemble Installer Directory
     needs:
       - build-native-installers
-    if: always()
+    if: ${{ needs.build-native-installers.result == 'success' }}
     runs-on: ubuntu-latest
 
     defaults:

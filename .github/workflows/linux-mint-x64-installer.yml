@@ -175,10 +175,6 @@ jobs:
         run: >
           npm run installers:prune --
           --target linux:x64
-          --target linux:arm64
-          --target win32:x64
-          --target darwin:x64
-          --target darwin:arm64
 
       - name: Sync finished Linux x64 installers into Installer
         run: |

@@ -212,6 +212,56 @@ const linuxDebRuntimeDependencies = [
   "zlib1g"
 ];
 
+const linuxRpmRuntimeDependencies = [
+  "alsa-lib",
+  "atk",
+  "at-spi2-atk",
+  "at-spi2-core",
+  "brotli",
+  "bzip2-libs",
+  "cairo",
+  "colord-libs",
+  "cups-libs",
+  "dbus-libs",
+  "dbus-glib",
+  "libepoxy",
+  "fontconfig",
+  "freetype",
+  "gdk-pixbuf2",
+  "glib2",
+  "gtk3",
+  "harfbuzz",
+  "libjpeg-turbo",
+  "lcms2",
+  "nspr",
+  "nss",
+  "pango",
+  "pixman",
+  "libpng",
+  "pulseaudio-libs",
+  "sqlite-libs",
+  "libstdc++",
+  "libthai",
+  "wayland-libs",
+  "libX11",
+  "libxcb",
+  "libXcomposite",
+  "libXcursor",
+  "libXdamage",
+  "libXext",
+  "libXfixes",
+  "libXinerama",
+  "libxkbcommon",
+  "libXi",
+  "libxml2",
+  "libXrandr",
+  "libXrender",
+  "libXt",
+  "libffi",
+  "libgcc",
+  "zlib"
+];
+
 function buildDesktopEntry({ name, exec, icon }) {
   return `[Desktop Entry]
 Version=1.0
@@ -580,7 +630,11 @@ function rpmChangelogDate() {
   return `${weekdays[date.getUTCDay()]} ${months[date.getUTCMonth()]} ${String(date.getUTCDate()).padStart(2, "0")} ${date.getUTCFullYear()}`;
 }
 
-function rpmSpec({ version, arch }) {
+export function rpmSpec({ version, arch }) {
+  const requires = linuxRpmRuntimeDependencies
+    .map((dependency) => `Requires:       ${dependency}`)
+    .join("\n");
+
   return `%global debug_package %{nil}
 %global _debugsource_packages 0
 Name:           nodely-browser
@@ -589,6 +643,7 @@ Release:        1
 Summary:        Node-based Gecko browser for research workflows
 License:        MPL-2.0
 BuildArch:      ${rpmArchNames[arch] ?? arch}
+${requires}
 Source0:        nodely-browser-system.tar.gz
 
 %description
@@ -1134,7 +1189,7 @@ async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory,
   return outputs;
 }
 
-async function copyNativeInstaller({ platform, arch, sourceArtifactPath, outDirectory }) {
+export async function copyNativeInstaller({ platform, arch, sourceArtifactPath, outDirectory }) {
   const allowedExtensions = nativeInstallerExtensions[platform] ?? [];
   const matchesExpectedExtension = allowedExtensions.some((extension) =>
     sourceArtifactPath.toLowerCase().endsWith(extension)
@@ -1148,7 +1203,20 @@ async function copyNativeInstaller({ platform, arch, sourceArtifactPath, outDire
 
   const outputDirectory = path.join(outDirectory, platform, arch);
   await ensureCleanDirectory(outputDirectory);
-  const destinationPath = path.join(outputDirectory, path.basename(sourceArtifactPath));
+  const version = extractGeckoArtifactVersion(path.basename(sourceArtifactPath));
+
+  if (!version) {
+    throw new Error(
+      `Could not determine the Nodely version from native installer ${path.basename(sourceArtifactPath)}.`
+    );
+  }
+
+  const extension = sourceArtifactPath.toLowerCase().endsWith(".pkg") ? ".pkg" : path.extname(sourceArtifactPath);
+  const destinationFileName =
+    platform === "win32"
+      ? `Nodely-Browser-${version}-windows-${arch}.installer.exe`
+      : `Nodely-Browser-${version}-macos-${arch}${extension}`;
+  const destinationPath = path.join(outputDirectory, destinationFileName);
   await cp(sourceArtifactPath, destinationPath);
   return [destinationPath];
 }

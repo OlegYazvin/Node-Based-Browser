@@ -8,7 +8,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildFlatpakWrapper,
   buildSystemWrapper,
+  copyNativeInstaller,
   debControl,
+  rpmSpec,
   resolveExtractedLinuxAppDirectory
 } from "../../scripts/build-installers.mjs";
 
@@ -162,6 +164,56 @@ describe("build-installers wrappers", () => {
     expect(control).toContain("libxcb-shm0");
     expect(control).toContain("libgcc-s1");
     expect(control).toContain("zlib1g");
+  });
+
+  it("declares the Gecko runtime libraries needed by Fedora", () => {
+    const spec = rpmSpec({
+      version: "140.9.1esr",
+      arch: "x64"
+    });
+
+    expect(spec).toContain("BuildArch:      x86_64");
+    expect(spec).toContain("Requires:       gtk3");
+    expect(spec).toContain("Requires:       dbus-glib");
+    expect(spec).toContain("Requires:       nspr");
+    expect(spec).toContain("Requires:       nss");
+    expect(spec).toContain("Requires:       libX11");
+    expect(spec).toContain("Requires:       libxcb");
+    expect(spec).toContain("Requires:       libxkbcommon");
+    expect(spec).toContain("Requires:       wayland-libs");
+    expect(spec).toContain("Requires:       zlib");
+  });
+
+  it("copies native installers to canonical platform and architecture names", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-native-"));
+    tempDirectories.push(tempDirectory);
+
+    const sourceDirectory = path.join(tempDirectory, "source");
+    const outDirectory = path.join(tempDirectory, "out");
+    const windowsSource = path.join(sourceDirectory, "nodely-browser-140.9.1esr.en-US.win64.installer.exe");
+    const macSource = path.join(sourceDirectory, "nodely-browser-140.9.1esr.en-US.mac.pkg");
+
+    await mkdir(sourceDirectory, { recursive: true });
+    await writeFile(windowsSource, "win");
+    await writeFile(macSource, "mac");
+
+    await expect(
+      copyNativeInstaller({
+        platform: "win32",
+        arch: "x64",
+        sourceArtifactPath: windowsSource,
+        outDirectory
+      })
+    ).resolves.toEqual([path.join(outDirectory, "win32", "x64", "Nodely-Browser-140.9.1esr-windows-x64.installer.exe")]);
+
+    await expect(
+      copyNativeInstaller({
+        platform: "darwin",
+        arch: "arm64",
+        sourceArtifactPath: macSource,
+        outDirectory
+      })
+    ).resolves.toEqual([path.join(outDirectory, "darwin", "arm64", "Nodely-Browser-140.9.1esr-macos-arm64.pkg")]);
   });
 
   it("finds the packaged app inside an extra wrapper directory", async () => {
