@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   patchCrashReporterFtlContents,
+  patchCrashReporterMacInfoStringsContents,
   patchCrashReporterMacPlistContents,
   syncLooseRuntimeOverlay,
   syncPackagedRuntimeOmniOverlay
@@ -36,24 +37,32 @@ describe("sync-overlay", () => {
   });
 
   it("brands macOS crash reporter bundle strings idempotently", () => {
-    const original = [
+    const plist = [
       "<key>CFBundleDisplayName</key>",
       "<string>@APP_NAME@ Crash Reporter</string>",
       "<key>CFBundleIdentifier</key>",
       "<string>org.mozilla.crashreporter</string>",
       "<key>CFBundleName</key>",
-      "<string>Crash Reporter</string>",
-      'CFBundleName = "Crash Reporter";'
+      "<string>Crash Reporter</string>"
+    ].join("\n");
+    const strings = [
+      'CFBundleName = "Crash Reporter";',
+      'CFBundleDisplayName = "@APP_NAME@ Crash Reporter";'
     ].join("\n");
 
-    const patched = patchCrashReporterMacPlistContents(original);
+    const patched = patchCrashReporterMacPlistContents(plist);
     const patchedAgain = patchCrashReporterMacPlistContents(patched);
+    const patchedStrings = patchCrashReporterMacInfoStringsContents(strings);
+    const patchedStringsAgain = patchCrashReporterMacInfoStringsContents(patchedStrings);
 
     expect(patched).toContain("<string>Nodely Crash Reporter</string>");
     expect(patched).toContain("<string>org.nodely.crashreporter</string>");
-    expect(patched).toContain('CFBundleName = "Nodely Crash Reporter";');
     expect(patchedAgain).toBe(patched);
     expect(patchedAgain).not.toContain("Nodely Nodely Crash Reporter");
+    expect(patchedStrings).toContain('CFBundleName = "@APP_NAME@ Crash Reporter";');
+    expect(patchedStrings).toContain('CFBundleDisplayName = "@APP_NAME@ Crash Reporter";');
+    expect(patchedStringsAgain).toBe(patchedStrings);
+    expect(patchedStringsAgain).not.toContain("Nodely Crash Reporter");
   });
 
   it("patches loose runtime browser files after artifact extraction", async () => {

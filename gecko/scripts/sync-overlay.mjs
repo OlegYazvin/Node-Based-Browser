@@ -294,6 +294,21 @@ export function patchCrashReporterMacPlistContents(contents) {
     .replaceAll(/Nodely(?: Nodely)+ Crash Reporter/gu, "Nodely Crash Reporter");
 }
 
+export function patchCrashReporterMacInfoStringsContents(contents) {
+  return contents
+    .replaceAll('CFBundleName = "Crash Reporter";', 'CFBundleName = "@APP_NAME@ Crash Reporter";')
+    .replaceAll('CFBundleName = "Nodely Crash Reporter";', 'CFBundleName = "@APP_NAME@ Crash Reporter";')
+    .replaceAll(
+      'CFBundleDisplayName = "Crash Reporter";',
+      'CFBundleDisplayName = "@APP_NAME@ Crash Reporter";'
+    )
+    .replaceAll(
+      'CFBundleDisplayName = "Nodely Crash Reporter";',
+      'CFBundleDisplayName = "@APP_NAME@ Crash Reporter";'
+    )
+    .replaceAll(/@APP_NAME@(?: @APP_NAME@)+ Crash Reporter/gu, "@APP_NAME@ Crash Reporter");
+}
+
 function ensureCrashReporterBrandingPatched(checkoutDir) {
   const crashReporterFtlPath = path.join(
     checkoutDir,
@@ -354,7 +369,7 @@ function ensureCrashReporterBrandingPatched(checkoutDir) {
   patchFile(
     crashReporterMacInfoStringsPath,
     "toolkit/crashreporter/client/app/macos_app_bundle InfoPlist nodely crash reporter bundle",
-    patchCrashReporterMacPlistContents
+    patchCrashReporterMacInfoStringsContents
   );
 }
 
