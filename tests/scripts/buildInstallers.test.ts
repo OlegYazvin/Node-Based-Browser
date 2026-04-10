@@ -11,6 +11,7 @@ import {
   copyNativeInstaller,
   debControl,
   rpmSpec,
+  resolveInstallerVersion,
   resolveExtractedLinuxAppDirectory
 } from "../../scripts/build-installers.mjs";
 
@@ -231,6 +232,34 @@ describe("build-installers wrappers", () => {
         outDirectory
       })
     ).resolves.toEqual([path.join(outDirectory, "darwin", "arm64", "Nodely-Browser-140.9.1esr-macos-arm64.pkg")]);
+  });
+
+  it("uses an explicit ESR version for native installers that omit the suffix", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-native-esr-"));
+    tempDirectories.push(tempDirectory);
+
+    const sourceDirectory = path.join(tempDirectory, "source");
+    const outDirectory = path.join(tempDirectory, "out");
+    const windowsSource = path.join(sourceDirectory, "nodely-browser-140.9.1.en-US.win64.installer.exe");
+
+    await mkdir(sourceDirectory, { recursive: true });
+    await writeFile(windowsSource, "win");
+
+    await expect(
+      copyNativeInstaller({
+        platform: "win32",
+        arch: "x64",
+        sourceArtifactPath: windowsSource,
+        outDirectory,
+        versionOverride: "140.9.1esr"
+      })
+    ).resolves.toEqual([path.join(outDirectory, "win32", "x64", "Nodely-Browser-140.9.1esr-windows-x64.installer.exe")]);
+  });
+
+  it("rejects installer version overrides that do not match the packaged artifact", () => {
+    expect(() => resolveInstallerVersion("140.10.0", "140.9.1esr", "native installer test.exe")).toThrow(
+      "Installer version override 140.9.1esr does not match packaged artifact version 140.10.0"
+    );
   });
 
   it("finds the packaged app inside an extra wrapper directory", async () => {

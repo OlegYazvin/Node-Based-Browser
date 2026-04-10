@@ -64,6 +64,7 @@ Options:
   --arch <arch>           x64 | arm64
   --channel <name>        Release channel in gecko/release-artifacts (default: local)
   --artifact <path>       Override the staged Gecko release artifact path
+  --version <version>     Override the visible installer version after checking it matches the artifact
   --out-dir <path>        Installer build output directory (default: out/make)
   --strict                Fail if any expected installer builder fails
   --no-sync               Skip syncing finished installers into Installer/
@@ -77,6 +78,7 @@ function parseArguments(argv) {
     arch: currentArch(),
     channel: "local",
     artifactPath: null,
+    versionOverride: null,
     outDirectory: outMakeDirectory,
     strict: false,
     sync: true
@@ -98,6 +100,9 @@ function parseArguments(argv) {
       case "--artifact":
         options.artifactPath = path.resolve(argv[++index]);
         break;
+      case "--version":
+        options.versionOverride = argv[++index];
+        break;
       case "--out-dir":
         options.outDirectory = path.resolve(argv[++index]);
         break;
@@ -117,6 +122,30 @@ function parseArguments(argv) {
   }
 
   return options;
+}
+
+function comparableInstallerVersion(version) {
+  return version.trim().toLowerCase().replace(/esr$/u, "");
+}
+
+export function resolveInstallerVersion(sourceVersion, versionOverride, sourceDescription = "packaged artifact") {
+  if (!sourceVersion) {
+    throw new Error(`Could not determine the Nodely version from ${sourceDescription}.`);
+  }
+
+  const normalizedOverride = versionOverride?.trim() || null;
+
+  if (!normalizedOverride) {
+    return sourceVersion;
+  }
+
+  if (comparableInstallerVersion(sourceVersion) !== comparableInstallerVersion(normalizedOverride)) {
+    throw new Error(
+      `Installer version override ${normalizedOverride} does not match packaged artifact version ${sourceVersion} from ${sourceDescription}.`
+    );
+  }
+
+  return normalizedOverride;
 }
 
 function linuxRunFileName(version, arch) {
@@ -1218,7 +1247,7 @@ async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory,
   return outputs;
 }
 
-export async function copyNativeInstaller({ platform, arch, sourceArtifactPath, outDirectory }) {
+export async function copyNativeInstaller({ platform, arch, sourceArtifactPath, outDirectory, versionOverride = null }) {
   const allowedExtensions = nativeInstallerExtensions[platform] ?? [];
   const matchesExpectedExtension = allowedExtensions.some((extension) =>
     sourceArtifactPath.toLowerCase().endsWith(extension)
@@ -1232,13 +1261,9 @@ export async function copyNativeInstaller({ platform, arch, sourceArtifactPath, 
 
   const outputDirectory = path.join(outDirectory, platform, arch);
   await ensureCleanDirectory(outputDirectory);
-  const version = extractGeckoArtifactVersion(path.basename(sourceArtifactPath));
-
-  if (!version) {
-    throw new Error(
-      `Could not determine the Nodely version from native installer ${path.basename(sourceArtifactPath)}.`
-    );
-  }
+  const sourceFileName = path.basename(sourceArtifactPath);
+  const sourceVersion = extractGeckoArtifactVersion(sourceFileName);
+  const version = resolveInstallerVersion(sourceVersion, versionOverride, `native installer ${sourceFileName}`);
 
   const extension = sourceArtifactPath.toLowerCase().endsWith(".pkg") ? ".pkg" : path.extname(sourceArtifactPath);
   const destinationFileName =
@@ -1258,13 +1283,9 @@ async function main() {
     channel: options.channel,
     artifactPath: options.artifactPath
   });
-  const version = extractGeckoArtifactVersion(path.basename(sourceArtifactPath));
-
-  if (!version) {
-    throw new Error(
-      `Could not determine the Nodely version from packaged artifact ${path.basename(sourceArtifactPath)}.`
-    );
-  }
+  const sourceArtifactName = path.basename(sourceArtifactPath);
+  const sourceVersion = extractGeckoArtifactVersion(sourceArtifactName);
+  const version = resolveInstallerVersion(sourceVersion, options.versionOverride, `packaged artifact ${sourceArtifactName}`);
 
   let outputs = [];
 
@@ -1281,7 +1302,8 @@ async function main() {
       platform: options.platform,
       arch: options.arch,
       sourceArtifactPath,
-      outDirectory: options.outDirectory
+      outDirectory: options.outDirectory,
+      versionOverride: options.versionOverride
     });
   } else {
     throw new Error(`Unsupported installer platform: ${options.platform}`);

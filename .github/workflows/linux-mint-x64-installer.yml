@@ -19,6 +19,7 @@ permissions:
 
 env:
   FIREFOX_ESR_VERSION: 140.9.1esr
+  FIREFOX_ESR_REF: FIREFOX_140_9_1esr_RELEASE
 
 jobs:
   build-linux-mint-x64:
@@ -72,7 +73,7 @@ jobs:
       - name: Bootstrap Gecko ESR checkout
         run: |
           set -o pipefail
-          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" --no-sync --no-patches 2>&1 | tee gecko-bootstrap.log; then
+          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" --ref "$FIREFOX_ESR_REF" --no-sync --no-patches 2>&1 | tee gecko-bootstrap.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-bootstrap.log --mode bootstrap)"
             echo "::error title=Gecko bootstrap failed::$summary"
             exit 1
@@ -133,7 +134,7 @@ jobs:
       - name: Build platform installer
         run: |
           set -o pipefail
-          if ! npm run installers -- --platform linux --arch x64 --channel ci --no-sync 2>&1 | tee installer-build.log; then
+          if ! npm run installers -- --platform linux --arch x64 --channel ci --version "$FIREFOX_ESR_VERSION" --no-sync 2>&1 | tee installer-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log installer-build.log --mode installer)"
             echo "::error title=Installer build failed::$summary"
             exit 1
@@ -178,12 +179,19 @@ jobs:
 
       - name: Sync finished Linux x64 installers into Installer
         run: |
-          npm run installers:sync -- \
-            --platform linux \
-            --arch x64 \
-            --built-by github-actions \
-            --build-workflow .github/workflows/linux-mint-x64-installer.yml \
-            --build-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          find out/make/linux/x64 -maxdepth 1 -type f -printf 'Installer output: %f\n' | sort
+          sync_log="$RUNNER_TEMP/installer-sync-linux-x64.log"
+
+          if ! npm run installers:sync -- \
+              --platform linux \
+              --arch x64 \
+              --built-by github-actions \
+              --build-workflow .github/workflows/linux-mint-x64-installer.yml \
+              --build-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" 2>&1 | tee "$sync_log"; then
+            summary="$(node scripts/summarize-ci-log.mjs --log "$sync_log" --mode installer)"
+            echo "::error title=Installer sync failed (linux/x64)::$summary"
+            exit 1
+          fi
 
       - name: Commit promoted Linux x64 installers
         run: |
