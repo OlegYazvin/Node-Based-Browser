@@ -28,6 +28,7 @@ const runtimeOverlaySourceDirectory = path.join(
   "content",
   "nodely"
 );
+const NODELY_CRASH_REPORT_EMAIL = "olegyazvin@gmail.com";
 
 function usage() {
   console.log(`Usage: node gecko/scripts/sync-overlay.mjs --checkout-dir <path>
@@ -138,6 +139,19 @@ function readZipEntry(archivePath, entryPath) {
   throw new Error(`unzip -p ${archivePath} ${entryPath} failed${output ? `: ${output}` : ""}`);
 }
 
+function maybeReadZipEntry(archivePath, entryPath) {
+  const result = spawnSync("unzip", ["-p", archivePath, entryPath], {
+    cwd: repositoryRoot,
+    encoding: "utf8"
+  });
+
+  if (result.status === 0 || result.stdout) {
+    return result.stdout ?? "";
+  }
+
+  return null;
+}
+
 function normalizeZipArchive(archivePath) {
   const fixedArchivePath = path.join(
     os.tmpdir(),
@@ -213,6 +227,135 @@ function patchFirefoxDefaultsContents(contents) {
   }
 
   return next;
+}
+
+export function patchCrashReporterFtlContents(contents) {
+  let next = contents;
+
+  next = next.replace(
+    "crashreporter-branded-title = { -brand-short-name } Crash Reporter",
+    "crashreporter-branded-title = Nodely Crash Reporter"
+  );
+  next = next.replace(
+    "crashreporter-crashed-and-restore = { -brand-short-name } had a problem and crashed. We’ll try to restore your tabs and windows when it restarts.",
+    "crashreporter-crashed-and-restore = Nodely had a problem and crashed. We’ll try to restore your tabs and windows when it restarts."
+  );
+  next = next.replace(
+    "crashreporter-plea = To help us diagnose and fix the problem, you can send us a crash report.",
+    `crashreporter-plea = To help us diagnose and fix the problem, you can send a crash report to ${NODELY_CRASH_REPORT_EMAIL}.`
+  );
+  next = next.replace(
+    "crashreporter-information = This application is run after a crash to report the problem to { -vendor-short-name }. It should not be run directly.",
+    `crashreporter-information = This application is run after a Nodely crash to report the problem to ${NODELY_CRASH_REPORT_EMAIL}. It should not be run directly.`
+  );
+  next = next.replace(
+    "crashreporter-error = { -brand-short-name } had a problem and crashed. Unfortunately, the crash reporter is unable to submit a report for this crash.",
+    "crashreporter-error = Nodely had a problem and crashed. Unfortunately, the crash reporter is unable to submit a report for this crash."
+  );
+  next = next.replace(
+    "crashreporter-no-run-message = This application is run after a crash to report the problem to the application vendor. It should not be run directly.",
+    `crashreporter-no-run-message = This application is run after a Nodely crash to report the problem to ${NODELY_CRASH_REPORT_EMAIL}. It should not be run directly.`
+  );
+  next = next.replace(
+    "crashreporter-checkbox-send-report = Tell { -vendor-short-name } about this crash so they can fix it.",
+    `crashreporter-checkbox-send-report = Send this crash report to ${NODELY_CRASH_REPORT_EMAIL} so Nodely can be fixed.`
+  );
+  next = next.replace(
+    "crashreporter-submit-success = Report submitted successfully!",
+    `crashreporter-submit-success = Crash report sent to ${NODELY_CRASH_REPORT_EMAIL}.`
+  );
+  next = next.replace(
+    "crashreporter-submit-failure = There was a problem submitting your report.",
+    `crashreporter-submit-failure = There was a problem sending your report to ${NODELY_CRASH_REPORT_EMAIL}.`
+  );
+
+  return next;
+}
+
+function patchCrashReporterUiFallbackContents(contents) {
+  return contents
+    .replace(
+      'Window title(string_or("crashreporter-branded-title", "Firefox Crash Reporter"))',
+      'Window title(string_or("crashreporter-branded-title", "Nodely Crash Reporter"))'
+    )
+    .replace(
+      '"The application had a problem and crashed. \\',
+      '"Nodely had a problem and crashed. \\'
+    );
+}
+
+export function patchCrashReporterMacPlistContents(contents) {
+  return contents
+    .replaceAll("@APP_NAME@ Crash Reporter", "Nodely Crash Reporter")
+    .replaceAll("Firefox Crash Reporter", "Nodely Crash Reporter")
+    .replaceAll(">Crash Reporter<", ">Nodely Crash Reporter<")
+    .replaceAll('"Crash Reporter"', '"Nodely Crash Reporter"')
+    .replaceAll("org.mozilla.crashreporter", "org.nodely.crashreporter")
+    .replaceAll(/Nodely(?: Nodely)+ Crash Reporter/gu, "Nodely Crash Reporter");
+}
+
+function ensureCrashReporterBrandingPatched(checkoutDir) {
+  const crashReporterFtlPath = path.join(
+    checkoutDir,
+    "toolkit",
+    "locales",
+    "en-US",
+    "crashreporter",
+    "crashreporter.ftl"
+  );
+  const crashReporterUiPath = path.join(
+    checkoutDir,
+    "toolkit",
+    "crashreporter",
+    "client",
+    "app",
+    "src",
+    "ui",
+    "mod.rs"
+  );
+  const crashReporterMacPlistPath = path.join(
+    checkoutDir,
+    "toolkit",
+    "crashreporter",
+    "client",
+    "app",
+    "src",
+    "ui",
+    "macos",
+    "plist.rs"
+  );
+  const crashReporterMacInfoStringsPath = path.join(
+    checkoutDir,
+    "toolkit",
+    "crashreporter",
+    "client",
+    "app",
+    "macos_app_bundle",
+    "Resources",
+    "English.lproj",
+    "InfoPlist.strings.in"
+  );
+
+  patchFile(
+    crashReporterFtlPath,
+    "toolkit/locales/en-US/crashreporter/crashreporter.ftl nodely wording",
+    patchCrashReporterFtlContents
+  );
+  patchFile(
+    crashReporterUiPath,
+    "toolkit/crashreporter/client/app/src/ui/mod.rs nodely crash reporter fallback",
+    patchCrashReporterUiFallbackContents
+  );
+  patchFile(
+    crashReporterMacPlistPath,
+    "toolkit/crashreporter/client/app/src/ui/macos/plist.rs nodely crash reporter bundle",
+    patchCrashReporterMacPlistContents
+  );
+  patchFile(
+    crashReporterMacInfoStringsPath,
+    "toolkit/crashreporter/client/app/macos_app_bundle InfoPlist nodely crash reporter bundle",
+    patchCrashReporterMacPlistContents
+  );
 }
 
 function ensureUnofficialBrandingPatched(checkoutDir) {
@@ -434,6 +577,10 @@ export function syncLooseRuntimeOverlay(checkoutDir) {
     path.join(checkoutDir, "obj-nodely", "dist", "bin", "browser", "defaults", "preferences", "firefox.js"),
     path.join(checkoutDir, "obj-nodely", "dist", "nodely", "browser", "defaults", "preferences", "firefox.js")
   ];
+  const runtimeCrashReporterFtlPaths = [
+    path.join(checkoutDir, "obj-nodely", "dist", "bin", "localization", "en-US", "crashreporter", "crashreporter.ftl"),
+    path.join(checkoutDir, "obj-nodely", "dist", "nodely", "localization", "en-US", "crashreporter", "crashreporter.ftl")
+  ];
 
   let updated = false;
 
@@ -461,6 +608,16 @@ export function syncLooseRuntimeOverlay(checkoutDir) {
 
     updated =
       patchFile(firefoxDefaultsPath, "runtime firefox.js nodely startup prefs", patchFirefoxDefaultsContents) || updated;
+  }
+
+  for (const crashReporterFtlPath of runtimeCrashReporterFtlPaths) {
+    if (!existsSync(crashReporterFtlPath)) {
+      continue;
+    }
+
+    updated =
+      patchFile(crashReporterFtlPath, "runtime crashreporter.ftl nodely wording", patchCrashReporterFtlContents) ||
+      updated;
   }
 
   return updated;
@@ -530,8 +687,45 @@ function syncRuntimeOmniArchive(archivePath) {
   }
 }
 
+function syncCrashReporterOmniArchive(archivePath) {
+  if (!existsSync(archivePath)) {
+    return false;
+  }
+
+  const crashReporterFtlEntry = "localization/en-US/crashreporter/crashreporter.ftl";
+  const crashReporterFtl = maybeReadZipEntry(archivePath, crashReporterFtlEntry);
+  if (crashReporterFtl === null) {
+    return false;
+  }
+
+  const nextCrashReporterFtl = patchCrashReporterFtlContents(crashReporterFtl);
+
+  if (nextCrashReporterFtl === crashReporterFtl) {
+    return false;
+  }
+
+  normalizeZipArchive(archivePath);
+  const stagingDirectory = mkdtempSync(path.join(os.tmpdir(), "nodely-crashreporter-omni-sync-"));
+
+  try {
+    runCommand("zip", ["-q", archivePath, stageArchiveEntry(stagingDirectory, crashReporterFtlEntry, nextCrashReporterFtl)], {
+      cwd: stagingDirectory
+    });
+    return true;
+  } finally {
+    rmSync(stagingDirectory, {
+      force: true,
+      recursive: true
+    });
+  }
+}
+
 export function syncPackagedRuntimeOmniOverlay(checkoutDir) {
   const runtimeArchives = [path.join(checkoutDir, "obj-nodely", "dist", "nodely", "browser", "omni.ja")];
+  const crashReporterRuntimeArchives = [
+    path.join(checkoutDir, "obj-nodely", "dist", "bin", "omni.ja"),
+    path.join(checkoutDir, "obj-nodely", "dist", "nodely", "omni.ja")
+  ];
 
   let updated = false;
 
@@ -541,6 +735,14 @@ export function syncPackagedRuntimeOmniOverlay(checkoutDir) {
     }
 
     updated = syncRuntimeOmniArchive(archivePath) || updated;
+  }
+
+  for (const archivePath of crashReporterRuntimeArchives) {
+    if (!existsSync(archivePath)) {
+      continue;
+    }
+
+    updated = syncCrashReporterOmniArchive(archivePath) || updated;
   }
 
   return updated;
@@ -559,6 +761,7 @@ export function syncOverlay({ checkoutDir }) {
   ensureBrowserMozConfigurePatched(checkoutDir);
   ensureBrowserProfileDefaultsPatched(checkoutDir);
   ensureUnofficialBrandingPatched(checkoutDir);
+  ensureCrashReporterBrandingPatched(checkoutDir);
   const looseRuntimeSynced = syncLooseRuntimeOverlay(checkoutDir);
   const packagedRuntimeSynced = syncPackagedRuntimeOmniOverlay(checkoutDir);
   if (looseRuntimeSynced) {

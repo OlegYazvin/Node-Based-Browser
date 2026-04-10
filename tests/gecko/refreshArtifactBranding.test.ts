@@ -4,9 +4,39 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ensureMacArtifactCompatibility, refreshBranding } from "../../gecko/scripts/refresh-artifact-branding.mjs";
+import {
+  ensureMacArtifactCompatibility,
+  patchApplicationIni,
+  refreshBranding
+} from "../../gecko/scripts/refresh-artifact-branding.mjs";
 
 describe("refresh-artifact-branding", () => {
+  it("routes crash report metadata through the Nodely crash contact", () => {
+    const patched = patchApplicationIni(
+      [
+        "[App]",
+        "Vendor=Mozilla",
+        "Name=Firefox",
+        "RemotingName=firefox",
+        "CodeName=Firefox",
+        "Version=140.9.1esr",
+        "BuildID=20260410000102",
+        "ID={ec8030f7-c20a-464f-9b0e-13a3a9e97384}",
+        "[Crash Reporter]",
+        "ServerURL=https://crashes.nodely.invalid/submit?id=old&version=old&buildid=old",
+        "[AppUpdate]",
+        "URL=https://example.invalid"
+      ].join("\n")
+    );
+
+    expect(patched).toContain(
+      "ServerURL=https://crashes.nodely.invalid/submit?to=olegyazvin%40gmail.com&id={a75f9f03-78b1-4c8a-a2c7-f12d45088b29}&version=140.9.1esr&buildid=20260410000102"
+    );
+    expect(patched).toContain("Vendor=Nodely");
+    expect(patched).toContain("Name=Nodely");
+    expect(patched).toContain("URL=");
+  });
+
   it("creates the full mac dist/bin alias set for app bundle artifacts", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-mac-compat-"));
     const executablePath = path.join(

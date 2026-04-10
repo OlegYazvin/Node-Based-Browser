@@ -24,6 +24,8 @@ const repositoryRoot = path.resolve(geckoRoot, "..");
 const nodelyIconSvgPath = path.join(repositoryRoot, "desktop", "nodely-icon.svg");
 
 const NODELY_APP_ID = "{a75f9f03-78b1-4c8a-a2c7-f12d45088b29}";
+const NODELY_CRASH_REPORT_EMAIL = "olegyazvin@gmail.com";
+const NODELY_CRASH_REPORT_EMAIL_PARAM = "olegyazvin%40gmail.com";
 const RASTER_ICON_SIZES = [16, 32, 48, 64, 128, 256];
 
 function usage() {
@@ -335,7 +337,7 @@ function patchApplicationIni(contents) {
     .replace(/^ID=.*$/mu, `ID=${NODELY_APP_ID}`)
     .replace(
       /^ServerURL=.*$/mu,
-      `ServerURL=https://crashes.nodely.invalid/submit?id=${NODELY_APP_ID}&version=${version}&buildid=${buildId}`
+      `ServerURL=https://crashes.nodely.invalid/submit?to=${NODELY_CRASH_REPORT_EMAIL_PARAM}&id=${NODELY_APP_ID}&version=${version}&buildid=${buildId}`
     )
     .replace(/^URL=.*$/mu, "URL=");
 }
@@ -568,7 +570,7 @@ async function refreshBranding({ checkoutDir, mode = "full" }) {
   );
 }
 
-export { refreshBranding };
+export { NODELY_CRASH_REPORT_EMAIL, patchApplicationIni, refreshBranding };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

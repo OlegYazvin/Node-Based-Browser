@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(geckoRoot, "..");
+const nodelyCrashReportBaseUrl = "https://crashes.nodely.invalid/report-to/olegyazvin%40gmail.com";
 
 function parseArguments(argv) {
   const options = {
@@ -62,7 +63,7 @@ function buildMozconfig({ mode }) {
     lines.push('export MOZ_APP_DISPLAYNAME=Nodely');
     lines.push('export MOZ_APP_REMOTINGNAME=nodely');
     lines.push('export MOZ_MACBUNDLE_ID=org.nodely.browser');
-    lines.push('export MOZ_CRASHREPORTER_URL=https://crashes.nodely.invalid/submit');
+    lines.push(`export MOZ_CRASHREPORTER_URL=${nodelyCrashReportBaseUrl}`);
   }
 
   lines.push("");
