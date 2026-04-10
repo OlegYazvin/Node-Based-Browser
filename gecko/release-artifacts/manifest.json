@@ -1,14 +1,4 @@
 {
-  "generatedAt": "2026-04-03T22:24:04.229Z",
-  "artifacts": [
-    {
-      "path": "linux/arm64/local/nodely-browser-140.10.0.en-US.linux-aarch64.tar.xz",
-      "platform": "linux",
-      "arch": "arm64",
-      "channel": "local",
-      "buildArtifact": "nodely-140.10.0.en-US.linux-aarch64.tar.xz",
-      "size": 66584856,
-      "stagedAt": "2026-04-03T22:24:04.229Z"
-    }
-  ]
+  "generatedAt": "2026-04-10T02:35:08.000Z",
+  "artifacts": []
 }
