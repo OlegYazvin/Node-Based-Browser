@@ -22,8 +22,9 @@ ensure_linux_desktop_integration() {
 
   local applications_dir="$HOME/.local/share/applications"
   local icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
-  local desktop_file="$applications_dir/nodely.desktop"
-  local icon_file="$icon_dir/nodely.svg"
+  local desktop_file="$applications_dir/nodely-local-build.desktop"
+  local legacy_desktop_file="$applications_dir/nodely.desktop"
+  local icon_file="$icon_dir/nodely-local-build.svg"
   local escaped_script_path
 
   escaped_script_path=$(desktop_exec_escape "$script_dir/launch-nodely.sh")
@@ -34,20 +35,25 @@ ensure_linux_desktop_integration() {
     cp "$repo_root/desktop/nodely-icon.svg" "$icon_file" 2>/dev/null || true
   fi
 
+  if [[ -f "$legacy_desktop_file" ]] && grep -Eq 'Node-Based(\\ | )Browser/scripts/launch-nodely\.sh' "$legacy_desktop_file"; then
+    mv -f "$legacy_desktop_file" "$legacy_desktop_file.nodely-local-backup" 2>/dev/null || rm -f "$legacy_desktop_file" || true
+  fi
+
   cat >"$desktop_file" <<EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Nodely
-Comment=Launch Nodely Browser
+Name=Nodely Local Build
+Comment=Launch the local Nodely Gecko build
 TryExec=$escaped_script_path
 Exec=$escaped_script_path %u
 Path=$repo_root
-Icon=nodely
+Icon=nodely-local-build
 Terminal=false
 StartupNotify=true
 StartupWMClass=nodely
 X-GNOME-WMClass=nodely
+NoDisplay=true
 Categories=Network;WebBrowser;
 Keywords=browser;research;nodely;graph;
 EOF
@@ -117,10 +123,8 @@ fi
 
 exec env \
   MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
-  MOZ_DESKTOP_FILE_NAME="${MOZ_DESKTOP_FILE_NAME:-nodely.desktop}" \
+  MOZ_DESKTOP_FILE_NAME="${MOZ_DESKTOP_FILE_NAME:-nodely-local-build.desktop}" \
   MOZ_APP_REMOTINGNAME="${MOZ_APP_REMOTINGNAME:-nodely}" \
   "$binary" \
-  -new-instance \
-  -no-remote \
   -profile "$profile_dir" \
   "$@"

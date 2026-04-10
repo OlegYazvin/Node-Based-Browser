@@ -24,7 +24,8 @@ import {
 const systemDesktopFileName = "nodely-browser.desktop";
 const systemIconName = "nodely-browser";
 const systemInstallRoot = "/opt/nodely-browser/app";
-const linuxPackageRelease = "3";
+const systemWrapperPath = "/usr/bin/nodely-browser";
+const linuxPackageRelease = "4";
 const flatpakAppId = "io.nodely.Browser";
 const flatpakRuntime = "org.freedesktop.Platform";
 const flatpakSdk = "org.freedesktop.Sdk";
@@ -303,7 +304,7 @@ const linuxRpmRuntimeDependencies = [
   "zlib"
 ];
 
-function buildDesktopEntry({ name, exec, icon }) {
+export function buildDesktopEntry({ name, exec, icon }) {
   return `[Desktop Entry]
 Version=1.0
 Type=Application
@@ -320,6 +321,21 @@ Categories=Network;WebBrowser;
 Keywords=browser;research;nodely;graph;
 MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
 `;
+}
+
+function staleUserLauncherCleanupScript({ finalNoop = false } = {}) {
+  return `set +e
+for applications_dir in /home/*/.local/share/applications /root/.local/share/applications; do
+  [ -d "$applications_dir" ] || continue
+  for desktop_path in "$applications_dir"/nodely.desktop "$applications_dir"/nodely-local-build.desktop "$applications_dir"/userapp-Nodely-*.desktop; do
+    [ -f "$desktop_path" ] || continue
+    if grep -Eq 'Node-Based(\\\\ | )Browser/scripts/launch-nodely\\.sh|Nodely-Gecko/.*/obj-nodely/dist/nodely/(nodely|nodely-bin)|nodely-local-build\\.desktop' "$desktop_path"; then
+      mv -f "$desktop_path" "$desktop_path.nodely-local-backup" || rm -f "$desktop_path" || true
+    fi
+  done
+done
+set -e
+${finalNoop ? ":" : ""}`;
 }
 
 function shellMozBackendSetup() {
@@ -653,9 +669,10 @@ Description: Nodely Browser for ${distributionLabel}
 `;
 }
 
-function desktopDatabaseScript() {
+function desktopDatabaseScript({ cleanStaleUserLaunchers = false } = {}) {
   return `#!/usr/bin/env bash
 set -e
+${cleanStaleUserLaunchers ? `${staleUserLauncherCleanupScript().trim()}\n` : ""}
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
 fi
@@ -702,6 +719,7 @@ mkdir -p %{buildroot}
 tar --no-same-owner --no-same-permissions -xzf %{SOURCE0} -C %{buildroot}
 
 %post
+${staleUserLauncherCleanupScript({ finalNoop: true }).trim()}
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database /usr/share/applications >/dev/null 2>&1 || :
 fi
@@ -901,7 +919,7 @@ async function prepareSystemPayload({ sourceArtifactPath, temporaryDirectory, ic
     desktopPath,
     buildDesktopEntry({
       name: "Nodely Browser",
-      exec: "nodely-browser",
+      exec: systemWrapperPath,
       icon: systemIconName
     }),
     "utf8"
@@ -940,7 +958,7 @@ async function buildDebInstaller({ version, outputDirectory, arch, distribution,
     const postrmPath = path.join(rootDirectory, "DEBIAN", "postrm");
 
     await writeFile(controlPath, debControl({ version, arch, distribution }), "utf8");
-    await writeFile(postinstPath, desktopDatabaseScript(), "utf8");
+    await writeFile(postinstPath, desktopDatabaseScript({ cleanStaleUserLaunchers: true }), "utf8");
     await writeFile(postrmPath, desktopDatabaseScript(), "utf8");
     await chmod(postinstPath, 0o755);
     await chmod(postrmPath, 0o755);

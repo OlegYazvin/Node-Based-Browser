@@ -98,7 +98,7 @@ podman run --rm \
       exit 127
     fi
     grep -q 'Mozilla Firefox\\|Nodely' /tmp/nodely-version.txt
-    if ! apt-get install -y --no-install-recommends xvfb xauth dbus-x11 >/tmp/nodely-apt-gui-smoke.log 2>&1; then
+    if ! apt-get install -y --no-install-recommends xvfb xauth dbus-x11 xdotool x11-utils >/tmp/nodely-apt-gui-smoke.log 2>&1; then
       cat /tmp/nodely-apt-gui-smoke.log >&2 || true
       exit 1
     fi
@@ -109,6 +109,38 @@ podman run --rm \
       exit 127
     fi
     test -s /tmp/nodely-headless.png
+    window_home=\"\$(mktemp -d)\"
+    if ! timeout 60s xvfb-run -a bash -lc '
+      set -euo pipefail
+      export HOME=\"\$1\"
+      /usr/bin/nodely-browser about:blank >/tmp/nodely-window.out 2>/tmp/nodely-window.err &
+      browser_pid=\$!
+      cleanup() {
+        kill \"\$browser_pid\" >/dev/null 2>&1 || true
+        wait \"\$browser_pid\" >/dev/null 2>&1 || true
+      }
+      trap cleanup EXIT
+      for _ in \$(seq 1 45); do
+        if xdotool search --onlyvisible --pid \"\$browser_pid\" >/tmp/nodely-window.ids 2>/dev/null ||
+          xdotool search --onlyvisible --class nodely >/tmp/nodely-window.ids 2>/dev/null ||
+          xwininfo -root -tree 2>/dev/null | grep -Eiq \"nodely|firefox|browser\"; then
+          exit 0
+        fi
+        if ! kill -0 \"\$browser_pid\" >/dev/null 2>&1; then
+          wait \"\$browser_pid\" >/dev/null 2>&1 || true
+          exit 1
+        fi
+        sleep 1
+      done
+      xwininfo -root -tree >/tmp/nodely-window-tree.txt 2>&1 || true
+      exit 1
+    ' nodely-desktop-smoke \"\$window_home\"; then
+      cat /tmp/nodely-window.out >&2 || true
+      cat /tmp/nodely-window.err >&2 || true
+      cat /tmp/nodely-window-tree.txt >&2 || true
+      find \"\$window_home/.local/share/nodely\" -maxdepth 4 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
+      exit 127
+    fi
     apt-get remove -y nodely-browser
     test ! -e /usr/bin/nodely-browser
   "

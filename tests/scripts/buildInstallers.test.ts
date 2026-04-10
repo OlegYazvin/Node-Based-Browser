@@ -6,6 +6,7 @@ import { lstat, mkdtemp, mkdir, readlink, rm, symlink, writeFile } from "node:fs
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  buildDesktopEntry,
   buildFlatpakWrapper,
   buildSystemWrapper,
   copyNativeInstaller,
@@ -23,6 +24,17 @@ afterEach(async () => {
 });
 
 describe("build-installers wrappers", () => {
+  it("uses an absolute desktop launcher path for system installs", () => {
+    const entry = buildDesktopEntry({
+      name: "Nodely Browser",
+      exec: "/usr/bin/nodely-browser",
+      icon: "nodely-browser"
+    });
+
+    expect(entry).toContain("TryExec=/usr/bin/nodely-browser");
+    expect(entry).toContain("Exec=/usr/bin/nodely-browser %u");
+  });
+
   it("uses session-aware backend detection for system installs", () => {
     const wrapper = buildSystemWrapper({
       installRoot: "/opt/nodely-browser/app",
@@ -139,7 +151,7 @@ describe("build-installers wrappers", () => {
       distribution: "ubuntu"
     });
 
-    expect(control).toContain("Version: 140.10.0-3");
+    expect(control).toContain("Version: 140.10.0-4");
     expect(control).toContain("Depends:");
     expect(control).toContain("libatk1.0-0");
     expect(control).toContain("libdbus-1-3");
@@ -195,7 +207,7 @@ describe("build-installers wrappers", () => {
     });
 
     expect(spec).toContain("BuildArch:      x86_64");
-    expect(spec).toContain("Release:        3");
+    expect(spec).toContain("Release:        4");
     expect(spec).toContain("%global __os_install_post %{nil}");
     expect(spec).toContain("Source0:        nodely-browser-payload.tar.gz");
     expect(spec).toContain("Requires:       gtk3");
