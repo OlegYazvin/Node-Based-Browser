@@ -977,8 +977,10 @@ async function buildRpmInstaller({ version, outputDirectory, arch, payloadRoot }
       [
         "set -euo pipefail",
         "if ! dnf -y install rpm-build >/tmp/nodely-rpm-dnf.log 2>&1; then cat /tmp/nodely-rpm-dnf.log >&2; exit 1; fi",
-        "cp -a /workspace/rpmbuild /tmp/rpmbuild",
-        "if ! rpmbuild --define '_topdir /tmp/rpmbuild' -bb /tmp/rpmbuild/SPECS/nodely-browser.spec >/tmp/nodely-rpmbuild.log 2>&1; then tail -n 160 /tmp/nodely-rpmbuild.log >&2; exit 1; fi",
+        "mkdir -p /tmp/rpmbuild",
+        "cp -R /workspace/rpmbuild/. /tmp/rpmbuild/",
+        "chmod -R u+rwX /tmp/rpmbuild",
+        "if ! rpmbuild --define '_topdir /tmp/rpmbuild' -bb /tmp/rpmbuild/SPECS/nodely-browser.spec >/tmp/nodely-rpmbuild.log 2>&1; then grep -Ei 'error:|bad exit|failed|cannot|permission|no such|cp:|tar:' /tmp/nodely-rpmbuild.log >&2 || true; tail -n 80 /tmp/nodely-rpmbuild.log >&2; exit 1; fi",
         "rpm_path=\"$(find /tmp/rpmbuild/RPMS -name '*.rpm' -print -quit)\"",
         "test -n \"$rpm_path\"",
         `cp "$rpm_path" /out/${path.basename(finalPath)}`
