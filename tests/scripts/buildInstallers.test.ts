@@ -182,7 +182,7 @@ describe("build-installers wrappers", () => {
     expect(spec).toContain("Requires:       libxkbcommon");
     expect(spec).toContain("Requires:       wayland-libs");
     expect(spec).toContain("Requires:       zlib");
-    expect(spec).toContain("tar --no-same-owner --no-same-permissions -xzf %{SOURCE0}");
+    expect(spec).toContain("cp -R -P /payload/opt /payload/usr %{buildroot}/");
   });
 
   it("copies native installers to canonical platform and architecture names", async () => {
