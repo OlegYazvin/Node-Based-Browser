@@ -105,7 +105,7 @@ podman run --rm \
     if ! timeout 45s xvfb-run -a /usr/bin/nodely-browser --headless --screenshot /tmp/nodely-headless.png about:blank >/tmp/nodely-headless.out 2>/tmp/nodely-headless.err; then
       cat /tmp/nodely-headless.out >&2 || true
       cat /tmp/nodely-headless.err >&2 || true
-      find "\${HOME:-/root}/.local/share/nodely" -maxdepth 4 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
+      find "\${HOME:-/root}/.local/share/nodely-browser" -maxdepth 4 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
       exit 127
     fi
     test -s /tmp/nodely-headless.png
@@ -113,7 +113,8 @@ podman run --rm \
     if ! timeout 60s xvfb-run -a bash -lc '
       set -euo pipefail
       export HOME=\"\$1\"
-      /usr/bin/nodely-browser about:blank >/tmp/nodely-window.out 2>/tmp/nodely-window.err &
+      smoke_url=\"data:text/html,%3Ctitle%3ENodely%20Desktop%20Smoke%3C%2Ftitle%3E%3Ch1%3ENodely%20Desktop%20Smoke%3C%2Fh1%3E\"
+      /usr/bin/nodely-browser \"\$smoke_url\" >/tmp/nodely-window.out 2>/tmp/nodely-window.err &
       browser_pid=\$!
       cleanup() {
         kill \"\$browser_pid\" >/dev/null 2>&1 || true
@@ -121,10 +122,12 @@ podman run --rm \
       }
       trap cleanup EXIT
       for _ in \$(seq 1 45); do
-        if xdotool search --onlyvisible --pid \"\$browser_pid\" >/tmp/nodely-window.ids 2>/dev/null ||
-          xdotool search --onlyvisible --class nodely >/tmp/nodely-window.ids 2>/dev/null ||
-          { command -v xwininfo >/dev/null 2>&1 && xwininfo -root -tree 2>/dev/null | grep -Eiq \"nodely|firefox|browser\"; }; then
+        if xdotool search --onlyvisible --name \"Nodely Desktop Smoke\" >/tmp/nodely-window.ids 2>/dev/null; then
           exit 0
+        fi
+        if xdotool search --onlyvisible --name \"Crash Reporter\" >/tmp/nodely-crashreporter.ids 2>/dev/null; then
+          xwininfo -root -tree >/tmp/nodely-window-tree.txt 2>&1 || true
+          exit 2
         fi
         if ! kill -0 \"\$browser_pid\" >/dev/null 2>&1; then
           wait \"\$browser_pid\" >/dev/null 2>&1 || true
@@ -138,7 +141,7 @@ podman run --rm \
       cat /tmp/nodely-window.out >&2 || true
       cat /tmp/nodely-window.err >&2 || true
       cat /tmp/nodely-window-tree.txt >&2 || true
-      find \"\$window_home/.local/share/nodely\" -maxdepth 4 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
+      find \"\$window_home/.local/share/nodely-browser\" -maxdepth 5 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
       exit 127
     fi
     apt-get remove -y nodely-browser

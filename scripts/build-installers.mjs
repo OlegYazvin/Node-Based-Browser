@@ -25,7 +25,7 @@ const systemDesktopFileName = "nodely-browser.desktop";
 const systemIconName = "nodely-browser";
 const systemInstallRoot = "/opt/nodely-browser/app";
 const systemWrapperPath = "/usr/bin/nodely-browser";
-const linuxPackageRelease = "4";
+const linuxPackageRelease = "5";
 const flatpakAppId = "io.nodely.Browser";
 const flatpakRuntime = "org.freedesktop.Platform";
 const flatpakSdk = "org.freedesktop.Sdk";
@@ -402,7 +402,7 @@ if [[ "$version_only" -eq 1 ]]; then
   exit 0
 fi
 
-profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
+profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely-browser/gecko-profile}"
 mkdir -p "$profile_dir"
 cat >"$profile_dir/user.js" <<'PREFS'
 user_pref("browser.startup.page", 0);
@@ -477,7 +477,7 @@ if [[ "$version_only" -eq 1 ]]; then
   exit 0
 fi
 
-profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely/gecko-profile}"
+profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely-browser/gecko-profile}"
 mkdir -p "$profile_dir"
 cat >"$profile_dir/user.js" <<'PREFS'
 user_pref("browser.startup.page", 0);
@@ -530,7 +530,7 @@ prefix="$HOME/.local/opt/nodely-browser"
 bin_dir="$HOME/.local/bin"
 desktop_dir="$HOME/.local/share/applications"
 icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
-profile_dir="$HOME/.local/share/nodely/gecko-profile"
+profile_dir="$HOME/.local/share/nodely-browser/gecko-profile"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
