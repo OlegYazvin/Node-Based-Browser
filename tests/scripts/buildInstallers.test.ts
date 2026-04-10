@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { lstat, mkdtemp, mkdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { access, lstat, mkdtemp, mkdir, readFile, readdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -69,6 +69,9 @@ describe("build-installers wrappers", () => {
     expect(wrapper).toContain("printf '%s");
     expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
     expect(wrapper).toContain("/nodely-browser/gecko-profile");
+    expect(wrapper).toContain('profile_recovery_enabled="${NODELY_PROFILE_RECOVERY:-1}"');
+    expect(wrapper).toContain('NODELY_PROFILE_RECOVERY_THRESHOLD_SECONDS');
+    expect(wrapper).toContain('Nodely detected a startup crash and moved the existing profile');
     expect(wrapper).not.toContain("/nodely/gecko-profile");
     expect(wrapper).not.toContain('-new-instance');
     expect(wrapper).not.toContain('-no-remote');
@@ -115,6 +118,68 @@ describe("build-installers wrappers", () => {
     expect(version.trim()).toBe("Nodely 140.10.0esr");
   });
 
+  it("backs up an existing profile and retries after an early startup crash", async () => {
+    const rootDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-recovery-"));
+    tempDirectories.push(rootDirectory);
+
+    const appDirectory = path.join(rootDirectory, "app");
+    const wrapperPath = path.join(rootDirectory, "nodely-browser");
+    const profileDirectory = path.join(rootDirectory, "profile");
+    const launchLogPath = path.join(rootDirectory, "launch.log");
+
+    await mkdir(appDirectory, { recursive: true });
+    await mkdir(profileDirectory, { recursive: true });
+    await writeFile(path.join(profileDirectory, "broken.flag"), "1");
+    await writeFile(
+      path.join(appDirectory, "nodely"),
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        'profile_dir=""',
+        'while [[ $# -gt 0 ]]; do',
+        '  case "$1" in',
+        '    -profile)',
+        '      profile_dir="$2"',
+        '      shift 2',
+        '      ;;',
+        '    *)',
+        '      shift',
+        '      ;;',
+        '  esac',
+        "done",
+        `if [[ -f "$profile_dir/broken.flag" ]]; then printf 'broken\\n' >>"${launchLogPath}"; exit 139; fi`,
+        `printf 'clean\\n' >>"${launchLogPath}"`,
+        "exit 0"
+      ].join("\n"),
+      { mode: 0o755 }
+    );
+    await writeFile(
+      wrapperPath,
+      buildSystemWrapper({
+        installRoot: appDirectory,
+        desktopFileName: "nodely-browser.desktop"
+      }),
+      { mode: 0o755 }
+    );
+
+    execFileSync(wrapperPath, [], {
+      env: {
+        ...process.env,
+        NODELY_PROFILE_DIR: profileDirectory
+      }
+    });
+
+    await expect(access(path.join(profileDirectory, "broken.flag"))).rejects.toThrow();
+    expect(await readFile(path.join(profileDirectory, "user.js"), "utf8")).toContain('user_pref("nodely.shell.enabled", true);');
+    expect(await readFile(launchLogPath, "utf8")).toBe("broken\nclean\n");
+
+    const backupDirectory = (await readdir(rootDirectory)).find((entry) => entry.startsWith("profile.backup-"));
+    if (!backupDirectory) {
+      throw new Error("Expected the wrapper to back up the broken profile before retrying.");
+    }
+    await expect(access(path.join(rootDirectory, backupDirectory, "broken.flag"))).resolves.toBeUndefined();
+  });
+
   it("uses session-aware backend detection for flatpak installs", () => {
     const wrapper = buildFlatpakWrapper();
 
@@ -143,6 +208,8 @@ describe("build-installers wrappers", () => {
     expect(wrapper).toContain("printf '%s");
     expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
     expect(wrapper).toContain("/nodely-browser/gecko-profile");
+    expect(wrapper).toContain('profile_recovery_enabled="${NODELY_PROFILE_RECOVERY:-1}"');
+    expect(wrapper).toContain('NODELY_PROFILE_RECOVERY_THRESHOLD_SECONDS');
     expect(wrapper).not.toContain("/nodely/gecko-profile");
     expect(wrapper).not.toContain('-new-instance');
     expect(wrapper).not.toContain('-no-remote');
@@ -155,7 +222,7 @@ describe("build-installers wrappers", () => {
       distribution: "ubuntu"
     });
 
-    expect(control).toContain("Version: 140.10.0-7");
+    expect(control).toContain("Version: 140.10.0-8");
     expect(control).toContain("Depends:");
     expect(control).toContain("libatk1.0-0");
     expect(control).toContain("libdbus-1-3");
@@ -211,7 +278,7 @@ describe("build-installers wrappers", () => {
     });
 
     expect(spec).toContain("BuildArch:      x86_64");
-    expect(spec).toContain("Release:        7");
+    expect(spec).toContain("Release:        8");
     expect(spec).toContain("%global __os_install_post %{nil}");
     expect(spec).toContain("Source0:        nodely-browser-payload.tar.gz");
     expect(spec).toContain("Requires:       gtk3");

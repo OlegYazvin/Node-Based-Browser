@@ -25,7 +25,7 @@ const systemDesktopFileName = "nodely-browser.desktop";
 const systemIconName = "nodely-browser";
 const systemInstallRoot = "/opt/nodely-browser/app";
 const systemWrapperPath = "/usr/bin/nodely-browser";
-const linuxPackageRelease = "7";
+const linuxPackageRelease = "8";
 const flatpakAppId = "io.nodely.Browser";
 const flatpakRuntime = "org.freedesktop.Platform";
 const flatpakSdk = "org.freedesktop.Sdk";
@@ -349,6 +349,95 @@ if [[ -z "$moz_enable_wayland" ]]; then
 fi`;
 }
 
+function shellProfileLaunch({ desktopFileName, profileDir }) {
+  return `profile_dir="${profileDir}"
+profile_preexisted=0
+
+if [[ -d "$profile_dir" ]]; then
+  profile_preexisted=1
+fi
+
+profile_recovery_enabled="\${NODELY_PROFILE_RECOVERY:-1}"
+profile_recovery_threshold="\${NODELY_PROFILE_RECOVERY_THRESHOLD_SECONDS:-20}"
+
+write_profile_preferences() {
+  mkdir -p "$profile_dir"
+  cat >"$profile_dir/user.js" <<'PREFS'
+user_pref("browser.startup.page", 0);
+user_pref("browser.startup.homepage", "about:blank");
+user_pref("startup.homepage_welcome_url", "");
+user_pref("startup.homepage_welcome_url.additional", "");
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.newtabpage.enabled", false);
+user_pref("nodely.shell.enabled", true);
+PREFS
+}
+
+launch_nodely() {
+  env \
+    MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
+    MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
+    MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
+    "$app_executable" \
+    -profile "$profile_dir" \
+    "$@"
+}
+
+backup_profile_directory() {
+  if [[ ! -d "$profile_dir" ]]; then
+    return 0
+  fi
+
+  backup_stamp="$(date +%Y%m%d-%H%M%S)"
+  backup_dir="\${profile_dir}.backup-\${backup_stamp}"
+  backup_suffix=0
+
+  while [[ -e "$backup_dir" ]]; do
+    backup_suffix=$((backup_suffix + 1))
+    backup_dir="\${profile_dir}.backup-\${backup_stamp}-\${backup_suffix}"
+  done
+
+  mv "$profile_dir" "$backup_dir"
+  printf 'Nodely detected a startup crash and moved the existing profile to %s\n' "$backup_dir" >&2
+}
+
+write_profile_preferences
+set +e
+launch_started="$(date +%s)"
+launch_nodely "$@"
+status=$?
+launch_finished="$(date +%s)"
+set -e
+
+if [[ "$status" -eq 0 ]]; then
+  exit 0
+fi
+
+launch_duration=$((launch_finished - launch_started))
+auto_recover=0
+
+if [[ "$profile_recovery_enabled" != "0" && "$profile_preexisted" -eq 1 && "$launch_duration" -lt "$profile_recovery_threshold" ]]; then
+  if [[ "$#" -eq 0 || "\${1:-}" != -* ]]; then
+    auto_recover=1
+  fi
+fi
+
+if [[ "$auto_recover" -eq 1 ]]; then
+  backup_profile_directory
+  write_profile_preferences
+  exec env \
+    MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
+    MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
+    MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
+    "$app_executable" \
+    -profile "$profile_dir" \
+    "$@"
+fi
+
+exit "$status"`;
+}
+
 export function buildSystemWrapper({ installRoot, desktopFileName }) {
   return `#!/usr/bin/env bash
 set -euo pipefail
@@ -402,25 +491,10 @@ if [[ "$version_only" -eq 1 ]]; then
   exit 0
 fi
 
-profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely-browser/gecko-profile}"
-mkdir -p "$profile_dir"
-cat >"$profile_dir/user.js" <<'PREFS'
-user_pref("browser.startup.page", 0);
-user_pref("browser.startup.homepage", "about:blank");
-user_pref("startup.homepage_welcome_url", "");
-user_pref("startup.homepage_welcome_url.additional", "");
-user_pref("browser.startup.homepage_override.mstone", "ignore");
-user_pref("browser.aboutwelcome.enabled", false);
-user_pref("browser.newtabpage.enabled", false);
-user_pref("nodely.shell.enabled", true);
-PREFS
-exec env \
-  MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
-  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
-  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
-  "$app_executable" \
-  -profile "$profile_dir" \
-  "$@"
+${shellProfileLaunch({
+    desktopFileName,
+    profileDir: '${NODELY_PROFILE_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/nodely-browser/gecko-profile}'
+  })}
 `;
 }
 
@@ -477,25 +551,10 @@ if [[ "$version_only" -eq 1 ]]; then
   exit 0
 fi
 
-profile_dir="\${NODELY_PROFILE_DIR:-\${XDG_DATA_HOME:-$HOME/.local/share}/nodely-browser/gecko-profile}"
-mkdir -p "$profile_dir"
-cat >"$profile_dir/user.js" <<'PREFS'
-user_pref("browser.startup.page", 0);
-user_pref("browser.startup.homepage", "about:blank");
-user_pref("startup.homepage_welcome_url", "");
-user_pref("startup.homepage_welcome_url.additional", "");
-user_pref("browser.startup.homepage_override.mstone", "ignore");
-user_pref("browser.aboutwelcome.enabled", false);
-user_pref("browser.newtabpage.enabled", false);
-user_pref("nodely.shell.enabled", true);
-PREFS
-exec env \
-  MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
-  MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
-  MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
-  "$app_executable" \
-  -profile "$profile_dir" \
-  "$@"
+${shellProfileLaunch({
+    desktopFileName: `${flatpakAppId}.desktop`,
+    profileDir: '${NODELY_PROFILE_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/nodely-browser/gecko-profile}'
+  })}
 `;
 }
 
