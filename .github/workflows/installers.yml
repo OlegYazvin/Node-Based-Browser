@@ -423,13 +423,23 @@ jobs:
           mkdir -p Installer
 
       - name: Prune managed installer slices before sync
-        run: >
-          npm run installers:prune --
-          --target linux:arm64
-          --target linux:x64
-          --target win32:x64
-          --target darwin:x64
-          --target darwin:arm64
+        run: |
+          prune_args=()
+
+          for target in linux:arm64 linux:x64 win32:x64 darwin:x64 darwin:arm64; do
+            platform="${target%%:*}"
+            arch="${target##*:}"
+
+            if [[ -d "out/make/$platform/$arch" ]] && find "out/make/$platform/$arch" -maxdepth 1 -type f -print -quit | grep -q .; then
+              prune_args+=(--target "$target")
+            fi
+          done
+
+          if [[ ${#prune_args[@]} -gt 0 ]]; then
+            npm run installers:prune -- "${prune_args[@]}"
+          else
+            echo "No downloaded installer outputs detected yet; skipping prune."
+          fi
 
       - name: Sync finished installers into Installer
         run: |

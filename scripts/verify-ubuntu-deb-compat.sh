@@ -80,6 +80,11 @@ podman run --rm \
       cat /tmp/nodely-apt-fix.log >&2 || true
       exit 1
     fi
+    id -u nodelytester >/dev/null 2>&1 || useradd -m -s /bin/bash nodelytester
+    test_user_home=/home/nodelytester
+    run_as_test_user() {
+      runuser -u nodelytester -- env HOME=\"\$test_user_home\" \"\$@\"
+    }
     test -x /usr/bin/nodely-browser
     test -f /usr/share/applications/nodely-browser.desktop
     broken_symlink=\"\$(find /opt/nodely-browser -xtype l -print -quit)\"
@@ -88,7 +93,14 @@ podman run --rm \
       find /opt/nodely-browser -xtype l -printf '%p -> %l\n' >&2
       exit 1
     fi
-    if ! /usr/bin/nodely-browser --version >/tmp/nodely-version.txt 2>/tmp/nodely-version.err; then
+    for readable_file in /opt/nodely-browser/app/omni.ja /opt/nodely-browser/app/browser/omni.ja; do
+      if ! run_as_test_user test -r \"\$readable_file\"; then
+        echo \"Nodely installed an unreadable runtime file for normal users: \$readable_file\" >&2
+        stat -c '%A %a %U:%G %n' \"\$readable_file\" >&2 || true
+        exit 1
+      fi
+    done
+    if ! run_as_test_user /usr/bin/nodely-browser --version >/tmp/nodely-version.txt 2>/tmp/nodely-version.err; then
       cat /tmp/nodely-dpkg.log >&2 || true
       cat /tmp/nodely-apt-fix.log >&2 || true
       cat /tmp/nodely-version.err >&2 || true
@@ -102,17 +114,17 @@ podman run --rm \
       cat /tmp/nodely-apt-gui-smoke.log >&2 || true
       exit 1
     fi
-    if ! timeout 45s xvfb-run -a /usr/bin/nodely-browser --headless --screenshot /tmp/nodely-headless.png about:blank >/tmp/nodely-headless.out 2>/tmp/nodely-headless.err; then
+    run_as_test_user rm -rf \"\$test_user_home/.local/share/nodely-browser\"
+    if ! timeout 45s xvfb-run -a runuser -u nodelytester -- env HOME=\"\$test_user_home\" /usr/bin/nodely-browser --headless --screenshot /tmp/nodely-headless.png about:blank >/tmp/nodely-headless.out 2>/tmp/nodely-headless.err; then
       cat /tmp/nodely-headless.out >&2 || true
       cat /tmp/nodely-headless.err >&2 || true
-      find "\${HOME:-/root}/.local/share/nodely-browser" -maxdepth 4 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
+      find \"\$test_user_home/.local/share/nodely-browser\" -maxdepth 4 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
       exit 127
     fi
     test -s /tmp/nodely-headless.png
-    window_home=\"\$(mktemp -d)\"
-    if ! timeout 60s xvfb-run -a bash -lc '
+    run_as_test_user rm -rf \"\$test_user_home/.local/share/nodely-browser\"
+    if ! timeout 60s xvfb-run -a runuser -u nodelytester -- env HOME=\"\$test_user_home\" bash -lc '
       set -euo pipefail
-      export HOME=\"\$1\"
       smoke_url=\"data:text/html,%3Ctitle%3ENodely%20Desktop%20Smoke%3C%2Ftitle%3E%3Ch1%3ENodely%20Desktop%20Smoke%3C%2Fh1%3E\"
       /usr/bin/nodely-browser \"\$smoke_url\" >/tmp/nodely-window.out 2>/tmp/nodely-window.err &
       browser_pid=\$!
@@ -149,11 +161,11 @@ podman run --rm \
       xwininfo -root -tree >/tmp/nodely-window-tree.txt 2>&1 || true
       echo \"Nodely desktop smoke timed out before a visible browser window appeared.\" >&2
       exit 1
-    ' nodely-desktop-smoke \"\$window_home\"; then
+    '; then
       cat /tmp/nodely-window.out >&2 || true
       cat /tmp/nodely-window.err >&2 || true
       cat /tmp/nodely-window-tree.txt >&2 || true
-      find \"\$window_home/.local/share/nodely-browser\" -maxdepth 5 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
+      find \"\$test_user_home/.local/share/nodely-browser\" -maxdepth 5 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
       exit 127
     fi
     apt-get remove -y nodely-browser
