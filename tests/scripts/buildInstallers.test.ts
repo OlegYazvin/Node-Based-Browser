@@ -166,6 +166,17 @@ describe("build-installers wrappers", () => {
     expect(control).toContain("zlib1g");
   });
 
+  it("declares the Debian jpeg runtime package", () => {
+    const control = debControl({
+      version: "140.10.0",
+      arch: "x64",
+      distribution: "debian"
+    });
+
+    expect(control).toContain("libjpeg62-turbo");
+    expect(control).not.toContain("libjpeg8");
+  });
+
   it("declares the Gecko runtime libraries needed by Fedora", () => {
     const spec = rpmSpec({
       version: "140.9.1esr",

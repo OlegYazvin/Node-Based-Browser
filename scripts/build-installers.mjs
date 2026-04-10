@@ -603,13 +603,18 @@ __NODELY_ARCHIVE_BELOW__
 
 export function debControl({ version, arch, distribution }) {
   const distributionLabel = distribution === "ubuntu" ? "Ubuntu" : "Debian";
+  const runtimeDependencies =
+    distribution === "debian"
+      ? linuxDebRuntimeDependencies.map((dependency) => (dependency === "libjpeg8" ? "libjpeg62-turbo" : dependency))
+      : linuxDebRuntimeDependencies;
+
   return `Package: nodely-browser
 Version: ${packageReleaseVersion(version)}
 Section: web
 Priority: optional
 Architecture: ${debArchNames[arch] ?? arch}
 Maintainer: Nodely Browser <noreply@nodely.invalid>
-Depends: ${linuxDebRuntimeDependencies.join(", ")}
+Depends: ${runtimeDependencies.join(", ")}
 Homepage: https://nodely.invalid/
 Description: Nodely Browser for ${distributionLabel}
  Node-based Gecko browser for research workflows packaged for ${distributionLabel}.
