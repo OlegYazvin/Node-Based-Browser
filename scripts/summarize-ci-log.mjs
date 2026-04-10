@@ -103,6 +103,9 @@ function modeConfig(mode) {
         "No such file or directory",
         "not found",
         "Permission denied",
+        "Crash Reporter",
+        "Nodely desktop",
+        "Nodely opened",
         "ldd",
         "env:"
       ],

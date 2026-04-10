@@ -122,20 +122,32 @@ podman run --rm \
       }
       trap cleanup EXIT
       for _ in \$(seq 1 45); do
+        if xdotool search --onlyvisible --name \"Crash Reporter\" >/tmp/nodely-crashreporter.ids 2>/dev/null; then
+          xwininfo -root -tree >/tmp/nodely-window-tree.txt 2>&1 || true
+          echo \"Nodely opened Firefox Crash Reporter instead of the desktop browser window.\" >&2
+          exit 2
+        fi
         if xdotool search --onlyvisible --name \"Nodely Desktop Smoke\" >/tmp/nodely-window.ids 2>/dev/null; then
           exit 0
         fi
-        if xdotool search --onlyvisible --name \"Crash Reporter\" >/tmp/nodely-crashreporter.ids 2>/dev/null; then
-          xwininfo -root -tree >/tmp/nodely-window-tree.txt 2>&1 || true
-          exit 2
+        if xdotool search --onlyvisible --pid \"\$browser_pid\" >/tmp/nodely-window.ids 2>/dev/null; then
+          exit 0
+        fi
+        if xdotool search --onlyvisible --class \"[Nn]odely|[Ff]irefox|Navigator\" >/tmp/nodely-window.ids 2>/dev/null; then
+          exit 0
+        fi
+        if xdotool search --onlyvisible --name \"[Nn]odely|[Ff]irefox|Mozilla\" >/tmp/nodely-window.ids 2>/dev/null; then
+          exit 0
         fi
         if ! kill -0 \"\$browser_pid\" >/dev/null 2>&1; then
           wait \"\$browser_pid\" >/dev/null 2>&1 || true
+          echo \"Nodely desktop browser process exited before exposing a visible window.\" >&2
           exit 1
         fi
         sleep 1
       done
       xwininfo -root -tree >/tmp/nodely-window-tree.txt 2>&1 || true
+      echo \"Nodely desktop smoke timed out before a visible browser window appeared.\" >&2
       exit 1
     ' nodely-desktop-smoke \"\$window_home\"; then
       cat /tmp/nodely-window.out >&2 || true

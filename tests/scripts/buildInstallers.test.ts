@@ -155,7 +155,7 @@ describe("build-installers wrappers", () => {
       distribution: "ubuntu"
     });
 
-    expect(control).toContain("Version: 140.10.0-5");
+    expect(control).toContain("Version: 140.10.0-6");
     expect(control).toContain("Depends:");
     expect(control).toContain("libatk1.0-0");
     expect(control).toContain("libdbus-1-3");
@@ -211,7 +211,7 @@ describe("build-installers wrappers", () => {
     });
 
     expect(spec).toContain("BuildArch:      x86_64");
-    expect(spec).toContain("Release:        5");
+    expect(spec).toContain("Release:        6");
     expect(spec).toContain("%global __os_install_post %{nil}");
     expect(spec).toContain("Source0:        nodely-browser-payload.tar.gz");
     expect(spec).toContain("Requires:       gtk3");
