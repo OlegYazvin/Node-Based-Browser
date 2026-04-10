@@ -46,6 +46,11 @@ const rpmArchNames = {
   arm64: "aarch64"
 };
 
+const rpmContainerPlatforms = {
+  x64: "linux/amd64",
+  arm64: "linux/arm64"
+};
+
 const debArchNames = {
   x64: "amd64",
   arm64: "arm64"
@@ -716,7 +721,7 @@ async function runCommand(command, args, options = {}) {
 
       reject(
         new Error(
-          `${command} ${args.join(" ")} failed with exit code ${code}\n${stderr || stdout || "(no output)"}`
+          `${command} ${args.join(" ")} failed with exit code ${code}\n${[stderr, stdout].filter(Boolean).join("\n") || "(no output)"}`
         )
       );
     });
@@ -950,19 +955,22 @@ async function buildRpmInstaller({ version, outputDirectory, arch, payloadRoot }
     await runCommand("podman", [
       "run",
       "--rm",
+      "--platform",
+      rpmContainerPlatforms[arch] ?? `linux/${arch}`,
       "-v",
       `${rpmDirectory}:/workspace:Z`,
       "-v",
       `${outputDirectory}:/out:Z`,
       "quay.io/fedora/fedora:43",
-      "sh",
+      "bash",
       "-lc",
       [
-        "dnf -y install rpm-build >/dev/null",
+        "set -euo pipefail",
+        "if ! dnf -y install rpm-build >/tmp/nodely-rpm-dnf.log 2>&1; then cat /tmp/nodely-rpm-dnf.log >&2; exit 1; fi",
         "rpmbuild --define '_topdir /workspace/rpmbuild' -bb /workspace/rpmbuild/SPECS/nodely-browser.spec",
-        `cp "$(find /workspace/rpmbuild/RPMS -name '*.rpm' -print -quit)" /out/${path.basename(finalPath)}`,
-        "status=$?",
-        "exit $status"
+        "rpm_path=\"$(find /workspace/rpmbuild/RPMS -name '*.rpm' -print -quit)\"",
+        "test -n \"$rpm_path\"",
+        `cp "$rpm_path" /out/${path.basename(finalPath)}`
       ].join("; ")
     ]);
     await podmanUnshare(["chown", "-R", "0:0", outputDirectory]);

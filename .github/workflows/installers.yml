@@ -167,14 +167,21 @@ jobs:
           set -o pipefail
 
           if ! (
-            cd "$GECKO_CHECKOUT_DIR"
-            python ./mach configure
-            python ./mach artifact install
-            cd "$GITHUB_WORKSPACE"
-            npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR"
-            npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode compat
-            cd "$GECKO_CHECKOUT_DIR"
-            python ./mach build faster
+            if [[ "${{ matrix.platform }}" == "darwin" ]]; then
+              cd "$GITHUB_WORKSPACE"
+              npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+              cd "$GECKO_CHECKOUT_DIR"
+              python ./mach build
+            else
+              cd "$GECKO_CHECKOUT_DIR"
+              python ./mach configure
+              python ./mach artifact install
+              cd "$GITHUB_WORKSPACE"
+              npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+              npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode compat
+              cd "$GECKO_CHECKOUT_DIR"
+              python ./mach build faster
+            fi
           ) 2>&1 | tee gecko-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-build.log --mode build)"
             echo "::error title=Gecko overlay build failed::$summary"
