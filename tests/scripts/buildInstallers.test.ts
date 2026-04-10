@@ -193,7 +193,10 @@ describe("build-installers wrappers", () => {
     expect(spec).toContain("Requires:       libX11");
     expect(spec).toContain("Requires:       libxcb");
     expect(spec).toContain("Requires:       libxkbcommon");
-    expect(spec).toContain("Requires:       wayland-libs");
+    expect(spec).toContain("Requires:       libwayland-client");
+    expect(spec).toContain("Requires:       libwayland-cursor");
+    expect(spec).toContain("Requires:       libwayland-egl");
+    expect(spec).not.toContain("Requires:       wayland-libs");
     expect(spec).toContain("Requires:       zlib");
     expect(spec).toContain("tar --no-same-owner --no-same-permissions -xzf %{SOURCE0} -C %{buildroot}");
   });
