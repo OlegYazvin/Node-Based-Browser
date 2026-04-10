@@ -1,24 +1,86 @@
 {
-  "generatedAt": "2026-04-09T18:41:33.092Z",
+  "generatedAt": "2026-04-10T02:21:37.563Z",
   "installers": [
     {
-      "version": "140.10.0",
-      "platform": "win32",
+      "version": "140.9.1esr",
+      "platform": "linux",
       "arch": "x64",
-      "variant": "installer",
-      "distribution": "windows",
+      "variant": "deb",
+      "distribution": "debian",
       "compatibility": [
-        "Windows 10",
-        "Windows 11"
+        "Debian"
       ],
       "builtBy": "github-actions",
-      "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24200397157",
-      "path": "windows/nodely-browser-140.10.0.en-US.win64.installer.exe",
-      "fileName": "nodely-browser-140.10.0.en-US.win64.installer.exe",
-      "source": "out/make/win32/x64/nodely-browser-140.10.0.en-US.win64.installer.exe",
-      "size": 19226116,
-      "syncedAt": "2026-04-09T18:41:33.092Z"
+      "buildWorkflow": ".github/workflows/linux-mint-x64-installer.yml",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474",
+      "path": "linux/Nodely-Browser-140.9.1esr-debian-x64.deb",
+      "fileName": "Nodely-Browser-140.9.1esr-debian-x64.deb",
+      "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-debian-x64.deb",
+      "size": 77520762,
+      "syncedAt": "2026-04-10T02:21:37.357Z"
+    },
+    {
+      "version": "140.9.1esr",
+      "platform": "linux",
+      "arch": "x64",
+      "variant": "flatpak",
+      "distribution": "flatpak",
+      "compatibility": [
+        "Linux Mint",
+        "Fedora",
+        "Ubuntu",
+        "Debian",
+        "other Flatpak-enabled Linux distros"
+      ],
+      "builtBy": "github-actions",
+      "buildWorkflow": ".github/workflows/linux-mint-x64-installer.yml",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474",
+      "path": "linux/Nodely-Browser-140.9.1esr-linux-x64.flatpak",
+      "fileName": "Nodely-Browser-140.9.1esr-linux-x64.flatpak",
+      "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-linux-x64.flatpak",
+      "size": 76389544,
+      "syncedAt": "2026-04-10T02:21:37.429Z"
+    },
+    {
+      "version": "140.9.1esr",
+      "platform": "linux",
+      "arch": "x64",
+      "variant": "generic",
+      "distribution": "generic",
+      "compatibility": [
+        "Ubuntu",
+        "Debian",
+        "Fedora",
+        "Linux Mint",
+        "other common desktop Linux distros"
+      ],
+      "builtBy": "github-actions",
+      "buildWorkflow": ".github/workflows/linux-mint-x64-installer.yml",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474",
+      "path": "linux/Nodely-Browser-140.9.1esr-linux-x64.run",
+      "fileName": "Nodely-Browser-140.9.1esr-linux-x64.run",
+      "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-linux-x64.run",
+      "size": 77533217,
+      "syncedAt": "2026-04-10T02:21:37.497Z"
+    },
+    {
+      "version": "140.9.1esr",
+      "platform": "linux",
+      "arch": "x64",
+      "variant": "deb",
+      "distribution": "ubuntu",
+      "compatibility": [
+        "Ubuntu",
+        "Linux Mint"
+      ],
+      "builtBy": "github-actions",
+      "buildWorkflow": ".github/workflows/linux-mint-x64-installer.yml",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474",
+      "path": "linux/Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
+      "fileName": "Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
+      "source": "out/make/linux/x64/Nodely-Browser-140.9.1esr-ubuntu-x64.deb",
+      "size": 77520602,
+      "syncedAt": "2026-04-10T02:21:37.563Z"
     }
   ]
 }

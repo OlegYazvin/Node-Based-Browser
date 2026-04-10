@@ -12,15 +12,13 @@ This directory contains the installers that actually exist in this repo right no
 - If a section below says no installers are staged, there is nothing in this repo for that target today.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
-Generated from `Installer/manifest.json` at 2026-04-09T18:41:33.092Z.
+Generated from `Installer/manifest.json` at 2026-04-10T02:21:37.563Z.
 
 ## Windows 10 and 11
 
 Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does not target Windows on ARM.
 
-| File | Type | Supported systems | Built by |
-| --- | --- | --- | --- |
-| [nodely-browser-140.10.0.en-US.win64.installer.exe](./windows/nodely-browser-140.10.0.en-US.win64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24200397157) (`installers.yml`) |
+No installers are currently staged in this repo for this target.
 
 ## macOS Intel
 
@@ -38,7 +36,12 @@ No installers are currently staged in this repo for this target.
 
 Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/AMD processors. On Linux Mint, prefer the Ubuntu DEB for easy install and uninstall through Software Manager.
 
-No installers are currently staged in this repo for this target.
+| File | Type | Supported systems | Built by |
+| --- | --- | --- | --- |
+| [Nodely-Browser-140.9.1esr-debian-x64.deb](./linux/Nodely-Browser-140.9.1esr-debian-x64.deb) | Debian DEB package | Debian; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474) (`linux-mint-x64-installer.yml`) |
+| [Nodely-Browser-140.9.1esr-linux-x64.flatpak](./linux/Nodely-Browser-140.9.1esr-linux-x64.flatpak) | Flatpak bundle | Linux Mint, Fedora, Ubuntu, Debian, other Flatpak-enabled Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474) (`linux-mint-x64-installer.yml`) |
+| [Nodely-Browser-140.9.1esr-linux-x64.run](./linux/Nodely-Browser-140.9.1esr-linux-x64.run) | Self-extracting installer (`.run`) | Ubuntu, Debian, Fedora, Linux Mint, other common desktop Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474) (`linux-mint-x64-installer.yml`) |
+| [Nodely-Browser-140.9.1esr-ubuntu-x64.deb](./linux/Nodely-Browser-140.9.1esr-ubuntu-x64.deb) | Ubuntu DEB package | Ubuntu, Linux Mint; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743474) (`linux-mint-x64-installer.yml`) |
 
 ## Linux arm64
 
