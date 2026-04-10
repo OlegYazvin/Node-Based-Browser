@@ -254,10 +254,10 @@ fi
 ${shellMozBackendSetup()}
 
 app_candidates=(
-  "${installRoot}/nodely"
-  "${installRoot}/nodely-bin"
   "${installRoot}/firefox"
   "${installRoot}/firefox-bin"
+  "${installRoot}/nodely"
+  "${installRoot}/nodely-bin"
 )
 app_executable=""
 
@@ -331,10 +331,10 @@ fi
 ${shellMozBackendSetup()}
 
 app_candidates=(
-  /app/lib/nodely/nodely
-  /app/lib/nodely/nodely-bin
   /app/lib/nodely/firefox
   /app/lib/nodely/firefox-bin
+  /app/lib/nodely/nodely
+  /app/lib/nodely/nodely-bin
 )
 app_executable=""
 
