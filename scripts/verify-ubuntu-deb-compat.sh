@@ -123,7 +123,7 @@ podman run --rm \
       for _ in \$(seq 1 45); do
         if xdotool search --onlyvisible --pid \"\$browser_pid\" >/tmp/nodely-window.ids 2>/dev/null ||
           xdotool search --onlyvisible --class nodely >/tmp/nodely-window.ids 2>/dev/null ||
-          xwininfo -root -tree 2>/dev/null | grep -Eiq \"nodely|firefox|browser\"; then
+          { command -v xwininfo >/dev/null 2>&1 && xwininfo -root -tree 2>/dev/null | grep -Eiq \"nodely|firefox|browser\"; }; then
           exit 0
         fi
         if ! kill -0 \"\$browser_pid\" >/dev/null 2>&1; then

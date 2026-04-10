@@ -78,7 +78,7 @@ podman run --rm \
       exit 127
     fi
     grep -q 'Mozilla Firefox\\|Nodely' /tmp/nodely-version.txt
-    if ! dnf install -y xorg-x11-server-Xvfb xorg-x11-xauth dbus-x11 xdotool xorg-x11-utils >/tmp/nodely-dnf-gui-smoke.log 2>&1; then
+    if ! dnf install -y xorg-x11-server-Xvfb xorg-x11-xauth dbus-x11 xdotool >/tmp/nodely-dnf-gui-smoke.log 2>&1; then
       cat /tmp/nodely-dnf-gui-smoke.log >&2 || true
       exit 1
     fi
@@ -103,7 +103,7 @@ podman run --rm \
       for _ in \$(seq 1 45); do
         if xdotool search --onlyvisible --pid \"\$browser_pid\" >/tmp/nodely-window.ids 2>/dev/null ||
           xdotool search --onlyvisible --class nodely >/tmp/nodely-window.ids 2>/dev/null ||
-          xwininfo -root -tree 2>/dev/null | grep -Eiq \"nodely|firefox|browser\"; then
+          { command -v xwininfo >/dev/null 2>&1 && xwininfo -root -tree 2>/dev/null | grep -Eiq \"nodely|firefox|browser\"; }; then
           exit 0
         fi
         if ! kill -0 \"\$browser_pid\" >/dev/null 2>&1; then
