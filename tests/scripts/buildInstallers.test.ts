@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readlink, rm, symlink, writeFile } from "node:fs/promises";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -9,6 +9,7 @@ import {
   buildFlatpakWrapper,
   buildSystemWrapper,
   copyNativeInstaller,
+  copyTreePreservingSymlinks,
   debControl,
   rpmSpec,
   resolveInstallerVersion,
@@ -260,6 +261,24 @@ describe("build-installers wrappers", () => {
     expect(() => resolveInstallerVersion("140.10.0", "140.9.1esr", "native installer test.exe")).toThrow(
       "Installer version override 140.9.1esr does not match packaged artifact version 140.10.0"
     );
+  });
+
+  it("preserves relative app-bundle symlinks instead of making build-temp links", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-symlinks-"));
+    tempDirectories.push(tempDirectory);
+
+    const sourceDirectory = path.join(tempDirectory, "source");
+    const destinationDirectory = path.join(tempDirectory, "destination");
+
+    await mkdir(sourceDirectory, { recursive: true });
+    await writeFile(path.join(sourceDirectory, "firefox-bin"), "binary");
+    await symlink("firefox-bin", path.join(sourceDirectory, "nodely-bin"));
+
+    await copyTreePreservingSymlinks(sourceDirectory, destinationDirectory);
+
+    const copiedLink = path.join(destinationDirectory, "nodely-bin");
+    expect((await lstat(copiedLink)).isSymbolicLink()).toBe(true);
+    expect(await readlink(copiedLink)).toBe("firefox-bin");
   });
 
   it("finds the packaged app inside an extra wrapper directory", async () => {

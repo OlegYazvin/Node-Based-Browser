@@ -184,6 +184,10 @@ function tarballExtractArgument(filePath) {
   return `-${linuxExtractFlags(filePath)}f`;
 }
 
+export async function copyTreePreservingSymlinks(source, destination) {
+  await cp(source, destination, { recursive: true, verbatimSymlinks: true });
+}
+
 function packageReleaseVersion(version) {
   return `${version}-1`;
 }
@@ -889,7 +893,7 @@ async function prepareSystemPayload({ sourceArtifactPath, temporaryDirectory, ic
   await extractLinuxArtifact(sourceArtifactPath, extractedDirectory);
   const extractedAppDirectory = await resolveExtractedLinuxAppDirectory(extractedDirectory);
   await ensureDirectory(path.dirname(appDestination));
-  await cp(extractedAppDirectory, appDestination, { recursive: true });
+  await copyTreePreservingSymlinks(extractedAppDirectory, appDestination);
   await ensureDirectory(path.dirname(wrapperPath));
   await ensureDirectory(path.dirname(desktopPath));
   await ensureDirectory(path.dirname(iconPath));
@@ -931,7 +935,7 @@ async function buildDebInstaller({ version, outputDirectory, arch, distribution,
   const debianBinaryPath = path.join(packageDirectory, "debian-binary");
 
   try {
-    await cp(payloadRoot, rootDirectory, { recursive: true });
+    await copyTreePreservingSymlinks(payloadRoot, rootDirectory);
     await ensureDirectory(path.join(rootDirectory, "DEBIAN"));
 
     const controlPath = path.join(rootDirectory, "DEBIAN", "control");
@@ -1080,7 +1084,7 @@ async function buildFlatpakInstaller({ version, outputDirectory, arch, payloadRo
     await ensureDirectory(path.dirname(iconPath));
     await ensureDirectory(path.dirname(metainfoPath));
 
-    await cp(path.join(payloadRoot, "opt", "nodely-browser", "app"), appRoot, { recursive: true });
+    await copyTreePreservingSymlinks(path.join(payloadRoot, "opt", "nodely-browser", "app"), appRoot);
     await writeFile(wrapperPath, buildFlatpakWrapper(), "utf8");
     await chmod(wrapperPath, 0o755);
     await writeFile(

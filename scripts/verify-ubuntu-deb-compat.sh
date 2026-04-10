@@ -82,6 +82,12 @@ podman run --rm \
     fi
     test -x /usr/bin/nodely-browser
     test -f /usr/share/applications/nodely-browser.desktop
+    broken_symlink=\"\$(find /opt/nodely-browser -xtype l -print -quit)\"
+    if [[ -n \"\$broken_symlink\" ]]; then
+      echo \"Broken Nodely symlink found: \$broken_symlink\" >&2
+      find /opt/nodely-browser -xtype l -printf '%p -> %l\n' >&2
+      exit 1
+    fi
     if ! /usr/bin/nodely-browser --version >/tmp/nodely-version.txt 2>/tmp/nodely-version.err; then
       cat /tmp/nodely-dpkg.log >&2 || true
       cat /tmp/nodely-apt-fix.log >&2 || true
