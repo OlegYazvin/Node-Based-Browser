@@ -12,6 +12,7 @@ import {
   copyNativeInstaller,
   copyTreePreservingSymlinks,
   debControl,
+  normalizePackagedAppPermissions,
   rpmSpec,
   resolveInstallerVersion,
   resolveExtractedLinuxAppDirectory
@@ -372,6 +373,31 @@ describe("build-installers wrappers", () => {
     const copiedLink = path.join(destinationDirectory, "nodely-bin");
     expect((await lstat(copiedLink)).isSymbolicLink()).toBe(true);
     expect(await readlink(copiedLink)).toBe("firefox-bin");
+  });
+
+  it("normalizes packaged app permissions so archive data stays user-readable", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-permissions-"));
+    tempDirectories.push(tempDirectory);
+
+    const browserDirectory = path.join(tempDirectory, "browser");
+    const rootOmni = path.join(tempDirectory, "omni.ja");
+    const browserOmni = path.join(browserDirectory, "omni.ja");
+    const executablePath = path.join(tempDirectory, "nodely-bin");
+    const symlinkPath = path.join(tempDirectory, "nodely-link");
+
+    await mkdir(browserDirectory, { recursive: true });
+    await writeFile(rootOmni, "root omni", { mode: 0o600 });
+    await writeFile(browserOmni, "browser omni", { mode: 0o600 });
+    await writeFile(executablePath, "#!/usr/bin/env bash\n", { mode: 0o700 });
+    await symlink("nodely-bin", symlinkPath);
+
+    await normalizePackagedAppPermissions(tempDirectory);
+
+    expect((await lstat(rootOmni)).mode & 0o777).toBe(0o644);
+    expect((await lstat(browserOmni)).mode & 0o777).toBe(0o644);
+    expect((await lstat(executablePath)).mode & 0o777).toBe(0o755);
+    expect((await lstat(browserDirectory)).mode & 0o777).toBe(0o755);
+    expect((await lstat(symlinkPath)).isSymbolicLink()).toBe(true);
   });
 
   it("finds the packaged app inside an extra wrapper directory", async () => {

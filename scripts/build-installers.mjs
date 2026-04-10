@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { access, chmod, cp, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, chmod, cp, lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -188,6 +188,41 @@ function tarballExtractArgument(filePath) {
 
 export async function copyTreePreservingSymlinks(source, destination) {
   await cp(source, destination, { recursive: true, verbatimSymlinks: true });
+}
+
+export async function normalizePackagedAppPermissions(rootDirectory) {
+  const directories = [rootDirectory];
+
+  while (directories.length > 0) {
+    const currentDirectory = directories.pop();
+
+    if (!currentDirectory) {
+      continue;
+    }
+
+    await chmod(currentDirectory, 0o755).catch(() => {});
+    const entries = await readdir(currentDirectory, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const entryPath = path.join(currentDirectory, entry.name);
+
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        directories.push(entryPath);
+        continue;
+      }
+
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const executable = ((await lstat(entryPath)).mode & 0o111) !== 0;
+      await chmod(entryPath, executable ? 0o755 : 0o644);
+    }
+  }
 }
 
 function packageReleaseVersion(version) {
@@ -968,6 +1003,7 @@ async function prepareSystemPayload({ sourceArtifactPath, temporaryDirectory, ic
   const extractedAppDirectory = await resolveExtractedLinuxAppDirectory(extractedDirectory);
   await ensureDirectory(path.dirname(appDestination));
   await copyTreePreservingSymlinks(extractedAppDirectory, appDestination);
+  await normalizePackagedAppPermissions(appDestination);
   await ensureDirectory(path.dirname(wrapperPath));
   await ensureDirectory(path.dirname(desktopPath));
   await ensureDirectory(path.dirname(iconPath));
@@ -989,14 +1025,20 @@ async function prepareSystemPayload({ sourceArtifactPath, temporaryDirectory, ic
   return payloadRoot;
 }
 
-async function buildLinuxRunInstaller({ version, sourceArtifactPath, outputDirectory, arch, iconSvg }) {
+async function buildLinuxRunInstaller({ version, payloadRoot, outputDirectory, arch, iconSvg }) {
   const installerPath = path.join(outputDirectory, linuxRunFileName(version, arch));
-  const stub = buildLinuxRunStub({ extractFlags: linuxExtractFlags(sourceArtifactPath), iconSvg: iconSvg.trim() });
-  const payload = await readFile(sourceArtifactPath);
+  const appRoot = path.join(payloadRoot, "opt", "nodely-browser", "app");
+  const payloadArchivePath = path.join(outputDirectory, `${path.basename(installerPath)}.payload.tar.xz`);
+
+  await runCommand("tar", ["-cJf", payloadArchivePath, "-C", path.dirname(appRoot), path.basename(appRoot)]);
+
+  const stub = buildLinuxRunStub({ extractFlags: "xJ", iconSvg: iconSvg.trim() });
+  const payload = await readFile(payloadArchivePath);
 
   await writeFile(installerPath, stub, "utf8");
   await writeFile(installerPath, payload, { flag: "a" });
   await chmod(installerPath, 0o755);
+  await rm(payloadArchivePath, { force: true });
   return installerPath;
 }
 
@@ -1249,7 +1291,7 @@ async function buildLinuxInstallers({ version, sourceArtifactPath, outDirectory,
         run: () =>
           buildLinuxRunInstaller({
             version,
-            sourceArtifactPath,
+            payloadRoot,
             outputDirectory,
             arch,
             iconSvg
