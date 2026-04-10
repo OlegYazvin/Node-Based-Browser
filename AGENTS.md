@@ -5,6 +5,7 @@
 - Prefer the CI workflow at `.github/workflows/gecko-verify.yml` for cross-platform verification and staged release refreshes after Gecko-facing changes.
 - Keep `gecko/release-artifacts/` user-facing: stage the single packaged artifact a person should download for each platform/channel, not auxiliary build outputs.
 - Keep one visible Nodely release version across `gecko/release-artifacts/` and `Installer/` at a time. Platform-specific installers are fine, but do not stage mixed Nodely versions in the same repo snapshot.
+- When publishing repo changes to GitHub from this workstation, use the SSH remote/path first now that SSH auth is configured; only fall back to direct GitHub publish routes if SSH fails for a new, concrete reason.
 - For Nodely interaction regressions, verify the packaged app's actual runtime tab or browser surface behavior; workspace selection alone is not enough to prove a page opened.
 - For Nodely canvas/split input regressions, packaged smoke must confirm the live `nodely-graph-surface` and split handle both report `pointerEvents: "auto"` when they should be interactive. Synthetic activation alone is not enough to clear a manual mouse bug.
 - For Nodely icon-only controls or contextual overlays, packaged smoke should verify rendered icon/path presence and placement mode, not just that wrapper buttons exist in the DOM.
