@@ -49,11 +49,15 @@ describe("build-installers wrappers", () => {
     expect(wrapper).toContain('set +e');
     expect(wrapper).toContain('"/opt/nodely-browser/app/nodely-bin"');
     expect(wrapper).toContain('"/opt/nodely-browser/app/firefox-bin"');
+    expect(wrapper.indexOf('"/opt/nodely-browser/app/nodely"')).toBeLessThan(
+      wrapper.indexOf('"/opt/nodely-browser/app/firefox"')
+    );
     expect(wrapper).toContain('"$app_executable"');
     expect(wrapper).toContain('status=$?');
     expect(wrapper).toContain("printf '%s");
     expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
-    expect(wrapper).toContain('-new-instance');
+    expect(wrapper).not.toContain('-new-instance');
+    expect(wrapper).not.toContain('-no-remote');
   });
 
   it("falls back to a runnable packaged executable for system wrapper version checks", async () => {
@@ -117,11 +121,15 @@ describe("build-installers wrappers", () => {
     expect(wrapper).toContain('set +e');
     expect(wrapper).toContain('/app/lib/nodely/nodely-bin');
     expect(wrapper).toContain('/app/lib/nodely/firefox-bin');
+    expect(wrapper.indexOf("/app/lib/nodely/nodely")).toBeLessThan(
+      wrapper.indexOf("/app/lib/nodely/firefox")
+    );
     expect(wrapper).toContain('"$app_executable"');
     expect(wrapper).toContain('status=$?');
     expect(wrapper).toContain("printf '%s");
     expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
-    expect(wrapper).toContain('-new-instance');
+    expect(wrapper).not.toContain('-new-instance');
+    expect(wrapper).not.toContain('-no-remote');
   });
 
   it("declares the Gecko runtime libraries needed by Ubuntu and Mint", () => {
@@ -131,7 +139,7 @@ describe("build-installers wrappers", () => {
       distribution: "ubuntu"
     });
 
-    expect(control).toContain("Version: 140.10.0-2");
+    expect(control).toContain("Version: 140.10.0-3");
     expect(control).toContain("Depends:");
     expect(control).toContain("libatk1.0-0");
     expect(control).toContain("libdbus-1-3");
@@ -187,7 +195,7 @@ describe("build-installers wrappers", () => {
     });
 
     expect(spec).toContain("BuildArch:      x86_64");
-    expect(spec).toContain("Release:        2");
+    expect(spec).toContain("Release:        3");
     expect(spec).toContain("%global __os_install_post %{nil}");
     expect(spec).toContain("Source0:        nodely-browser-payload.tar.gz");
     expect(spec).toContain("Requires:       gtk3");

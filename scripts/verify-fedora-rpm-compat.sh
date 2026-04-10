@@ -78,6 +78,17 @@ podman run --rm \
       exit 127
     fi
     grep -q 'Mozilla Firefox\\|Nodely' /tmp/nodely-version.txt
+    if ! dnf install -y xorg-x11-server-Xvfb xorg-x11-xauth dbus-x11 >/tmp/nodely-dnf-gui-smoke.log 2>&1; then
+      cat /tmp/nodely-dnf-gui-smoke.log >&2 || true
+      exit 1
+    fi
+    if ! timeout 45s xvfb-run -a /usr/bin/nodely-browser --headless --screenshot /tmp/nodely-headless.png about:blank >/tmp/nodely-headless.out 2>/tmp/nodely-headless.err; then
+      cat /tmp/nodely-headless.out >&2 || true
+      cat /tmp/nodely-headless.err >&2 || true
+      find "\${HOME:-/root}/.local/share/nodely" -maxdepth 4 -mindepth 1 -printf '%P\n' 2>/dev/null | sort >&2 || true
+      exit 127
+    fi
+    test -s /tmp/nodely-headless.png
     dnf remove -y nodely-browser >/tmp/nodely-dnf-remove.log 2>&1
     test ! -e /usr/bin/nodely-browser
   "
