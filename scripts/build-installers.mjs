@@ -656,7 +656,7 @@ Nodely Browser is a node-based Gecko browser for research workflows.
 
 %prep
 %setup -q -c -T
-tar -xzf %{SOURCE0}
+tar --no-same-owner --no-same-permissions -xzf %{SOURCE0}
 
 %install
 rm -rf %{buildroot}
