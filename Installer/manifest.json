@@ -1,24 +1,4 @@
 {
-  "generatedAt": "2026-04-10T04:26:53.759Z",
-  "installers": [
-    {
-      "version": "140.10.0",
-      "platform": "win32",
-      "arch": "x64",
-      "variant": "installer",
-      "distribution": "windows",
-      "compatibility": [
-        "Windows 10",
-        "Windows 11"
-      ],
-      "builtBy": "github-actions",
-      "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24222743494",
-      "path": "windows/nodely-browser-140.10.0.en-US.win64.installer.exe",
-      "fileName": "nodely-browser-140.10.0.en-US.win64.installer.exe",
-      "source": "out/make/win32/x64/nodely-browser-140.10.0.en-US.win64.installer.exe",
-      "size": 19226202,
-      "syncedAt": "2026-04-10T04:26:53.758Z"
-    }
-  ]
+  "generatedAt": "2026-04-10T08:53:08.541Z",
+  "installers": []
 }

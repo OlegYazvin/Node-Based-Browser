@@ -447,16 +447,16 @@ export function renderInstallerReadme(manifest) {
 
   return `# Nodely Installer Guide
 
-This directory contains the installers that actually exist in this repo right now. \`Installer/manifest.json\` is the machine-readable source of truth, and this file is regenerated from that manifest.
+This directory is the small, machine-readable installer index used by release automation. Large generated installers are published as GitHub Release assets instead of committed to the repo when they exceed normal GitHub file limits. \`Installer/manifest.json\` describes the installers staged in this directory when files are present, and this file is regenerated from that manifest.
 
 ## Quick guide
 
 - Use **Linux x64** on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs.
 - Use **Linux arm64** only on ARM64 Linux hardware.
 - On **Linux Mint**, prefer the **Ubuntu DEB** package if you want the cleanest install and uninstall experience.
-- Windows and macOS installers are produced on native GitHub Actions runners and only show up here after a real native build has been promoted into this directory.
+- The cross-platform installer workflow publishes release assets for the current Nodely version after Windows, macOS, and Linux checks pass.
 - Each staged installer records whether it came from a local build or GitHub Actions promotion.
-- If a section below says no installers are staged, there is nothing in this repo for that target today.
+- If a section below says no installers are staged, check the [GitHub Releases](https://github.com/OlegYazvin/Node-Based-Browser/releases) page for published CI assets for the current version.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
 Generated from \`Installer/manifest.json\` at ${generatedAt}.

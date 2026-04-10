@@ -172,39 +172,10 @@ jobs:
             exit 1
           fi
 
-      - name: Prune managed installer slices
-        run: >
-          npm run installers:prune --
-          --target linux:x64
-
-      - name: Sync finished Linux x64 installers into Installer
+      - name: Report Linux Mint installer outputs
         run: |
           find out/make/linux/x64 -maxdepth 1 -type f -printf 'Installer output: %f\n' | sort
-          sync_log="$RUNNER_TEMP/installer-sync-linux-x64.log"
-
-          if ! npm run installers:sync -- \
-              --platform linux \
-              --arch x64 \
-              --built-by github-actions \
-              --build-workflow .github/workflows/linux-mint-x64-installer.yml \
-              --build-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" 2>&1 | tee "$sync_log"; then
-            summary="$(node scripts/summarize-ci-log.mjs --log "$sync_log" --mode installer)"
-            echo "::error title=Installer sync failed (linux/x64)::$summary"
-            exit 1
-          fi
-
-      - name: Commit promoted Linux x64 installers
-        run: |
-          if [[ -z "$(git status --porcelain -- Installer)" ]]; then
-            echo "No Installer changes to commit."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Installer
-          git commit -m "chore: promote Linux Mint x64 installer"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          echo "Linux Mint x64 verification uploads installers as workflow artifacts. The cross-platform installer workflow publishes release assets."
 
       - name: Upload failure logs
         if: failure()
