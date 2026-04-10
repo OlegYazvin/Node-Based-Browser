@@ -952,6 +952,8 @@ async function buildRpmInstaller({ version, outputDirectory, arch, payloadRoot }
     await ensureDirectory(sourcesDirectory);
     await writeFile(specPath, rpmSpec({ version, arch }), "utf8");
     await runCommand("tar", [
+      "--dereference",
+      "--hard-dereference",
       "--owner=0",
       "--group=0",
       "--numeric-owner",
