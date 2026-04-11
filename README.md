@@ -76,7 +76,7 @@ The final user-downloadable installers live in [Installer](./Installer).
 - `npm run installers:prune -- --target <platform:arch>` removes stale installer slices before a CI promotion refresh.
 - Keep a single visible Nodely release version across `gecko/release-artifacts/` and `Installer/`; the repo snapshot can contain multiple platform installers, but they should all belong to the same Nodely version.
 - Linux uses a self-contained `.run` installer so the downloaded file is enough to install and launch Nodely on common desktop distributions.
-- Windows and macOS installers are built from native packaged Gecko outputs and should be produced on native runners through [`.github/workflows/installers.yml`](./.github/workflows/installers.yml), which now runs on pushes to `main`, skips installer-only promotion commits, and auto-commits successful installer refreshes back to the branch it ran on.
+- Windows and macOS installers are built from native packaged Gecko outputs and should be produced on native runners through [`.github/workflows/installers.yml`](./.github/workflows/installers.yml), which runs on pushes to `main`, skips installer-only promotion commits, only promotes installers after a fully successful build matrix, and publishes the resulting installers as GitHub Release assets for the current Nodely version.
 - `Installer/` should only contain installers that were actually built and synced for this version.
 - [INSTALLER_BOUNDARIES.MD](./INSTALLER_BOUNDARIES.MD) is the maintainer guide for keeping Gecko browser packaging separate from installer generation.
 

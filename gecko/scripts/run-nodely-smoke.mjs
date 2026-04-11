@@ -258,6 +258,7 @@ function snapshotLooksReady(snapshot, scenario = "") {
     (snapshot.ui?.treeStrip?.newChildPathCount ?? 0) >= 1 &&
     snapshot.ui?.treeStrip?.treeFavoritePresent === false;
   const canvasTreeLabelsReady =
+    snapshot.ui?.canvasTreeLabels?.mode === "canvas" &&
     (snapshot.ui?.canvasTreeLabels?.count ?? 0) >= Math.max(1, snapshot.workspace?.rootCount ?? 0);
   const surfaceCloseMatchesView =
     snapshot.view === "focus"

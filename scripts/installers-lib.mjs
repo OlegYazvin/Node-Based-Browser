@@ -455,9 +455,10 @@ This directory contains the installers that actually exist in this repo right no
 - Use **Linux arm64** only on ARM64 Linux hardware.
 - On **Linux Mint**, prefer the **Ubuntu DEB** package if you want the cleanest install and uninstall experience.
 - Windows and macOS installers are produced on native GitHub Actions runners and only show up here after a real native build has been promoted into this directory.
+- The cross-platform installer workflow also publishes GitHub Release assets for the current Nodely version after a full successful matrix run.
 - Each staged installer records whether it came from a local build or GitHub Actions promotion.
 - \`Installer/RELEASE_NOTES.MD\` captures the latest push-triggered installer/release summary for this repo.
-- If a section below says no installers are staged, there is nothing in this repo for that target today.
+- If a section below says no installers are staged, check the GitHub Releases page for the latest published assets for that target.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
 Generated from \`Installer/manifest.json\` at ${generatedAt}.

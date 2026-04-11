@@ -13,6 +13,8 @@ import {
   isArtifactNode,
   killNode as removeNodeFromWorkspace,
   relayoutWorkspace,
+  refreshAutoTreeTitles,
+  refreshTreeFavoriteEntries,
   removeTree,
   renameTree,
   resolveFavoriteOpenPlan,
@@ -41,6 +43,8 @@ export class ChromeStateController extends EventTarget {
     this.basicsBridge = basicsBridge;
     this.workspace = null;
     this.workspacePersistChain = Promise.resolve();
+    this.treeTitleRefreshTimer = null;
+    this.treeTitleRefreshChain = Promise.resolve();
     this.favorites = [];
     this.chrome = createChromeState();
     this.basicsBridge.callbacks = {
@@ -112,13 +116,14 @@ export class ChromeStateController extends EventTarget {
       viewMode: this.workspace.prefs.viewMode
     });
     this.emitStateChange();
+    this.scheduleTreeTitleRefresh();
     await this.restoreSelectedNodeRuntime();
     this.trace("initialize:complete", {
       selectedNodeId: this.workspace.selectedNodeId
     });
   }
 
-  async persistWorkspace(nextWorkspaceOrUpdater) {
+  async persistWorkspace(nextWorkspaceOrUpdater, { scheduleTreeTitleRefresh = true } = {}) {
     let persistedWorkspace = this.workspace;
 
     this.workspacePersistChain = this.workspacePersistChain
@@ -130,12 +135,59 @@ export class ChromeStateController extends EventTarget {
             : nextWorkspaceOrUpdater;
         this.workspace = await this.workspaceStore.saveWorkspace(nextWorkspace);
         this.emitStateChange();
+        if (scheduleTreeTitleRefresh) {
+          this.scheduleTreeTitleRefresh();
+        }
         persistedWorkspace = this.workspace;
         return this.workspace;
       });
 
     await this.workspacePersistChain;
     return persistedWorkspace;
+  }
+
+  scheduleTreeTitleRefresh() {
+    if (!this.workspace?.nodes?.length) {
+      return;
+    }
+
+    if (this.treeTitleRefreshTimer != null) {
+      globalThis.clearTimeout?.(this.treeTitleRefreshTimer);
+    }
+
+    this.treeTitleRefreshTimer = globalThis.setTimeout?.(() => {
+      this.treeTitleRefreshTimer = null;
+      void this.runTreeTitleRefresh();
+    }, 260);
+  }
+
+  async runTreeTitleRefresh() {
+    this.treeTitleRefreshChain = this.treeTitleRefreshChain
+      .catch(() => {})
+      .then(async () => {
+        if (!this.workspace?.nodes?.length) {
+          return;
+        }
+
+        if (typeof globalThis.requestIdleCallback === "function") {
+          await new Promise((resolve) => globalThis.requestIdleCallback(resolve, { timeout: 600 }));
+        } else {
+          await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+        }
+
+        const nextWorkspace = refreshAutoTreeTitles(this.workspace);
+
+        if (nextWorkspace === this.workspace) {
+          return;
+        }
+
+        await this.persistWorkspace(nextWorkspace, {
+          scheduleTreeTitleRefresh: false
+        });
+        await this.syncTreeFavorites(this.workspace);
+      });
+
+    await this.treeTitleRefreshChain;
   }
 
   async createRootFromInput(input, options = {}) {
@@ -379,6 +431,7 @@ export class ChromeStateController extends EventTarget {
 
   async renameTree(rootId, title) {
     await this.persistWorkspace(renameTree(this.workspace, rootId, title));
+    await this.syncTreeFavorites(this.workspace);
   }
 
   async deleteTree(rootId) {
@@ -452,6 +505,17 @@ export class ChromeStateController extends EventTarget {
     }
 
     this.favorites = await this.favoritesStore.toggleFavorite(buildTreeFavoriteEntry(this.workspace, rootId));
+    this.emitStateChange();
+  }
+
+  async syncTreeFavorites(workspace = this.workspace) {
+    const nextFavorites = refreshTreeFavoriteEntries(this.favorites, workspace);
+
+    if (nextFavorites === this.favorites) {
+      return;
+    }
+
+    this.favorites = await this.favoritesStore.saveFavorites(nextFavorites);
     this.emitStateChange();
   }
 

@@ -14,6 +14,8 @@ const ROOT_RING_STEP = 920;
 const ROOT_CHILD_RADIUS = 268;
 const CHILD_RADIUS = 214;
 const COMPACT_CHILD_RADIUS = 182;
+const ROOT_TITLE_CLEARANCE_RADIUS = 56;
+const ROOT_TITLE_CLEARANCE_GAP = Math.PI / 2.7;
 const DEPTH_RADIUS_STEP = 24;
 const COMPACT_DEPTH_RADIUS_STEP = 10;
 const SIBLING_RADIUS_STEP = 14;
@@ -83,6 +85,47 @@ const AI_CHAT_PATH_PATTERNS = [
   /^\/project(?:s)?(?:\/|$)/u
 ];
 
+const TREE_TITLE_NOISE_PATTERN =
+  /\b(?:google docs|google drive|google search|search results|reddit|youtube|wikipedia|openai|chatgpt|claude|anthropic|sign in|sign up|log in|home|homepage|official site|documentation|docs|overview|watch|video|thread|discussion|post|dashboard|workspace|untitled page|untitled thread)\b/giu;
+const TREE_TITLE_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "by",
+  "for",
+  "from",
+  "how",
+  "in",
+  "into",
+  "near",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "vs",
+  "with"
+]);
+const TREE_TITLE_SMALL_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "as",
+  "at",
+  "by",
+  "for",
+  "from",
+  "in",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "vs"
+]);
+const TREE_TITLE_CHUNK_SPLIT_PATTERN = /\s*(?:\||:|•|·|»|«|\/)\s*|\s+[—–-]\s+/u;
+
 export const SITE_CATEGORY_STYLES = {
   "ai-chat": {
     label: "AI Chat",
@@ -145,6 +188,11 @@ function makeEmptyNodeTitle() {
   return "Untitled thread";
 }
 
+function normalizeOptionalTitle(value) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || null;
+}
+
 function defaultPosition() {
   return { x: 0, y: 0 };
 }
@@ -157,6 +205,8 @@ function createNode({ parentId, rootId, origin, slotIndex }) {
     parentId,
     rootId,
     title: makeEmptyNodeTitle(),
+    treeTitleManual: null,
+    treeTitleAuto: null,
     url: null,
     faviconUrl: null,
     createdAt: timestamp,
@@ -401,6 +451,8 @@ function normalizeNode(node) {
   return {
     ...node,
     kind,
+    treeTitleManual: normalizeOptionalTitle(node?.treeTitleManual),
+    treeTitleAuto: normalizeOptionalTitle(node?.treeTitleAuto),
     artifact: kind === "page" ? null : normalizeArtifactData({ ...node, kind }),
     permissions:
       kind === "page" && node?.permissions
@@ -774,11 +826,15 @@ export function renameTree(workspace, rootId, title) {
     return workspace;
   }
 
-  const nextTitle = title.trim() || rootNode.title || makeEmptyNodeTitle();
+  const nextTitle = normalizeOptionalTitle(title);
+
+  if (!nextTitle) {
+    return workspace;
+  }
 
   return replaceNode(workspace, rootId, (node) => ({
     ...node,
-    title: nextTitle
+    treeTitleManual: nextTitle
   }));
 }
 
@@ -924,7 +980,9 @@ function killRootNode(workspace, node) {
           return {
             ...rebasedNode,
             parentId: null,
-            slotIndex: node.slotIndex
+            slotIndex: node.slotIndex,
+            treeTitleManual: node.treeTitleManual ?? candidate.treeTitleManual ?? null,
+            treeTitleAuto: node.treeTitleAuto ?? candidate.treeTitleAuto ?? null
           };
         }
 
@@ -1282,7 +1340,10 @@ function placeNode(workspace, node, position, angle, positionedNodes, branchAxis
       node.parentId === null
         ? pageChildren.length === 1
           ? -Math.PI / 2
-          : -Math.PI / 2 + (Math.PI * 2 * childIndex) / pageChildren.length
+          : -Math.PI / 2 -
+            (Math.PI * 2 - ROOT_TITLE_CLEARANCE_GAP) / 2 +
+            ((Math.PI * 2 - ROOT_TITLE_CLEARANCE_GAP) * (childIndex + 0.5)) /
+              pageChildren.length
         : pageChildren.length === 1
           ? laneAxis + (node.depth % 2 === 0 ? 1 : -1) * SINGLE_CHILD_ZIGZAG_ANGLE
           : laneAxis -
@@ -1292,7 +1353,9 @@ function placeNode(workspace, node, position, angle, positionedNodes, branchAxis
 
     const radius =
       node.parentId === null
-        ? ROOT_CHILD_RADIUS + Math.max(0, pageChildren.length - 1) * SIBLING_RADIUS_STEP
+        ? ROOT_CHILD_RADIUS +
+          ROOT_TITLE_CLEARANCE_RADIUS +
+          Math.max(0, pageChildren.length - 1) * SIBLING_RADIUS_STEP
         : pageChildren.length === 1
           ? COMPACT_CHILD_RADIUS + node.depth * COMPACT_DEPTH_RADIUS_STEP
           : CHILD_RADIUS + node.depth * DEPTH_RADIUS_STEP + Math.max(0, pageChildren.length - 1) * SIBLING_RADIUS_STEP;
@@ -1726,8 +1789,51 @@ export function removeNodeFavorites(entries, workspaceId, nodeIds) {
       (entry) =>
         entry.workspaceId !== workspaceId ||
         !(entry.nodeId && removedNodeIdSet.has(entry.nodeId))
-    )
+      )
   );
+}
+
+export function refreshTreeFavoriteEntries(entries, workspace) {
+  if (!workspace) {
+    return entries;
+  }
+
+  let changed = false;
+  const nextEntries = entries.map((entry) => {
+    if (entry.kind !== "tree" || entry.workspaceId !== workspace.id) {
+      return entry;
+    }
+
+    const rootNode = findNode(workspace, entry.rootId);
+
+    if (!rootNode) {
+      return entry;
+    }
+
+    const refreshedFavorite = buildTreeFavoriteEntry(workspace, entry.rootId);
+
+    if (
+      entry.title === refreshedFavorite.title &&
+      entry.url === refreshedFavorite.url &&
+      entry.faviconUrl === refreshedFavorite.faviconUrl &&
+      entry.category === refreshedFavorite.category &&
+      entry.workspaceName === refreshedFavorite.workspaceName
+    ) {
+      return entry;
+    }
+
+    changed = true;
+    return {
+      ...entry,
+      title: refreshedFavorite.title,
+      url: refreshedFavorite.url,
+      faviconUrl: refreshedFavorite.faviconUrl,
+      category: refreshedFavorite.category,
+      workspaceName: refreshedFavorite.workspaceName
+    };
+  });
+
+  return changed ? sortFavorites(nextEntries) : entries;
 }
 
 function findTreeNodes(workspace, rootId) {
@@ -1745,6 +1851,251 @@ function representativeTreeNode(workspace, rootId) {
   return treeNodes.find((node) => Boolean(node.url || node.history?.entries?.length)) ?? findNode(workspace, rootId) ?? treeNodes[0] ?? null;
 }
 
+function treeTitleChunks(text) {
+  return String(text ?? "")
+    .split(TREE_TITLE_CHUNK_SPLIT_PATTERN)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+}
+
+function treeTitleTokens(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(TREE_TITLE_NOISE_PATTERN, " ")
+    .replace(/[()[\]{}]/gu, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\b(?:www|com|org|net|io|ai|app)\b/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .split(" ")
+    .filter(
+      (token) =>
+        token &&
+        token.length > 1 &&
+        !TREE_TITLE_STOP_WORDS.has(token) &&
+        !/^\d+$/u.test(token)
+    );
+}
+
+function humanizeTreeTitleTokens(tokens) {
+  return tokens
+    .map((token, index) => {
+      if (index > 0 && index < tokens.length - 1 && TREE_TITLE_SMALL_WORDS.has(token)) {
+        return token;
+      }
+
+      return token.charAt(0).toUpperCase() + token.slice(1);
+    })
+    .join(" ");
+}
+
+function addTreeTitleCandidate(candidateMap, tokens, { weight, nodeId, domain, fromQuery = false, fromSelected = false } = {}) {
+  if (!tokens.length || tokens.length > 6) {
+    return;
+  }
+
+  if (tokens.length === 1 && tokens[0].length < 4) {
+    return;
+  }
+
+  const key = tokens.join(" ");
+  const existing =
+    candidateMap.get(key) ??
+    {
+      tokens,
+      score: 0,
+      nodeIds: new Set(),
+      domains: new Set(),
+      queryHits: 0,
+      selectedHits: 0
+    };
+
+  existing.score += weight;
+  existing.nodeIds.add(nodeId);
+
+  if (domain) {
+    existing.domains.add(domain.replace(/^www\./u, ""));
+  }
+
+  if (fromQuery) {
+    existing.queryHits += 1;
+  }
+
+  if (fromSelected) {
+    existing.selectedHits += 1;
+  }
+
+  candidateMap.set(key, existing);
+}
+
+function titlePhrasesFromTokens(tokens) {
+  if (!tokens.length) {
+    return [];
+  }
+
+  const phrases = new Map();
+  const maxPhraseLength = Math.min(4, tokens.length);
+
+  if (tokens.length <= 6) {
+    phrases.set(tokens.join(" "), [...tokens]);
+  }
+
+  for (let size = maxPhraseLength; size >= 2; size -= 1) {
+    for (let start = 0; start <= tokens.length - size; start += 1) {
+      const phraseTokens = tokens.slice(start, start + size);
+      phrases.set(phraseTokens.join(" "), phraseTokens);
+    }
+  }
+
+  if (tokens.length === 1) {
+    phrases.set(tokens[0], [...tokens]);
+  }
+
+  return [...phrases.values()];
+}
+
+function conservativeTreeTitleFallback(workspace, rootId) {
+  const rootNode = findNode(workspace, rootId);
+  const representativeNode = representativeTreeNode(workspace, rootId) ?? rootNode;
+  const fallbackSources = [
+    rootNode?.searchQuery,
+    representativeNode?.searchQuery,
+    representativeNode?.title,
+    rootNode?.title
+  ];
+
+  for (const source of fallbackSources) {
+    const tokens = treeTitleTokens(source).slice(0, 6);
+
+    if (tokens.length) {
+      return humanizeTreeTitleTokens(tokens);
+    }
+  }
+
+  return representativeNode?.title?.trim() || rootNode?.title?.trim() || "Untitled tree";
+}
+
+export function deriveAutoTreeTitle(workspace, rootId) {
+  const rootNode = findNode(workspace, rootId);
+
+  if (!rootNode) {
+    return "Untitled tree";
+  }
+
+  const pageNodes = findTreeNodes(workspace, rootId).filter(isPageNode);
+
+  if (!pageNodes.length) {
+    return conservativeTreeTitleFallback(workspace, rootId);
+  }
+
+  const candidateMap = new Map();
+  const selectedNodeId = workspace?.selectedNodeId ?? null;
+
+  for (const node of pageNodes) {
+    const domain = hostnameForUrl(node.url);
+    const depthWeight = Math.max(0.7, 2.2 - node.depth * 0.45);
+    const recencyWeight = node.lastActiveAt || node.updatedAt ? 0.25 : 0;
+    const selectedWeight = node.id === selectedNodeId ? 0.9 : 0;
+    const nodeWeight = 1 + depthWeight + recencyWeight + selectedWeight;
+    const sources = [];
+
+    if (node.searchQuery) {
+      sources.push({
+        text: node.searchQuery,
+        weight: nodeWeight + 1.5,
+        fromQuery: true
+      });
+    }
+
+    for (const chunk of treeTitleChunks(node.title)) {
+      sources.push({
+        text: chunk,
+        weight: nodeWeight,
+        fromQuery: false
+      });
+    }
+
+    if (!sources.length && node.title) {
+      sources.push({
+        text: node.title,
+        weight: nodeWeight,
+        fromQuery: false
+      });
+    }
+
+    for (const source of sources) {
+      const sourceTokens = treeTitleTokens(source.text);
+
+      if (!sourceTokens.length) {
+        continue;
+      }
+
+      for (const phraseTokens of titlePhrasesFromTokens(sourceTokens)) {
+        const phraseWeight =
+          source.weight *
+          (phraseTokens.length === 1 ? 0.82 : phraseTokens.length >= 3 ? 1.12 : 1);
+
+        addTreeTitleCandidate(candidateMap, phraseTokens, {
+          weight: phraseWeight,
+          nodeId: node.id,
+          domain,
+          fromQuery: source.fromQuery,
+          fromSelected: node.id === selectedNodeId
+        });
+      }
+    }
+  }
+
+  const rankedCandidates = [...candidateMap.values()]
+    .map((candidate) => {
+      const supportBonus = Math.max(0, candidate.nodeIds.size - 1) * 0.8;
+      const domainBonus = Math.max(0, candidate.domains.size - 1) * 0.75;
+      const queryBonus = candidate.queryHits > 0 ? 1.4 : 0;
+      const selectedBonus = candidate.selectedHits > 0 ? 0.4 : 0;
+      const lengthBonus =
+        candidate.tokens.length === 1
+          ? -0.25
+          : candidate.tokens.length <= 4
+            ? 0.45
+            : 0.2;
+
+      return {
+        ...candidate,
+        finalScore:
+          candidate.score + supportBonus + domainBonus + queryBonus + selectedBonus + lengthBonus,
+        label: humanizeTreeTitleTokens(candidate.tokens)
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.finalScore - left.finalScore ||
+        right.tokens.length - left.tokens.length ||
+        left.label.localeCompare(right.label)
+    );
+
+  const winner = rankedCandidates[0];
+
+  if (!winner || winner.finalScore < 4.25) {
+    return conservativeTreeTitleFallback(workspace, rootId);
+  }
+
+  return winner.label;
+}
+
+export function treeDisplayTitle(workspace, rootId) {
+  const rootNode = findNode(workspace, rootId);
+
+  if (!rootNode) {
+    return "Untitled tree";
+  }
+
+  return (
+    normalizeOptionalTitle(rootNode.treeTitleManual) ??
+    normalizeOptionalTitle(rootNode.treeTitleAuto) ??
+    conservativeTreeTitleFallback(workspace, rootId)
+  );
+}
+
 export function summarizeTreeContents(workspace, rootId) {
   const treeNodes = findTreeNodes(workspace, rootId);
 
@@ -1752,6 +2103,39 @@ export function summarizeTreeContents(workspace, rootId) {
     pageCount: treeNodes.filter(isPageNode).length,
     artifactCount: treeNodes.filter(isArtifactNode).length
   };
+}
+
+export function refreshAutoTreeTitles(workspace) {
+  if (!workspace) {
+    return workspace;
+  }
+
+  let changed = false;
+  const nextNodes = workspace.nodes.map((node) => {
+    if (node.parentId !== null) {
+      return node;
+    }
+
+    const nextAutoTitle = normalizeOptionalTitle(deriveAutoTreeTitle(workspace, node.id));
+
+    if (nextAutoTitle === normalizeOptionalTitle(node.treeTitleAuto)) {
+      return node;
+    }
+
+    changed = true;
+    return {
+      ...node,
+      treeTitleAuto: nextAutoTitle
+    };
+  });
+
+  return changed
+    ? {
+        ...workspace,
+        updatedAt: now(),
+        nodes: nextNodes
+      }
+    : workspace;
 }
 
 export function classifyNodeCategory(workspace, node) {
@@ -1805,7 +2189,7 @@ export function buildTreeFavoriteEntry(workspace, rootId) {
     workspaceName: workspace.name,
     nodeId: null,
     rootId,
-    title: rootNode.title || representativeNode.title || "Untitled tree",
+    title: treeDisplayTitle(workspace, rootId),
     url: representativeNode.url,
     faviconUrl: representativeNode.faviconUrl,
     category: classifySiteCategory(representativeNode.url, representativeNode.title),

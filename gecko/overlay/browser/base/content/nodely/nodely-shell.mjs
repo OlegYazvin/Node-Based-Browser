@@ -9,6 +9,7 @@ import {
   nodeDimensions,
   orderTreeNodesForTabs,
   summarizeTreeContents,
+  treeDisplayTitle,
   treeHasInitializedPage
 } from "./domain.mjs";
 import "./nodely-graph-surface.mjs";
@@ -588,6 +589,7 @@ export class NodelyShell extends HTMLElement {
     const surfaceMode = workspace?.prefs.surfaceMode ?? "page";
     const selectedNode = findNode(workspace, workspace?.selectedNodeId);
     const selectedRoot = selectedNode ? findNode(workspace, selectedNode.rootId) : null;
+    const selectedRootTitle = selectedRoot ? treeDisplayTitle(workspace, selectedRoot.id) : "Tree";
     const favoritePageNode = selectedNode && isArtifactNode(selectedNode) ? findOwningPageNode(workspace, selectedNode) : selectedNode;
     const activePageFavoriteId = favoritePageNode ? buildPageFavoriteId(workspace.id, favoritePageNode.id) : null;
     const activeFavoriteIds = new Set(this.state.favorites.map((favorite) => favorite.id));
@@ -618,7 +620,14 @@ export class NodelyShell extends HTMLElement {
 
     this.renderTopbar(workspace);
     this.renderComposer(workspace, showComposer);
-    this.renderPagebar(workspace, selectedNode, selectedRoot, activeFavoriteIds, activePageFavoriteId);
+    this.renderPagebar(
+      workspace,
+      selectedNode,
+      selectedRoot,
+      selectedRootTitle,
+      activeFavoriteIds,
+      activePageFavoriteId
+    );
     this.renderArtifactSurface(workspace, selectedNode);
     this.renderFavoritesDrawer();
     this.renderDownloadsDrawer(workspace);
@@ -786,7 +795,14 @@ export class NodelyShell extends HTMLElement {
     this.composer.append(form);
   }
 
-  renderPagebar(workspace, selectedNode, selectedRoot, activeFavoriteIds, activePageFavoriteId) {
+  renderPagebar(
+    workspace,
+    selectedNode,
+    selectedRoot,
+    selectedRootTitle,
+    activeFavoriteIds,
+    activePageFavoriteId
+  ) {
     this.pagebar.hidden = !selectedNode || workspace?.prefs.surfaceMode === "canvas";
     this.pagebar.replaceChildren();
 
@@ -1057,7 +1073,7 @@ export class NodelyShell extends HTMLElement {
       treeHeading.append(renameForm);
     } else {
       const treeTitle = createHtmlElement(this.ownerDocument, "strong");
-      treeTitle.textContent = selectedRoot?.title || "Tree";
+      treeTitle.textContent = selectedRootTitle || "Tree";
       const treeMeta = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tree-meta");
       treeMeta.textContent = `${treeCounts.pageCount} pages${
         treeCounts.artifactCount ? ` • ${treeCounts.artifactCount} files` : ""
@@ -1442,7 +1458,7 @@ export class NodelyShell extends HTMLElement {
         form.dataset.rootId = root.id;
         const input = createHtmlElement(this.ownerDocument, "input", "nodely-shell__drawer-input");
         input.name = "title";
-        input.value = root.title || "Untitled thread";
+        input.value = treeDisplayTitle(workspace, root.id);
         const treeFavoriteId = buildTreeFavoriteId(workspace.id, root.id);
         const actions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-action-row");
         actions.append(
@@ -1950,7 +1966,10 @@ export class NodelyShell extends HTMLElement {
     if (action === "start-tree-rename") {
       const rootId = button.dataset.rootId;
       const rootNode = findNode(this.state.workspace, rootId);
-      this.openTreeRename(rootId, rootNode?.title ?? "");
+      this.openTreeRename(
+        rootId,
+        rootNode ? treeDisplayTitle(this.state.workspace, rootNode.id) : ""
+      );
       return;
     }
 

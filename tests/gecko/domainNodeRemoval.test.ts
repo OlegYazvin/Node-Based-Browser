@@ -7,6 +7,8 @@ import {
   findNode,
   findPageChildren,
   killNode,
+  renameTree,
+  treeDisplayTitle,
   upsertArtifactNode
 } from "../../gecko/overlay/browser/base/content/nodely/domain.mjs";
 
@@ -75,6 +77,7 @@ describe("killNode domain graph splicing", () => {
     let workspace = createRootNode(createEmptyWorkspace());
     const rootId = workspace.selectedNodeId as string;
 
+    workspace = renameTree(workspace, rootId, "Priority Sources");
     workspace = createChildNode(workspace, rootId, "manual");
     const childId = workspace.selectedNodeId as string;
     workspace = createChildNode(workspace, childId, "manual", { selectChild: false });
@@ -90,6 +93,7 @@ describe("killNode domain graph splicing", () => {
     expect(findNode(result.workspace, childId)?.parentId).toBeNull();
     expect(findNode(result.workspace, childId)?.rootId).toBe(childId);
     expect(findNode(result.workspace, grandchildId)?.rootId).toBe(childId);
+    expect(treeDisplayTitle(result.workspace, childId)).toBe("Priority Sources");
     expect(result.workspace.selectedNodeId).toBe(childId);
     expect(result.invalidatedNodeIds).toEqual(expect.arrayContaining([rootId]));
   });

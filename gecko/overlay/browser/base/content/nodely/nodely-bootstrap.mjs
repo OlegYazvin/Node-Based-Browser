@@ -2,6 +2,7 @@ import { BrowserBasicsBridge } from "./browser-basics-bridge.mjs";
 import { ChromeStateController } from "./chrome-state-controller.mjs";
 import { FavoritesStore } from "./favorites-store.mjs";
 import { describeNodelyShellEligibility, NodeRuntimeManager } from "./node-runtime-manager.mjs";
+import { treeDisplayTitle } from "./domain.mjs";
 import "./nodely-shell.mjs";
 import { WorkspaceStore } from "./workspace-store.mjs";
 
@@ -344,6 +345,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const minimapNodes = minimap?.querySelectorAll("rect");
     const minimapEdges = minimap?.querySelectorAll(".nodely-graph-surface__minimap-edge");
     const minimapToolbar = document.querySelector(".nodely-graph-surface__minimap-toolbar");
+    const graphSurface = document.querySelector("nodely-graph-surface");
     const surfaceCloseButton = document.querySelector(".nodely-shell__surface-close");
     const surfaceCloseSvg = surfaceCloseButton?.querySelector("svg");
     const surfaceClosePaths = surfaceCloseButton?.querySelectorAll("svg path");
@@ -355,7 +357,6 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const aiChatTabs = document.querySelectorAll(".nodely-shell__tab--ai-chat");
     const tabFavicons = document.querySelectorAll(".nodely-shell__tab .nodely-shell__tab-favicon");
     const treeFavoriteButton = document.querySelector('.nodely-shell__tree-strip [data-action="toggle-tree-favorite"]');
-    const treeCanvasLabels = document.querySelectorAll(".nodely-graph-tree-label");
     const topbarOrganizeButton = document.querySelector(".nodely-shell__topbar [data-action='auto-organize']");
     const topbarFullscreenButton = document.querySelector(".nodely-shell__topbar [data-action='toggle-fullscreen']");
     const graphOrganizeButton = minimapToolbar?.querySelector('[data-action="auto-organize"]');
@@ -404,7 +405,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           ? null
           : {
               rootId: selectedRoot.id,
-              title: selectedRoot.title,
+              title: treeDisplayTitle(workspace, selectedRoot.id),
               nodeCount: selectedTreeNodeCount
             },
       runtime: {
@@ -435,7 +436,8 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           treeFavoritePresent: Boolean(treeFavoriteButton)
         },
         canvasTreeLabels: {
-          count: treeCanvasLabels?.length ?? 0
+          count: Number(graphSurface?.dataset?.treeLabelCount ?? 0),
+          mode: graphSurface?.dataset?.treeLabelMode ?? null
         },
         windowFullscreen: Boolean(window.fullScreen),
         minimap: {

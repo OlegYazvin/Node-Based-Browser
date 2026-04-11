@@ -9,6 +9,8 @@ import {
   rectCenter,
   SITE_CATEGORY_STYLES,
   snapNodePosition,
+  summarizeTreeContents,
+  treeDisplayTitle,
   shouldCurveEdgeWithPositions
 } from "./domain.mjs";
 
@@ -31,6 +33,27 @@ function safeHostname(url, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function fitTextToWidth(context, text, maxWidth) {
+  const value = String(text ?? "").trim();
+
+  if (!value) {
+    return "";
+  }
+
+  if (context.measureText(value).width <= maxWidth) {
+    return value;
+  }
+
+  const ellipsis = "…";
+  let end = value.length;
+
+  while (end > 0 && context.measureText(`${value.slice(0, end).trimEnd()}${ellipsis}`).width > maxWidth) {
+    end -= 1;
+  }
+
+  return end > 0 ? `${value.slice(0, end).trimEnd()}${ellipsis}` : ellipsis;
 }
 
 function createIcon(paths, viewBox = "0 0 20 20") {
@@ -62,7 +85,6 @@ export class NodelyGraphSurface extends HTMLElement {
     this.persistedViewport = { ...this.viewport };
     this.livePositions = new Map();
     this.nodeElements = new Map();
-    this.treeLabelElements = new Map();
     this.dragState = null;
     this.panState = null;
     this.minimapState = null;
@@ -108,7 +130,6 @@ export class NodelyGraphSurface extends HTMLElement {
     this.stage = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__stage");
     this.canvas = createHtmlElement(this.ownerDocument, "canvas", "nodely-graph-surface__edges");
     this.nodeLayer = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__nodes");
-    this.labelLayer = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__tree-labels");
     this.emptyState = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__empty");
     this.emptyState.hidden = true;
     const emptyCard = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__empty-card");
@@ -131,7 +152,9 @@ export class NodelyGraphSurface extends HTMLElement {
 
     emptyCard.append(emptyTitle, emptyCopy);
     this.emptyState.append(emptyCard);
-    this.stage.append(this.canvas, this.nodeLayer, this.labelLayer);
+    this.dataset.treeLabelMode = "canvas";
+    this.dataset.treeLabelCount = "0";
+    this.stage.append(this.canvas, this.nodeLayer);
     this.append(this.stage, this.emptyState, this.minimap, this.minimapToolbar);
 
     this.context = this.canvas.getContext("2d");
@@ -373,13 +396,12 @@ export class NodelyGraphSurface extends HTMLElement {
 
     const positions = positionsForWorkspace(this.workspace, this.livePositions);
 
-    if (flags.edges || flags.resize) {
+    if (flags.edges || flags.resize || flags.nodes) {
       this.drawEdges(rect, positions);
     }
 
     if (flags.nodes || flags.resize) {
       this.reconcileNodes(positions);
-      this.reconcileTreeLabels(positions);
     }
 
     if (flags.minimap || flags.resize) {
@@ -415,99 +437,7 @@ export class NodelyGraphSurface extends HTMLElement {
     }
 
     this.nodeElements.clear();
-
-    for (const element of this.treeLabelElements.values()) {
-      element.remove();
-    }
-
-    this.treeLabelElements.clear();
-  }
-
-  reconcileTreeLabels(positions) {
-    if (!this.workspace || !this.labelLayer) {
-      return;
-    }
-
-    const bounds = this.getBoundingClientRect();
-    const activeSelectedNode =
-      findNode(this.workspace, this.selectedNodeId ?? this.workspace.selectedNodeId) ?? null;
-    const activeRootId = activeSelectedNode?.rootId ?? null;
-    const treeStats = new Map();
-
-    for (const node of this.workspace.nodes) {
-      const stats = treeStats.get(node.rootId) ?? { pageCount: 0, artifactCount: 0 };
-
-      if (isArtifactNode(node)) {
-        stats.artifactCount += 1;
-      } else {
-        stats.pageCount += 1;
-      }
-
-      treeStats.set(node.rootId, stats);
-    }
-
-    const seenRootIds = new Set();
-
-    for (const root of findRoots(this.workspace)) {
-      seenRootIds.add(root.id);
-      const category = classifyNodeCategory(this.workspace, root);
-      const colors = SITE_CATEGORY_STYLES[category];
-      const position = positions.get(root.id) ?? root.position;
-      const point = this.screenFromWorld(position);
-      const dimensions = nodeDimensions(root);
-      const stats = treeStats.get(root.id) ?? { pageCount: 1, artifactCount: 0 };
-      const meta = `${stats.pageCount} page${stats.pageCount === 1 ? "" : "s"}${
-        stats.artifactCount ? ` • ${stats.artifactCount} file${stats.artifactCount === 1 ? "" : "s"}` : ""
-      }`;
-      const element =
-        this.treeLabelElements.get(root.id) ??
-        createHtmlElement(this.ownerDocument, "div", "nodely-graph-tree-label");
-
-      if (!this.treeLabelElements.has(root.id)) {
-        this.treeLabelElements.set(root.id, element);
-        this.labelLayer.appendChild(element);
-      }
-
-      element.className = `nodely-graph-tree-label${root.id === activeRootId ? " is-active" : ""}`;
-      element.style.setProperty("--tree-label-accent", colors.accent);
-      element.dataset.rootId = root.id;
-
-      const contentSignature = JSON.stringify([root.title, meta, category, root.id === activeRootId]);
-
-      if (element.dataset.contentSignature !== contentSignature) {
-        element.innerHTML = `
-          <strong>${escapeHtml(root.title || "Tree")}</strong>
-          <span>${escapeHtml(meta)}</span>
-        `;
-        element.dataset.contentSignature = contentSignature;
-      }
-
-      const labelHeight = Math.max(
-        36,
-        Math.round(element.getBoundingClientRect?.().height || 40)
-      );
-      const preferredTop = Math.round(point.y + dimensions.height * this.viewport.zoom + 10);
-      const fallbackTop = Math.round(point.y - labelHeight - 10);
-      const maxTop = Math.max(8, Math.round(bounds.height - labelHeight - 8));
-      const labelTop =
-        preferredTop <= maxTop
-          ? preferredTop
-          : clamp(fallbackTop, 8, maxTop);
-      const maxWidth = Math.max(220, Math.round(dimensions.width * this.viewport.zoom + 88));
-      const maxLeft = Math.max(8, Math.round(bounds.width - maxWidth - 8));
-      const labelLeft = clamp(Math.round(point.x + 8), 8, maxLeft);
-
-      element.style.left = `${labelLeft}px`;
-      element.style.top = `${labelTop}px`;
-      element.style.maxWidth = `${maxWidth}px`;
-    }
-
-    for (const [rootId, element] of this.treeLabelElements.entries()) {
-      if (!seenRootIds.has(rootId)) {
-        element.remove();
-        this.treeLabelElements.delete(rootId);
-      }
-    }
+    this.dataset.treeLabelCount = "0";
   }
 
   drawEdges(rect, positions) {
@@ -548,6 +478,89 @@ export class NodelyGraphSurface extends HTMLElement {
       this.context.strokeStyle = "rgba(88, 115, 148, 0.82)";
       this.context.lineWidth = 2.4 / this.viewport.zoom;
       this.context.stroke(new Path2D(path.path));
+    }
+
+    this.context.restore();
+    this.drawTreeLabels(rect, positions);
+  }
+
+  drawTreeLabels(rect, positions) {
+    if (!this.workspace) {
+      this.dataset.treeLabelCount = "0";
+      return;
+    }
+
+    const roots = findRoots(this.workspace);
+    this.dataset.treeLabelMode = "canvas";
+    this.dataset.treeLabelCount = String(roots.length);
+
+    if (!roots.length) {
+      return;
+    }
+
+    const computedStyle = window.getComputedStyle(this);
+    const fontFamily =
+      computedStyle.fontFamily ||
+      '"SF Pro Text", "Segoe UI", "Noto Sans", system-ui, sans-serif';
+    const textColor = computedStyle.getPropertyValue("--nodely-text").trim() || "#203246";
+    const mutedTextColor = computedStyle.getPropertyValue("--nodely-muted").trim() || textColor;
+    const darkTheme = document.documentElement?.getAttribute("nodely-theme") === "dark";
+    const shadowColor = darkTheme ? "rgba(0, 0, 0, 0.62)" : "rgba(255, 255, 255, 0.84)";
+    const activeSelectedNode =
+      findNode(this.workspace, this.selectedNodeId ?? this.workspace.selectedNodeId) ?? null;
+    const activeRootId = activeSelectedNode?.rootId ?? null;
+    const devicePixelRatio = window.devicePixelRatio || 1;
+
+    this.context.save();
+    this.context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    this.context.textAlign = "left";
+    this.context.textBaseline = "alphabetic";
+
+    for (const root of roots) {
+      const category = classifyNodeCategory(this.workspace, root);
+      const colors = SITE_CATEGORY_STYLES[category];
+      const position = positions.get(root.id) ?? root.position;
+      const point = this.screenFromWorld(position);
+      const dimensions = nodeDimensions(root);
+      const stats = summarizeTreeContents(this.workspace, root.id);
+      const meta = `${stats.pageCount} page${stats.pageCount === 1 ? "" : "s"}${
+        stats.artifactCount ? ` • ${stats.artifactCount} file${stats.artifactCount === 1 ? "" : "s"}` : ""
+      }`;
+      const blockHeight = 30;
+      const preferredTop = Math.round(point.y + dimensions.height * this.viewport.zoom + 10);
+      const fallbackTop = Math.round(point.y - blockHeight - 10);
+      const maxTop = Math.max(8, Math.round(rect.height - blockHeight - 8));
+      const labelTop =
+        preferredTop <= maxTop
+          ? preferredTop
+          : clamp(fallbackTop, 8, maxTop);
+      const maxWidth = Math.max(220, Math.round(dimensions.width * this.viewport.zoom + 88));
+      const maxLeft = Math.max(8, Math.round(rect.width - maxWidth - 8));
+      const labelLeft = clamp(Math.round(point.x + 8), 8, maxLeft);
+      const isActive = root.id === activeRootId;
+
+      this.context.shadowColor = shadowColor;
+      this.context.shadowBlur = isActive ? 8 : 2;
+      this.context.shadowOffsetX = 0;
+      this.context.shadowOffsetY = 1;
+
+      this.context.font = `800 15px ${fontFamily}`;
+      this.context.fillStyle = isActive ? colors.accent : textColor;
+      this.context.fillText(
+        fitTextToWidth(this.context, treeDisplayTitle(this.workspace, root.id), maxWidth),
+        labelLeft,
+        labelTop + 14,
+        maxWidth
+      );
+
+      this.context.font = `500 11.5px ${fontFamily}`;
+      this.context.fillStyle = isActive ? colors.accent : mutedTextColor;
+      this.context.fillText(
+        fitTextToWidth(this.context, meta, maxWidth),
+        labelLeft,
+        labelTop + 27,
+        maxWidth
+      );
     }
 
     this.context.restore();

@@ -903,8 +903,7 @@
 
 .nodely-graph-surface__stage,
 .nodely-graph-surface__edges,
-.nodely-graph-surface__nodes,
-.nodely-graph-surface__tree-labels {
+.nodely-graph-surface__nodes {
   position: absolute;
   inset: 0;
 }
@@ -924,12 +923,6 @@
   z-index: 1;
   overflow: hidden;
   contain: layout paint;
-}
-
-.nodely-graph-surface__tree-labels {
-  z-index: 2;
-  pointer-events: none;
-  overflow: hidden;
 }
 
 .nodely-graph-surface__empty {
@@ -1075,51 +1068,6 @@
   color: #5d6f83;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-}
-
-.nodely-graph-tree-label {
-  position: absolute;
-  left: 0;
-  top: 0;
-  min-width: 0;
-  max-width: 320px;
-  padding: 0;
-  display: grid;
-  gap: 3px;
-  color: var(--nodely-text);
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.72);
-}
-
-.nodely-graph-tree-label strong {
-  font-size: 15px;
-  line-height: 1.12;
-  font-weight: 800;
-  color: color-mix(in srgb, var(--tree-label-accent) 56%, var(--nodely-text));
-}
-
-.nodely-graph-tree-label span {
-  font-size: 11.5px;
-  color: color-mix(in srgb, var(--tree-label-accent) 62%, var(--nodely-muted));
-}
-
-.nodely-graph-tree-label.is-active {
-  text-shadow:
-    0 1px 2px rgba(255, 255, 255, 0.82),
-    0 0 10px color-mix(in srgb, var(--tree-label-accent) 22%, transparent);
-}
-
-.nodely-graph-tree-label.is-active strong {
-  color: color-mix(in srgb, var(--tree-label-accent) 80%, var(--nodely-text));
-}
-
-:root[nodely-theme="dark"] .nodely-graph-tree-label {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
-}
-
-:root[nodely-theme="dark"] .nodely-graph-tree-label.is-active {
-  text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.65),
-    0 0 10px color-mix(in srgb, var(--tree-label-accent) 18%, transparent);
 }
 
 .nodely-graph-surface__minimap {

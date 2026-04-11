@@ -281,7 +281,7 @@ jobs:
     name: Assemble Installer Directory
     needs:
       - build-native-installers
-    if: always()
+    if: needs.build-native-installers.result == 'success'
     runs-on: ubuntu-latest
 
     defaults:
@@ -358,18 +358,71 @@ jobs:
           --ref "$GITHUB_REF_NAME"
           --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
+      - name: Derive release metadata
+        id: release_meta
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from "node:fs";
+
+          const manifest = JSON.parse(readFileSync("Installer/manifest.json", "utf8"));
+          const installers = Array.isArray(manifest.installers) ? manifest.installers : [];
+          const versions = [...new Set(installers.map((entry) => entry.version).filter(Boolean))];
+
+          if (!installers.length) {
+            throw new Error("Installer/manifest.json does not contain any installers to publish.");
+          }
+
+          if (versions.length !== 1) {
+            throw new Error(`Expected exactly one staged Nodely version, found: ${versions.join(", ")}`);
+          }
+
+          const version = versions[0];
+          const assets = installers.map((entry) => `Installer/${String(entry.path).replaceAll("\\\\", "/")}`);
+          const outputPath = process.env.GITHUB_OUTPUT;
+
+          appendFileSync(outputPath, `version=${version}\n`);
+          appendFileSync(outputPath, `tag=nodely-browser-${version}\n`);
+          appendFileSync(outputPath, `title=Nodely Browser ${version}\n`);
+          appendFileSync(outputPath, "assets<<EOF\n");
+          appendFileSync(outputPath, `${assets.join("\n")}\n`);
+          appendFileSync(outputPath, "EOF\n");
+          NODE
+
       - name: Commit promoted installers
         run: |
           if [[ -z "$(git status --porcelain -- Installer)" ]]; then
             echo "No Installer changes to commit."
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Installer
+            git commit -m "chore: promote generated installers and notes"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Installer
-          git commit -m "chore: promote generated installers and notes"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+      - name: Publish GitHub Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.release_meta.outputs.title }}
+          RELEASE_ASSETS: ${{ steps.release_meta.outputs.assets }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file Installer/RELEASE_NOTES.MD
+          else
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file Installer/RELEASE_NOTES.MD \
+              --target "$GITHUB_SHA"
+          fi
+
+          while IFS= read -r asset; do
+            if [[ -n "$asset" ]]; then
+              gh release upload "$RELEASE_TAG" "$asset" --clobber
+            fi
+          done <<< "$RELEASE_ASSETS"
 
       - name: Upload assembled Installer directory
         uses: actions/upload-artifact@v4
