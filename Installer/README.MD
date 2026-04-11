@@ -1,18 +1,19 @@
 # Nodely Installer Guide
 
-This directory is the small, machine-readable installer index used by release automation. Large generated installers are published as GitHub Release assets instead of committed to the repo when they exceed normal GitHub file limits. `Installer/manifest.json` describes the installers staged in this directory when files are present, and this file is regenerated from that manifest.
+This directory contains the installers that actually exist in this repo right now. `Installer/manifest.json` is the machine-readable source of truth, and this file is regenerated from that manifest.
 
 ## Quick guide
 
 - Use **Linux x64** on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs.
 - Use **Linux arm64** only on ARM64 Linux hardware.
 - On **Linux Mint**, prefer the **Ubuntu DEB** package if you want the cleanest install and uninstall experience.
-- The cross-platform installer workflow publishes release assets for the current Nodely version after Windows, macOS, and Linux checks pass.
+- Windows and macOS installers are produced on native GitHub Actions runners and only show up here after a real native build has been promoted into this directory.
 - Each staged installer records whether it came from a local build or GitHub Actions promotion.
-- If a section below says no installers are staged, check the [GitHub Releases](https://github.com/OlegYazvin/Node-Based-Browser/releases) page for published CI assets for the current version.
+- `Installer/RELEASE_NOTES.MD` captures the latest push-triggered installer/release summary for this repo.
+- If a section below says no installers are staged, there is nothing in this repo for that target today.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
-Generated from `Installer/manifest.json` at 2026-04-11T00:07:16.214Z.
+Generated from `Installer/manifest.json` at 2026-04-11T02:26:48.035Z.
 
 ## Windows 10 and 11
 
@@ -20,7 +21,7 @@ Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |
-| [Nodely-Browser-140.9.1esr-windows-x64.installer.exe](./windows/Nodely-Browser-140.9.1esr-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24263266469) (`installers.yml`) |
+| [Nodely-Browser-140.10.0-windows-x64.installer.exe](./windows/Nodely-Browser-140.10.0-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24271334012) (`installers.yml`) |
 
 ## macOS Intel
 
@@ -38,12 +39,7 @@ No installers are currently staged in this repo for this target.
 
 Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/AMD processors. On Linux Mint, prefer the Ubuntu DEB for easy install and uninstall through Software Manager.
 
-| File | Type | Supported systems | Built by |
-| --- | --- | --- | --- |
-| [Nodely-Browser-140.9.1esr-debian-x64.deb](./linux/Nodely-Browser-140.9.1esr-debian-x64.deb) | Debian DEB package | Debian; x64 only | Local build |
-| [Nodely-Browser-140.9.1esr-linux-x64.flatpak](./linux/Nodely-Browser-140.9.1esr-linux-x64.flatpak) | Flatpak bundle | Linux Mint, Fedora, Ubuntu, Debian, other Flatpak-enabled Linux distros; x64 only | Local build |
-| [Nodely-Browser-140.9.1esr-linux-x64.run](./linux/Nodely-Browser-140.9.1esr-linux-x64.run) | Self-extracting installer (`.run`) | Ubuntu, Debian, Fedora, Linux Mint, other common desktop Linux distros; x64 only | Local build |
-| [Nodely-Browser-140.9.1esr-ubuntu-x64.deb](./linux/Nodely-Browser-140.9.1esr-ubuntu-x64.deb) | Ubuntu DEB package | Ubuntu, Linux Mint; x64 only | Local build |
+No installers are currently staged in this repo for this target.
 
 ## Linux arm64
 
