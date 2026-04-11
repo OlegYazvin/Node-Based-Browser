@@ -12,7 +12,9 @@ const LOCALHOST_PATTERN = /^localhost(?::\d+)?(?:\/.*)?$/i;
 const ROOT_RING_RADIUS = 1040;
 const ROOT_RING_STEP = 920;
 const ROOT_RING_PUSH_STEP = 280;
-const ROOT_PLACEMENT_ATTEMPTS = 16;
+const ROOT_PLACEMENT_RADIUS_BANDS = 4;
+const ROOT_RING_SWEEP_STEP = Math.PI / 12;
+const ROOT_RING_SWEEP_ORDER = [0, 1, -1, 2, -2, 3, -3, 4, -4];
 const ROOT_TREE_PADDING = 132;
 const ROOT_CHILD_RADIUS = 268;
 const CHILD_RADIUS = 214;
@@ -174,7 +176,8 @@ export const GRAPH_ARTIFACT_HEIGHT = 52;
 export const GRAPH_NODE_GAP = 16;
 export const GRAPH_EDGE_CLEARANCE = 16;
 const ROOT_NODE_MAX_WIDTH = 214;
-const ROOT_NODE_WIDTH_PADDING = 28;
+const ROOT_NODE_HORIZONTAL_PADDING = 20;
+const ROOT_NODE_WIDTH_STEP = 6;
 const ROOT_NODE_TITLE_LINE_HEIGHT = 17;
 
 const DRAG_SNAP_STEP = 24;
@@ -1427,20 +1430,11 @@ export function nodeDimensions(node) {
 
   if (node?.parentId === null) {
     const title = String(node?.title ?? "").trim();
-    const titleLength = title.length;
-    const width =
-      GRAPH_NODE_WIDTH +
-      Math.min(
-        ROOT_NODE_MAX_WIDTH - GRAPH_NODE_WIDTH,
-        Math.max(0, Math.round((titleLength - 24) * 1.45 + ROOT_NODE_WIDTH_PADDING))
-      );
-    const effectiveWidth = Math.max(GRAPH_NODE_WIDTH, Math.min(ROOT_NODE_MAX_WIDTH, width));
-    const titleWidth = Math.max(88, effectiveWidth - 26);
-    const estimatedLineCount = Math.max(1, Math.ceil((Math.max(titleLength, 1) * 6.1) / titleWidth));
-    const extraLineCount = Math.max(0, estimatedLineCount - 2);
+    const layout = resolveRootTitleLayout(title);
+    const extraLineCount = Math.max(0, layout.lineCount - 2);
 
     return {
-      width: effectiveWidth,
+      width: layout.width,
       height: GRAPH_NODE_HEIGHT + extraLineCount * ROOT_NODE_TITLE_LINE_HEIGHT
     };
   }
@@ -1449,6 +1443,168 @@ export function nodeDimensions(node) {
     width: GRAPH_NODE_WIDTH,
     height: GRAPH_NODE_HEIGHT
   };
+}
+
+function resolveRootTitleLayout(title) {
+  const normalizedTitle = String(title ?? "").trim();
+  const minimumWidth = GRAPH_NODE_WIDTH;
+
+  if (!normalizedTitle) {
+    return {
+      width: minimumWidth,
+      lineCount: 1
+    };
+  }
+
+  let bestLayout = null;
+
+  for (
+    let candidateWidth = minimumWidth;
+    candidateWidth <= ROOT_NODE_MAX_WIDTH;
+    candidateWidth += ROOT_NODE_WIDTH_STEP
+  ) {
+    const contentWidth = Math.max(88, candidateWidth - ROOT_NODE_HORIZONTAL_PADDING);
+    const lines = wrapRootTitle(normalizedTitle, contentWidth);
+    const lineWidths = lines.map((line) => estimateTitleWidth(line));
+    const lastLineWidth = lineWidths.at(-1) ?? 0;
+    const widestLineWidth = Math.max(...lineWidths, 1);
+    const lineCount = Math.max(1, lines.length);
+    const widthGrowth = candidateWidth - minimumWidth;
+    const lastLineFillRatio = lastLineWidth / Math.max(contentWidth, 1);
+    const widestFillRatio = widestLineWidth / Math.max(contentWidth, 1);
+    const score =
+      widthGrowth * 1.2 +
+      Math.max(0, lineCount - 2) * 26 +
+      (lineCount > 1 && lastLineFillRatio < 0.24 ? 78 : 0) +
+      (lineCount > 1 && lastLineFillRatio < 0.34 ? 44 : 0) +
+      (lineCount > 1 && lastLineFillRatio < 0.46 ? 16 : 0) +
+      (lineCount > 1 && widestFillRatio > 0.88 && lastLineFillRatio < 0.42 ? 26 : 0);
+
+    if (!bestLayout || score < bestLayout.score) {
+      bestLayout = {
+        width: candidateWidth,
+        lineCount,
+        score
+      };
+    }
+  }
+
+  return bestLayout ?? {
+    width: minimumWidth,
+    lineCount: 1
+  };
+}
+
+function wrapRootTitle(title, maxWidth) {
+  const tokens = String(title ?? "").trim().split(/\s+/u).filter(Boolean);
+
+  if (!tokens.length) {
+    return [""];
+  }
+
+  const lines = [];
+  let currentLine = "";
+  let currentWidth = 0;
+
+  for (const token of tokens) {
+    const tokenWidth = estimateTitleWidth(token);
+    const separatorWidth = currentLine ? estimateTitleWidth(" ") : 0;
+
+    if (currentLine && currentWidth + separatorWidth + tokenWidth <= maxWidth) {
+      currentLine = `${currentLine} ${token}`;
+      currentWidth += separatorWidth + tokenWidth;
+      continue;
+    }
+
+    if (currentLine) {
+      lines.push(currentLine);
+      currentLine = "";
+      currentWidth = 0;
+    }
+
+    if (tokenWidth <= maxWidth) {
+      currentLine = token;
+      currentWidth = tokenWidth;
+      continue;
+    }
+
+    const fragments = splitRootTitleToken(token, maxWidth);
+    currentLine = fragments.pop() ?? "";
+    currentWidth = estimateTitleWidth(currentLine);
+    lines.push(...fragments);
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+}
+
+function splitRootTitleToken(token, maxWidth) {
+  const fragments = [];
+  let current = "";
+  let currentWidth = 0;
+
+  for (const character of Array.from(token)) {
+    const characterWidth = estimateTitleWidth(character);
+
+    if (current && currentWidth + characterWidth > maxWidth) {
+      fragments.push(current);
+      current = character;
+      currentWidth = characterWidth;
+      continue;
+    }
+
+    current += character;
+    currentWidth += characterWidth;
+  }
+
+  if (current) {
+    fragments.push(current);
+  }
+
+  return fragments;
+}
+
+function estimateTitleWidth(text) {
+  let width = 0;
+
+  for (const character of String(text ?? "")) {
+    if (character === " ") {
+      width += 3.1;
+      continue;
+    }
+
+    if (/[A-Z]/u.test(character)) {
+      width += 7;
+      continue;
+    }
+
+    if (/[0-9]/u.test(character)) {
+      width += 6.1;
+      continue;
+    }
+
+    if (/[ilIjtfr]/u.test(character)) {
+      width += 3.7;
+      continue;
+    }
+
+    if (/[mwMW]/u.test(character)) {
+      width += 7.6;
+      continue;
+    }
+
+    if (/[-–—.:/]/u.test(character)) {
+      width += 4.2;
+      continue;
+    }
+
+    width += 5.8;
+  }
+
+  return width;
 }
 
 export function nodeRect(positionOrNode, dimensions = null) {
@@ -1525,27 +1681,51 @@ function resolveRootPlacement(workspace, rootNode, rootIndex, placedTreeBounds) 
   const { angle, radius } = rootAnchorPolar(rootIndex);
   let fallbackNodes = null;
   let fallbackBounds = null;
+  let fallbackOverlapArea = Number.POSITIVE_INFINITY;
+  let fallbackRadiusBand = Number.POSITIVE_INFINITY;
+  let fallbackSweepMagnitude = Number.POSITIVE_INFINITY;
 
-  for (let attempt = 0; attempt < ROOT_PLACEMENT_ATTEMPTS; attempt += 1) {
-    const candidateRadius = radius + attempt * ROOT_RING_PUSH_STEP;
-    const candidatePosition =
-      candidateRadius === 0
-        ? { x: 0, y: 0 }
-        : {
-            x: Math.cos(angle) * candidateRadius,
-            y: Math.sin(angle) * candidateRadius
-          };
-    const nodes = new Map();
-    placeNode(workspace, rootNode, candidatePosition, null, nodes);
-    const bounds = expandRect(boundsForNodes([...nodes.values()]), ROOT_TREE_PADDING);
+  for (let radiusBand = 0; radiusBand < ROOT_PLACEMENT_RADIUS_BANDS; radiusBand += 1) {
+    for (const sweepStep of ROOT_RING_SWEEP_ORDER) {
+      if (radius === 0 && radiusBand === 0 && sweepStep !== 0) {
+        continue;
+      }
 
-    if (!fallbackNodes) {
-      fallbackNodes = nodes;
-      fallbackBounds = bounds;
-    }
+      const candidateAngle = angle + sweepStep * ROOT_RING_SWEEP_STEP;
+      const candidateRadius = radius + radiusBand * ROOT_RING_PUSH_STEP;
+      const candidatePosition =
+        candidateRadius === 0
+          ? { x: 0, y: 0 }
+          : {
+              x: Math.cos(candidateAngle) * candidateRadius,
+              y: Math.sin(candidateAngle) * candidateRadius
+            };
+      const nodes = new Map();
+      placeNode(workspace, rootNode, candidatePosition, null, nodes);
+      const bounds = expandRect(boundsForNodes([...nodes.values()]), ROOT_TREE_PADDING);
+      const overlapArea = placedBounds.reduce(
+        (sum, existingBounds) => sum + rectOverlapArea(bounds, existingBounds),
+        0
+      );
 
-    if (!placedBounds.some((existingBounds) => rectsOverlap(bounds, existingBounds))) {
-      return { nodes, bounds };
+      if (overlapArea === 0) {
+        return { nodes, bounds };
+      }
+
+      const sweepMagnitude = Math.abs(sweepStep);
+      if (
+        overlapArea < fallbackOverlapArea ||
+        (overlapArea === fallbackOverlapArea && radiusBand < fallbackRadiusBand) ||
+        (overlapArea === fallbackOverlapArea &&
+          radiusBand === fallbackRadiusBand &&
+          sweepMagnitude < fallbackSweepMagnitude)
+      ) {
+        fallbackNodes = nodes;
+        fallbackBounds = bounds;
+        fallbackOverlapArea = overlapArea;
+        fallbackRadiusBand = radiusBand;
+        fallbackSweepMagnitude = sweepMagnitude;
+      }
     }
   }
 
@@ -1557,6 +1737,19 @@ function resolveRootPlacement(workspace, rootNode, rootIndex, placedTreeBounds) 
 
 function rectsOverlap(left, right) {
   return left.x < right.x + right.width && left.x + left.width > right.x && left.y < right.y + right.height && left.y + left.height > right.y;
+}
+
+function rectOverlapArea(left, right) {
+  const overlapWidth = Math.max(
+    0,
+    Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x)
+  );
+  const overlapHeight = Math.max(
+    0,
+    Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y)
+  );
+
+  return overlapWidth * overlapHeight;
 }
 
 function orientation(first, second, third) {

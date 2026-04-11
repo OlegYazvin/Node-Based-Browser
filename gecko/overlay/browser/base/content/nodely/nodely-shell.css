@@ -415,8 +415,7 @@
 
 .nodely-shell__combo-suggestion {
   display: grid;
-  gap: 2px;
-  justify-items: start;
+  gap: 4px;
   text-align: left;
   padding: 9px 12px;
   border-radius: 12px;
@@ -424,9 +423,27 @@
   background: var(--nodely-input-bg);
 }
 
+.nodely-shell__combo-suggestion-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
 .nodely-shell__combo-suggestion strong {
   font-size: 12.5px;
   color: var(--nodely-text);
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.nodely-shell__combo-suggestion-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nodely-shell__combo-suggestion-label,
@@ -662,6 +679,8 @@
 .nodely-shell__tab-wrap {
   position: relative;
   flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
 }
 
 .nodely-shell__tab {
@@ -718,7 +737,7 @@
   box-shadow: 0 0 0 1px rgba(29, 115, 201, 0.12) inset;
 }
 
-.nodely-shell__tab-kill {
+.nodely-shell__tab-close {
   position: absolute;
   top: 50%;
   right: 6px;
@@ -731,25 +750,22 @@
   place-items: center;
   border-radius: 8px;
   transform: translateY(-50%);
-  opacity: 0;
-  pointer-events: none;
-  color: var(--nodely-muted);
-  background: color-mix(in srgb, var(--nodely-input-bg) 88%, transparent);
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
-}
-
-.nodely-shell__tab-wrap:hover .nodely-shell__tab-kill,
-.nodely-shell__tab-wrap:focus-within .nodely-shell__tab-kill {
   opacity: 1;
   pointer-events: auto;
+  color: var(--nodely-muted);
+  background: color-mix(in srgb, var(--nodely-input-bg) 94%, transparent);
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  border: 1px solid transparent;
 }
 
-.nodely-shell__tab-kill:hover {
+.nodely-shell__tab-close:hover,
+.nodely-shell__tab-close:focus-visible {
   color: #a72a2a;
+  border-color: color-mix(in srgb, #a72a2a 22%, transparent);
   background: rgba(255, 255, 255, 0.88);
 }
 
-.nodely-shell__tab-kill svg {
+.nodely-shell__tab-close svg {
   width: 12px;
   height: 12px;
 }
@@ -1117,7 +1133,8 @@
 .nodely-graph-node__title {
   font-size: 12px;
   line-height: 1.3;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .nodely-graph-node__meta {

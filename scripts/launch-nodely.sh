@@ -9,6 +9,7 @@ checkout_dir="${NODELY_BROWSER_CHECKOUT:-${NODELY_FIREFOX_DIR:-$checkout_dir_def
 packaged_binary_default="$checkout_dir/obj-nodely/dist/nodely/nodely"
 binary="${NODELY_BROWSER_BINARY:-${NODELY_FIREFOX_BINARY:-$packaged_binary_default}}"
 profile_dir="${NODELY_PROFILE_DIR:-$HOME/.local/share/nodely/gecko-profile}"
+bundled_node="$repo_root/.tools/node/bin/node"
 
 desktop_exec_escape() {
   local value="$1"
@@ -73,11 +74,20 @@ EOF
   fi
 }
 
-if [[ -x "$repo_root/.tools/node/bin/node" ]]; then
-  "$repo_root/.tools/node/bin/node" \
+refresh_local_runtime() {
+  [[ -x "$bundled_node" ]] || return 0
+  [[ -d "$checkout_dir" ]] || return 0
+
+  "$bundled_node" \
+    "$repo_root/gecko/scripts/sync-overlay.mjs" \
+    --checkout-dir "$checkout_dir" >/dev/null 2>&1 || true
+
+  "$bundled_node" \
     "$repo_root/gecko/scripts/refresh-artifact-branding.mjs" \
     --checkout-dir "$checkout_dir" >/dev/null 2>&1 || true
-fi
+}
+
+refresh_local_runtime
 
 show_error() {
   local message="$1"

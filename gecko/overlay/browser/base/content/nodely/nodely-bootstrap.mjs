@@ -356,6 +356,8 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const treeEditButton = document.querySelector('[data-action="start-tree-rename"]');
     const aiChatTabs = document.querySelectorAll(".nodely-shell__tab--ai-chat");
     const tabFavicons = document.querySelectorAll(".nodely-shell__tab .nodely-shell__tab-favicon");
+    const tabCloseButtons = document.querySelectorAll(".nodely-shell__tab-close");
+    const tabClosePaths = document.querySelectorAll(".nodely-shell__tab-close svg path");
     const treeFavoriteButton = document.querySelector('.nodely-shell__tree-strip [data-action="toggle-tree-favorite"]');
     const topbarOrganizeButton = document.querySelector(".nodely-shell__topbar [data-action='auto-organize']");
     const topbarFullscreenButton = document.querySelector(".nodely-shell__topbar [data-action='toggle-fullscreen']");
@@ -431,6 +433,8 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           treeEditPresent: Boolean(treeEditButton),
           aiChatTabCount: aiChatTabs?.length ?? 0,
           tabFaviconCount: tabFavicons?.length ?? 0,
+          tabCloseCount: tabCloseButtons?.length ?? 0,
+          tabClosePathCount: tabClosePaths?.length ?? 0,
           newChildSvgCount: newChildButton?.querySelectorAll("svg")?.length ?? 0,
           newChildPathCount: newChildButton?.querySelectorAll("svg path")?.length ?? 0,
           treeFavoritePresent: Boolean(treeFavoriteButton)

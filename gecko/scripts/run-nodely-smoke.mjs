@@ -254,6 +254,8 @@ function snapshotLooksReady(snapshot, scenario = "") {
   const topbarFullscreenPresent = snapshot.ui?.topbar?.fullscreenPresent === true;
   const treeStripIconsReady =
     (snapshot.ui?.treeStrip?.tabFaviconCount ?? 0) >= minimumTreeNodeCount &&
+    (snapshot.ui?.treeStrip?.tabCloseCount ?? 0) >= minimumTreeNodeCount &&
+    (snapshot.ui?.treeStrip?.tabClosePathCount ?? 0) >= minimumTreeNodeCount &&
     (snapshot.ui?.treeStrip?.newChildSvgCount ?? 0) >= 1 &&
     (snapshot.ui?.treeStrip?.newChildPathCount ?? 0) >= 1 &&
     snapshot.ui?.treeStrip?.treeFavoritePresent === false;

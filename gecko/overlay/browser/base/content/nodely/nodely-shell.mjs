@@ -1164,14 +1164,19 @@ export class NodelyShell extends HTMLElement {
         copy.append(label);
         tab.append(favicon, copy);
         tabWrap.append(tab);
-        tabWrap.append(
-          createActionButton(this.ownerDocument, "", "nodely-shell__tab-kill", {
+        const closeTabButton = createActionButton(
+          this.ownerDocument,
+          "",
+          "nodely-shell__tab-close",
+          {
             action: "kill-tab-node",
             dataset: { nodeId: node.id },
-            title: `Kill node: ${node.title || "Untitled"}`,
+            title: `Close tab: ${node.title || "Untitled"}`,
             icon: iconClose()
-          })
+          }
         );
+        closeTabButton.setAttribute("aria-label", `Close tab: ${node.title || "Untitled"}`);
+        tabWrap.append(closeTabButton);
         tabs.append(tabWrap);
       }
     }
@@ -2550,15 +2555,32 @@ export class NodelyShell extends HTMLElement {
           title: `Jump to node: ${suggestion.title}`
         }
       );
-      const eyebrow = createHtmlElement(this.ownerDocument, "span", "nodely-shell__combo-suggestion-label");
-      eyebrow.textContent = suggestion.sameTree ? "Jump to node in this tree" : "Jump to node in another tree";
+      const header = createHtmlElement(
+        this.ownerDocument,
+        "div",
+        "nodely-shell__combo-suggestion-header"
+      );
       const title = createHtmlElement(this.ownerDocument, "strong");
       title.textContent = suggestion.title;
-      const meta = createHtmlElement(this.ownerDocument, "span", "nodely-shell__combo-suggestion-meta");
-      meta.textContent = suggestion.hostname
-        ? `${suggestion.treeTitle} • ${suggestion.hostname}`
-        : suggestion.treeTitle;
-      button.append(eyebrow, title, meta);
+      const scope = createHtmlElement(
+        this.ownerDocument,
+        "span",
+        "nodely-shell__combo-suggestion-label"
+      );
+      scope.textContent = `Jump to node in ${suggestion.treeTitle || "this tree"}`;
+      header.append(title, scope);
+      button.append(header);
+
+      if (suggestion.hostname) {
+        const meta = createHtmlElement(
+          this.ownerDocument,
+          "span",
+          "nodely-shell__combo-suggestion-meta"
+        );
+        meta.textContent = suggestion.hostname;
+        button.append(meta);
+      }
+
       panel.append(button);
     });
   }

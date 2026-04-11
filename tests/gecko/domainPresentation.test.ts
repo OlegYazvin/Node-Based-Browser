@@ -39,6 +39,22 @@ describe("Gecko domain presentation helpers", () => {
     expect(expandedRoot.width - compactRoot.width).toBeLessThanOrEqual(72);
   });
 
+  it("keeps orphan-prone origin titles compact by adding height before wasting width", () => {
+    const compactRoot = nodeDimensions({
+      kind: "page",
+      parentId: null,
+      title: "Short"
+    });
+    const seafoodRoot = nodeDimensions({
+      kind: "page",
+      parentId: null,
+      title: "YamaSeafood - Delivering The Best Seafood Since 1977"
+    });
+
+    expect(seafoodRoot.width).toBe(compactRoot.width);
+    expect(seafoodRoot.height).toBeGreaterThan(compactRoot.height);
+  });
+
   it("recognizes active AI chat interfaces without recoloring generic OpenAI pages", () => {
     expect(classifySiteCategory("https://chatgpt.com/c/abc123", "ChatGPT")).toBe("ai-chat");
     expect(classifySiteCategory("https://claude.ai/new", "Claude")).toBe("ai-chat");
@@ -57,49 +73,44 @@ describe("Gecko domain presentation helpers", () => {
 
   it("pushes tree layouts apart so different roots do not overlap after auto arrange", () => {
     let workspace = createRootNode(createEmptyWorkspace());
-    const firstRootId = workspace.selectedNodeId as string;
+    const rootIds = [workspace.selectedNodeId as string];
 
-    for (let index = 0; index < 5; index += 1) {
-      workspace = createChildNode(workspace, firstRootId, "manual", { selectChild: false });
-    }
+    for (let rootIndex = 0; rootIndex < 5; rootIndex += 1) {
+      const rootId = rootIds.at(-1) as string;
+      for (let childIndex = 0; childIndex < 7; childIndex += 1) {
+        workspace = createChildNode(workspace, rootId, "manual", { selectChild: false });
+      }
 
-    workspace = createRootNode(workspace);
-    const secondRootId = workspace.selectedNodeId as string;
-
-    for (let index = 0; index < 5; index += 1) {
-      workspace = createChildNode(workspace, secondRootId, "manual", { selectChild: false });
+      if (rootIndex < 4) {
+        workspace = createRootNode(workspace);
+        rootIds.push(workspace.selectedNodeId as string);
+      }
     }
 
     workspace = relayoutWorkspace(workspace);
 
-    const firstRects = workspace.nodes
-      .filter((node) => node.rootId === firstRootId)
-      .map((node) => nodeRect(node));
-    const secondRects = workspace.nodes
-      .filter((node) => node.rootId === secondRootId)
-      .map((node) => nodeRect(node));
+    const treeBounds = rootIds.map((rootId) => {
+      const rects = workspace.nodes
+        .filter((node) => node.rootId === rootId)
+        .map((node) => nodeRect(node));
 
-    const firstBounds = {
-      x: Math.min(...firstRects.map((rect) => rect.x)),
-      y: Math.min(...firstRects.map((rect) => rect.y)),
-      width:
-        Math.max(...firstRects.map((rect) => rect.x + rect.width)) -
-        Math.min(...firstRects.map((rect) => rect.x)),
-      height:
-        Math.max(...firstRects.map((rect) => rect.y + rect.height)) -
-        Math.min(...firstRects.map((rect) => rect.y))
-    };
-    const secondBounds = {
-      x: Math.min(...secondRects.map((rect) => rect.x)),
-      y: Math.min(...secondRects.map((rect) => rect.y)),
-      width:
-        Math.max(...secondRects.map((rect) => rect.x + rect.width)) -
-        Math.min(...secondRects.map((rect) => rect.x)),
-      height:
-        Math.max(...secondRects.map((rect) => rect.y + rect.height)) -
-        Math.min(...secondRects.map((rect) => rect.y))
-    };
+      return {
+        rootId,
+        x: Math.min(...rects.map((rect) => rect.x)),
+        y: Math.min(...rects.map((rect) => rect.y)),
+        width:
+          Math.max(...rects.map((rect) => rect.x + rect.width)) -
+          Math.min(...rects.map((rect) => rect.x)),
+        height:
+          Math.max(...rects.map((rect) => rect.y + rect.height)) -
+          Math.min(...rects.map((rect) => rect.y))
+      };
+    });
 
-    expect(rectsOverlap(firstBounds, secondBounds)).toBe(false);
+    for (let leftIndex = 0; leftIndex < treeBounds.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < treeBounds.length; rightIndex += 1) {
+        expect(rectsOverlap(treeBounds[leftIndex], treeBounds[rightIndex])).toBe(false);
+      }
+    }
   });
 });
