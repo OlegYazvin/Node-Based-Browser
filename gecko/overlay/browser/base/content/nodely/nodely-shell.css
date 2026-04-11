@@ -392,6 +392,49 @@
   gap: 8px;
 }
 
+.nodely-shell__combo-stack {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.nodely-shell__address-stack {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.nodely-shell__combo-suggestions {
+  display: grid;
+  gap: 6px;
+}
+
+.nodely-shell__combo-suggestions[hidden] {
+  display: none !important;
+}
+
+.nodely-shell__combo-suggestion {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--nodely-button-border);
+  background: var(--nodely-input-bg);
+}
+
+.nodely-shell__combo-suggestion strong {
+  font-size: 12.5px;
+  color: var(--nodely-text);
+}
+
+.nodely-shell__combo-suggestion-label,
+.nodely-shell__combo-suggestion-meta {
+  font-size: 11px;
+  color: var(--nodely-muted);
+}
+
 .nodely-shell__page-actions {
   display: grid;
   gap: 8px;
@@ -407,7 +450,7 @@
   min-width: 0;
   flex: 1 1 auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -505,6 +548,7 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
+  align-self: flex-start;
 }
 
 .nodely-shell__surface-close svg {
@@ -597,8 +641,8 @@
 }
 
 .nodely-shell__tree-rename-input {
-  flex: 1 1 220px;
-  min-width: 180px;
+  flex: 1 1 320px;
+  min-width: 260px;
 }
 
 .nodely-shell__tree-rename-actions {
@@ -615,11 +659,16 @@
   padding-bottom: 2px;
 }
 
+.nodely-shell__tab-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .nodely-shell__tab {
   appearance: none;
   min-width: 132px;
   max-width: 196px;
-  padding: 6px 8px;
+  padding: 6px 34px 6px 8px;
   border-radius: 10px;
   border: 1px solid var(--nodely-button-border);
   text-align: left;
@@ -667,6 +716,42 @@
 .nodely-shell__tab.is-active {
   border-color: var(--nodely-button-active-border);
   box-shadow: 0 0 0 1px rgba(29, 115, 201, 0.12) inset;
+}
+
+.nodely-shell__tab-kill {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  color: var(--nodely-muted);
+  background: color-mix(in srgb, var(--nodely-input-bg) 88%, transparent);
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.nodely-shell__tab-wrap:hover .nodely-shell__tab-kill,
+.nodely-shell__tab-wrap:focus-within .nodely-shell__tab-kill {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.nodely-shell__tab-kill:hover {
+  color: #a72a2a;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.nodely-shell__tab-kill svg {
+  width: 12px;
+  height: 12px;
 }
 
 .nodely-shell__tab--new-child {
@@ -972,6 +1057,7 @@
   padding: 10px 10px 12px;
   display: grid;
   gap: 6px;
+  align-content: start;
   text-align: center;
   color: #203246;
 }
@@ -1031,6 +1117,7 @@
 .nodely-graph-node__title {
   font-size: 12px;
   line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .nodely-graph-node__meta {
@@ -1206,18 +1293,23 @@
 .nodely-shell__drawer-row--general { background: var(--nodely-tab-general); }
 
 .nodely-shell__drawer--trees {
-  width: 372px;
+  width: 448px;
 }
 
 .nodely-shell__drawer-row--tree {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   background: var(--nodely-button-bg);
 }
 
 .nodely-shell__drawer-row--tree .nodely-shell__drawer-input {
   min-width: 0;
-  min-height: 34px;
+  min-height: 36px;
   font-size: 12.5px;
+  width: 100%;
+}
+
+.nodely-shell__drawer-row--tree .nodely-shell__drawer-action-row {
+  justify-content: flex-start;
 }
 
 .nodely-shell__drawer-row--stacked {

@@ -11,6 +11,9 @@ const LOCALHOST_PATTERN = /^localhost(?::\d+)?(?:\/.*)?$/i;
 
 const ROOT_RING_RADIUS = 1040;
 const ROOT_RING_STEP = 920;
+const ROOT_RING_PUSH_STEP = 280;
+const ROOT_PLACEMENT_ATTEMPTS = 16;
+const ROOT_TREE_PADDING = 132;
 const ROOT_CHILD_RADIUS = 268;
 const CHILD_RADIUS = 214;
 const COMPACT_CHILD_RADIUS = 182;
@@ -170,8 +173,9 @@ export const GRAPH_ARTIFACT_WIDTH = 96;
 export const GRAPH_ARTIFACT_HEIGHT = 52;
 export const GRAPH_NODE_GAP = 16;
 export const GRAPH_EDGE_CLEARANCE = 16;
-const ROOT_NODE_MAX_WIDTH = 320;
-const ROOT_NODE_WIDTH_PADDING = 92;
+const ROOT_NODE_MAX_WIDTH = 214;
+const ROOT_NODE_WIDTH_PADDING = 28;
+const ROOT_NODE_TITLE_LINE_HEIGHT = 17;
 
 const DRAG_SNAP_STEP = 24;
 const DRAG_SNAP_RINGS = 36;
@@ -269,7 +273,14 @@ export function normalizeThemeMode(themeMode) {
 }
 
 export function normalizeSearchProvider(searchProvider) {
-  return searchProvider === "wikipedia" ? "wikipedia" : "google";
+  switch (searchProvider) {
+    case "wikipedia":
+    case "bing":
+    case "yahoo":
+      return searchProvider;
+    default:
+      return "google";
+  }
 }
 
 function normalizeCandidateUrl(input) {
@@ -306,10 +317,18 @@ function normalizeCandidateUrl(input) {
 
 export function buildSearchUrl(query, provider) {
   const encoded = encodeURIComponent(query.trim());
+  const resolvedProvider = normalizeSearchProvider(provider);
 
-  return provider === "wikipedia"
-    ? `https://en.wikipedia.org/w/index.php?search=${encoded}`
-    : `https://www.google.com/search?q=${encoded}`;
+  switch (resolvedProvider) {
+    case "wikipedia":
+      return `https://en.wikipedia.org/w/index.php?search=${encoded}`;
+    case "bing":
+      return `https://www.bing.com/search?q=${encoded}`;
+    case "yahoo":
+      return `https://search.yahoo.com/search?p=${encoded}`;
+    default:
+      return `https://www.google.com/search?q=${encoded}`;
+  }
 }
 
 export function resolveOmniboxInput(input, provider) {
@@ -1261,9 +1280,9 @@ function orderedRoots(workspace) {
   });
 }
 
-function rootAnchor(index) {
+function rootAnchorPolar(index) {
   if (index === 0) {
-    return { x: 0, y: 0 };
+    return { angle: -Math.PI / 2, radius: 0 };
   }
 
   let remaining = index - 1;
@@ -1279,10 +1298,7 @@ function rootAnchor(index) {
   const angle = -Math.PI / 2 + (Math.PI * 2 * remaining) / ringCapacity;
   const radius = ROOT_RING_RADIUS + (ring - 1) * ROOT_RING_STEP;
 
-  return {
-    x: Math.cos(angle) * radius,
-    y: Math.sin(angle) * radius
-  };
+  return { angle, radius };
 }
 
 function radialPoint(origin, angle, radius) {
@@ -1318,7 +1334,7 @@ function placeNode(workspace, node, position, angle, positionedNodes, branchAxis
             childIndex * attachmentStep
         ),
         y: Math.round(
-          resolvedPosition.y + resolvedSize.height - Math.round(childSize.height * 0.38)
+          resolvedPosition.y + resolvedSize.height - Math.round(childSize.height * 0.12)
         )
       };
 
@@ -1373,8 +1389,16 @@ function placeNode(workspace, node, position, angle, positionedNodes, branchAxis
 
 export function relayoutWorkspace(workspace) {
   const positionedNodes = new Map();
+  const placedTreeBounds = [];
   const roots = orderedRoots(workspace);
-  roots.forEach((rootNode, rootIndex) => placeNode(workspace, rootNode, rootAnchor(rootIndex), null, positionedNodes));
+
+  roots.forEach((rootNode, rootIndex) => {
+    const placement = resolveRootPlacement(workspace, rootNode, rootIndex, placedTreeBounds);
+    placement.nodes.forEach((node, nodeId) => positionedNodes.set(nodeId, node));
+    if (placement.bounds) {
+      placedTreeBounds.push(placement.bounds);
+    }
+  });
 
   return {
     ...workspace,
@@ -1402,15 +1426,22 @@ export function nodeDimensions(node) {
   }
 
   if (node?.parentId === null) {
-    const estimatedTitleWidth =
-      ROOT_NODE_WIDTH_PADDING + String(node?.title ?? "").trim().length * 6.1;
+    const title = String(node?.title ?? "").trim();
+    const titleLength = title.length;
+    const width =
+      GRAPH_NODE_WIDTH +
+      Math.min(
+        ROOT_NODE_MAX_WIDTH - GRAPH_NODE_WIDTH,
+        Math.max(0, Math.round((titleLength - 24) * 1.45 + ROOT_NODE_WIDTH_PADDING))
+      );
+    const effectiveWidth = Math.max(GRAPH_NODE_WIDTH, Math.min(ROOT_NODE_MAX_WIDTH, width));
+    const titleWidth = Math.max(88, effectiveWidth - 26);
+    const estimatedLineCount = Math.max(1, Math.ceil((Math.max(titleLength, 1) * 6.1) / titleWidth));
+    const extraLineCount = Math.max(0, estimatedLineCount - 2);
 
     return {
-      width: Math.max(
-        GRAPH_NODE_WIDTH,
-        Math.min(ROOT_NODE_MAX_WIDTH, Math.round(estimatedTitleWidth))
-      ),
-      height: GRAPH_NODE_HEIGHT
+      width: effectiveWidth,
+      height: GRAPH_NODE_HEIGHT + extraLineCount * ROOT_NODE_TITLE_LINE_HEIGHT
     };
   }
 
@@ -1459,6 +1490,68 @@ function expandRect(rect, padding) {
     y: rect.y - padding,
     width: rect.width + padding * 2,
     height: rect.height + padding * 2
+  };
+}
+
+function boundsForNodes(nodes) {
+  if (!nodes.length) {
+    return null;
+  }
+
+  const rects = nodes.map((node) => nodeRect(node));
+  const xs = rects.flatMap((rect) => [rect.x, rect.x + rect.width]);
+  const ys = rects.flatMap((rect) => [rect.y, rect.y + rect.height]);
+
+  return {
+    x: Math.min(...xs),
+    y: Math.min(...ys),
+    width: Math.max(...xs) - Math.min(...xs),
+    height: Math.max(...ys) - Math.min(...ys)
+  };
+}
+
+function resolveRootPlacement(workspace, rootNode, rootIndex, placedTreeBounds) {
+  const placedBounds = placedTreeBounds.filter(Boolean);
+
+  if (rootNode.manualPosition) {
+    const nodes = new Map();
+    placeNode(workspace, rootNode, rootNode.position, null, nodes);
+    return {
+      nodes,
+      bounds: expandRect(boundsForNodes([...nodes.values()]), ROOT_TREE_PADDING)
+    };
+  }
+
+  const { angle, radius } = rootAnchorPolar(rootIndex);
+  let fallbackNodes = null;
+  let fallbackBounds = null;
+
+  for (let attempt = 0; attempt < ROOT_PLACEMENT_ATTEMPTS; attempt += 1) {
+    const candidateRadius = radius + attempt * ROOT_RING_PUSH_STEP;
+    const candidatePosition =
+      candidateRadius === 0
+        ? { x: 0, y: 0 }
+        : {
+            x: Math.cos(angle) * candidateRadius,
+            y: Math.sin(angle) * candidateRadius
+          };
+    const nodes = new Map();
+    placeNode(workspace, rootNode, candidatePosition, null, nodes);
+    const bounds = expandRect(boundsForNodes([...nodes.values()]), ROOT_TREE_PADDING);
+
+    if (!fallbackNodes) {
+      fallbackNodes = nodes;
+      fallbackBounds = bounds;
+    }
+
+    if (!placedBounds.some((existingBounds) => rectsOverlap(bounds, existingBounds))) {
+      return { nodes, bounds };
+    }
+  }
+
+  return {
+    nodes: fallbackNodes ?? new Map(),
+    bounds: fallbackBounds
   };
 }
 

@@ -206,6 +206,18 @@ function iconWarning() {
   ]);
 }
 
+function iconClose() {
+  return createIcon([
+    {
+      d: "M5.1 5.1 14.9 14.9M14.9 5.1 5.1 14.9",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.55",
+      "stroke-linecap": "round"
+    }
+  ]);
+}
+
 export class NodelyShell extends HTMLElement {
   constructor() {
     super();
@@ -223,6 +235,10 @@ export class NodelyShell extends HTMLElement {
     this.inlineTreeRenameRootId = null;
     this.inlineTreeRenameValue = "";
     this.lastSelectedNodeId = null;
+    this.composerDraft = "";
+    this.addressDraft = "";
+    this.composerSuggestions = [];
+    this.addressSuggestions = [];
     this.layoutSyncFrame = null;
     this.splitResizeState = null;
     this.splitWidthOverride = null;
@@ -313,6 +329,8 @@ export class NodelyShell extends HTMLElement {
 
     this.topbar.addEventListener("click", (event) => this.handleTopbarClick(event));
     this.topbar.addEventListener("change", (event) => this.handleTopbarChange(event));
+    this.composer.addEventListener("click", (event) => this.handleComposerClick(event));
+    this.composer.addEventListener("input", (event) => this.handleComposerInput(event));
     this.composer.addEventListener("submit", (event) => this.handleComposerSubmit(event));
     this.pagebar.addEventListener("click", (event) => this.handlePagebarClick(event));
     this.pagebar.addEventListener("contextmenu", (event) => this.handlePagebarContextMenu(event));
@@ -418,6 +436,7 @@ export class NodelyShell extends HTMLElement {
   closeComposer() {
     this.composerOpen = false;
     this.composerAnchor = null;
+    this.composerSuggestions = [];
   }
 
   openTreeRename(rootId, currentTitle = "") {
@@ -601,6 +620,8 @@ export class NodelyShell extends HTMLElement {
       this.printSheetOpen = false;
       this.findOpen = false;
       this.findQuery = this.controller?.getFindQuery?.() ?? "";
+      this.addressDraft = "";
+      this.addressSuggestions = [];
       this.lastSelectedNodeId = selectedNode?.id ?? null;
     }
 
@@ -741,7 +762,9 @@ export class NodelyShell extends HTMLElement {
     select.dataset.action = "search-provider";
     select.append(
       createOption(this.ownerDocument, "google", "Google", workspace?.prefs.searchProvider === "google"),
-      createOption(this.ownerDocument, "wikipedia", "Wikipedia", workspace?.prefs.searchProvider === "wikipedia")
+      createOption(this.ownerDocument, "wikipedia", "Wikipedia", workspace?.prefs.searchProvider === "wikipedia"),
+      createOption(this.ownerDocument, "bing", "Bing", workspace?.prefs.searchProvider === "bing"),
+      createOption(this.ownerDocument, "yahoo", "Yahoo", workspace?.prefs.searchProvider === "yahoo")
     );
     searchLabel.append(searchText, select);
     utilities.append(
@@ -785,14 +808,28 @@ export class NodelyShell extends HTMLElement {
       this.composer.style.removeProperty("width");
     }
 
+    const stack = createHtmlElement(this.ownerDocument, "div", "nodely-shell__combo-stack");
     const form = createHtmlElement(this.ownerDocument, "form", "nodely-shell__composer-form");
     const input = createHtmlElement(this.ownerDocument, "input", "nodely-shell__input");
     input.name = "root-input";
+    input.value = this.composerDraft;
     input.setAttribute("placeholder", "Enter a URL or search term for a new root");
     input.setAttribute("autocomplete", "off");
     const button = createActionButton(this.ownerDocument, "Open Root", "nodely-shell__primary", { type: "submit" });
     form.append(input, button);
-    this.composer.append(form);
+    this.composerInput = input;
+    this.composerSuggestionsPanel = createHtmlElement(
+      this.ownerDocument,
+      "div",
+      "nodely-shell__combo-suggestions"
+    );
+    this.composerSuggestionsPanel.hidden = true;
+    stack.append(form, this.composerSuggestionsPanel);
+    this.composer.append(stack);
+    if (!this.composerDraft.trim()) {
+      this.composerSuggestions = [];
+    }
+    this.refreshSuggestionPanel("composer");
   }
 
   renderPagebar(
@@ -805,6 +842,8 @@ export class NodelyShell extends HTMLElement {
   ) {
     this.pagebar.hidden = !selectedNode || workspace?.prefs.surfaceMode === "canvas";
     this.pagebar.replaceChildren();
+    this.addressInput = null;
+    this.addressSuggestionsPanel = null;
 
     if (!selectedNode || workspace?.prefs.surfaceMode === "canvas") {
       return;
@@ -815,7 +854,11 @@ export class NodelyShell extends HTMLElement {
     const treeCounts = selectedRoot ? summarizeTreeContents(workspace, selectedRoot.id) : { pageCount: 0, artifactCount: 0 };
     const activeTabNodeId = isArtifactNode(selectedNode) ? findOwningPageNode(workspace, selectedNode)?.id ?? null : selectedNode.id;
     const isFocusView = workspace.prefs.viewMode === "focus";
-    const selectedNodeActions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__inline-actions");
+    const selectedNodeActions = createHtmlElement(
+      this.ownerDocument,
+      "div",
+      "nodely-shell__inline-actions nodely-shell__pagebar-actions"
+    );
 
     if (isFocusView) {
       const closeSurfaceTitle = "Back to canvas (Esc)";
@@ -831,15 +874,6 @@ export class NodelyShell extends HTMLElement {
         }
       );
       selectedNodeActions.append(closeSurfaceButton);
-    }
-
-    if (selectedNode.parentId !== null) {
-      selectedNodeActions.append(
-        createActionButton(this.ownerDocument, "Kill Node", "nodely-shell__drawer-pill is-danger", {
-          action: "kill-node",
-          dataset: { nodeId: selectedNode.id }
-        })
-      );
     }
 
     if (isArtifactNode(selectedNode)) {
@@ -901,10 +935,11 @@ export class NodelyShell extends HTMLElement {
         })
       );
 
+      const addressStack = createHtmlElement(this.ownerDocument, "div", "nodely-shell__combo-stack nodely-shell__address-stack");
       const addressForm = createHtmlElement(this.ownerDocument, "form", "nodely-shell__address-form");
       const addressInput = createHtmlElement(this.ownerDocument, "input", "nodely-shell__input nodely-shell__address-input");
       addressInput.name = "address";
-      addressInput.value = selectedNode.url || "";
+      addressInput.value = this.addressDraft || selectedNode.url || "";
       addressInput.setAttribute("placeholder", "Enter a URL or search term");
       addressInput.setAttribute("autocomplete", "off");
 
@@ -946,13 +981,24 @@ export class NodelyShell extends HTMLElement {
         findButton,
         printButton
       );
-
-      surfaceMain.append(navGroup, addressForm);
+      this.addressInput = addressInput;
+      this.addressSuggestionsPanel = createHtmlElement(
+        this.ownerDocument,
+        "div",
+        "nodely-shell__combo-suggestions nodely-shell__combo-suggestions--pagebar"
+      );
+      this.addressSuggestionsPanel.hidden = true;
+      addressStack.append(addressForm, this.addressSuggestionsPanel);
+      surfaceMain.append(navGroup, addressStack);
       pageActionsHeader.append(surfaceMain);
       if (selectedNodeActions.childElementCount) {
         pageActionsHeader.append(selectedNodeActions);
       }
       pageActions.append(pageActionsHeader);
+      if (!this.addressDraft.trim()) {
+        this.addressSuggestions = [];
+      }
+      this.refreshSuggestionPanel("address");
 
       if (this.permissionsPanelOpen) {
         const permissionsPanel = createHtmlElement(this.ownerDocument, "div", "nodely-shell__inline-panel");
@@ -1078,35 +1124,37 @@ export class NodelyShell extends HTMLElement {
       treeMeta.textContent = `${treeCounts.pageCount} pages${
         treeCounts.artifactCount ? ` • ${treeCounts.artifactCount} files` : ""
       }`;
-      treeHeading.append(treeTitle, treeMeta);
+      treeHeading.append(treeTitle);
+      if (selectedRoot) {
+        treeHeading.append(
+          createActionButton(this.ownerDocument, "", "nodely-shell__icon-button nodely-shell__tree-edit", {
+            action: "start-tree-rename",
+            dataset: {
+              rootId: selectedRoot.id
+            },
+            title: "Rename tree",
+            icon: iconEdit()
+          })
+        );
+      }
+      treeHeading.append(treeMeta);
     }
 
     treeHeader.append(treeHeading);
-
-    if (selectedRoot && !isInlineTreeRename) {
-      treeHeader.append(
-        createActionButton(this.ownerDocument, "", "nodely-shell__icon-button nodely-shell__tree-edit", {
-          action: "start-tree-rename",
-          dataset: {
-            rootId: selectedRoot.id
-          },
-          title: "Rename tree",
-          icon: iconEdit()
-        })
-      );
-    }
 
     const tabs = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tabs");
     if (selectedRoot) {
       for (const node of orderTreeNodesForTabs(workspace, selectedRoot.id)) {
         const category = classifySiteCategory(node.url, node.title);
+        const tabWrap = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tab-wrap");
         const tab = createActionButton(
           this.ownerDocument,
           "",
           `nodely-shell__tab${node.id === activeTabNodeId ? " is-active" : ""} nodely-shell__tab--${category}`,
           {
             action: "select-node",
-            dataset: { nodeId: node.id }
+            dataset: { nodeId: node.id },
+            title: node.title || "Untitled"
           }
         );
         const favicon = createFaviconChip(this.ownerDocument, node, "nodely-shell__tab-favicon");
@@ -1115,7 +1163,16 @@ export class NodelyShell extends HTMLElement {
         label.textContent = node.title || "Untitled";
         copy.append(label);
         tab.append(favicon, copy);
-        tabs.append(tab);
+        tabWrap.append(tab);
+        tabWrap.append(
+          createActionButton(this.ownerDocument, "", "nodely-shell__tab-kill", {
+            action: "kill-tab-node",
+            dataset: { nodeId: node.id },
+            title: `Kill node: ${node.title || "Untitled"}`,
+            icon: iconClose()
+          })
+        );
+        tabs.append(tabWrap);
       }
     }
 
@@ -1900,12 +1957,37 @@ export class NodelyShell extends HTMLElement {
     const input = form?.querySelector("input[name='root-input']");
 
     if (input?.value.trim()) {
+      this.composerDraft = "";
+      this.composerSuggestions = [];
       this.controller?.createRootFromInput(input.value, {
         position: this.resolveContextualRootPosition()
       });
       this.closeComposer();
       this.render();
     }
+  }
+
+  handleComposerClick(event) {
+    const button = event.target.closest("[data-action]");
+
+    if (!button) {
+      return;
+    }
+
+    if (button.dataset.action === "jump-node-suggestion") {
+      void this.jumpToSuggestedNode(button.dataset.nodeId, { closeComposer: true });
+    }
+  }
+
+  handleComposerInput(event) {
+    const input = event.target.closest("input[name='root-input']");
+
+    if (!input) {
+      return;
+    }
+
+    this.composerDraft = input.value;
+    this.refreshSuggestionState("composer");
   }
 
   handleAddressSubmit(event) {
@@ -1941,6 +2023,8 @@ export class NodelyShell extends HTMLElement {
 
     event.preventDefault();
     const input = form.querySelector("input[name='address']");
+    this.addressDraft = "";
+    this.addressSuggestions = [];
     this.controller?.submitAddress(input.value);
   }
 
@@ -2069,6 +2153,11 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if (action === "kill-tab-node") {
+      this.controller?.killNode(button.dataset.nodeId);
+      return;
+    }
+
     if (action === "set-view") {
       this.controller?.setViewMode(button.dataset.view);
       return;
@@ -2088,6 +2177,11 @@ export class NodelyShell extends HTMLElement {
 
     if (action === "hide-focus-hint") {
       this.controller?.setShowFocusHint(false);
+      return;
+    }
+
+    if (action === "jump-node-suggestion") {
+      void this.jumpToSuggestedNode(button.dataset.nodeId);
     }
   }
 
@@ -2128,12 +2222,20 @@ export class NodelyShell extends HTMLElement {
 
     const input = event.target.closest("input[name='find-query']");
 
-    if (!input) {
+    if (input) {
+      this.findQuery = input.value;
+      this.controller?.findInPage(this.findQuery);
       return;
     }
 
-    this.findQuery = input.value;
-    this.controller?.findInPage(this.findQuery);
+    const addressInput = event.target.closest("input[name='address']");
+
+    if (!addressInput) {
+      return;
+    }
+
+    this.addressDraft = addressInput.value;
+    this.refreshSuggestionState("address");
   }
 
   handleFavoritesClick(event) {
@@ -2385,6 +2487,80 @@ export class NodelyShell extends HTMLElement {
 
     this.closeContextMenu();
     this.render();
+  }
+
+  async jumpToSuggestedNode(nodeId, { closeComposer = false } = {}) {
+    if (!nodeId) {
+      return;
+    }
+
+    this.composerSuggestions = [];
+    this.addressSuggestions = [];
+    this.composerDraft = "";
+    this.addressDraft = "";
+
+    if (closeComposer) {
+      this.closeComposer();
+    }
+
+    await this.openNodeFromGraph(nodeId);
+    this.graph.centerOnNode(nodeId);
+    this.render();
+  }
+
+  refreshSuggestionState(kind) {
+    const selectedNode = findNode(this.state.workspace, this.state.workspace?.selectedNodeId);
+    const currentNodeId = kind === "address" && !isArtifactNode(selectedNode) ? selectedNode?.id ?? null : null;
+    const suggestions = findNodeJumpSuggestions(
+      this.state.workspace,
+      kind === "composer" ? this.composerDraft : this.addressDraft,
+      currentNodeId
+    );
+
+    if (kind === "composer") {
+      this.composerSuggestions = suggestions;
+    } else {
+      this.addressSuggestions = suggestions;
+    }
+
+    this.refreshSuggestionPanel(kind);
+  }
+
+  refreshSuggestionPanel(kind) {
+    const panel = kind === "composer" ? this.composerSuggestionsPanel : this.addressSuggestionsPanel;
+    const suggestions = kind === "composer" ? this.composerSuggestions : this.addressSuggestions;
+
+    if (!panel) {
+      return;
+    }
+
+    panel.replaceChildren();
+    panel.hidden = !suggestions.length;
+
+    suggestions.forEach((suggestion) => {
+      const button = createActionButton(
+        this.ownerDocument,
+        "",
+        "nodely-shell__combo-suggestion",
+        {
+          action: "jump-node-suggestion",
+          dataset: {
+            nodeId: suggestion.nodeId
+          },
+          title: `Jump to node: ${suggestion.title}`
+        }
+      );
+      const eyebrow = createHtmlElement(this.ownerDocument, "span", "nodely-shell__combo-suggestion-label");
+      eyebrow.textContent = suggestion.sameTree ? "Jump to node in this tree" : "Jump to node in another tree";
+      const title = createHtmlElement(this.ownerDocument, "strong");
+      title.textContent = suggestion.title;
+      const meta = createHtmlElement(this.ownerDocument, "span", "nodely-shell__combo-suggestion-meta");
+      meta.textContent = suggestion.hostname
+        ? `${suggestion.treeTitle} • ${suggestion.hostname}`
+        : suggestion.treeTitle;
+      button.append(eyebrow, title, meta);
+      panel.append(button);
+    });
   }
 }
 
@@ -2692,6 +2868,96 @@ function urlHostname(url) {
   } catch {
     return "";
   }
+}
+
+function normalizeSuggestionText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s.:/-]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+export function findNodeJumpSuggestions(workspace, query, currentNodeId = null, limit = 5) {
+  const normalizedQuery = normalizeSuggestionText(query);
+
+  if (!workspace?.nodes?.length || normalizedQuery.length < 2) {
+    return [];
+  }
+
+  const tokens = normalizedQuery.split(" ").filter(Boolean);
+  const currentNode = findNode(workspace, currentNodeId);
+  const currentRootId = currentNode?.rootId ?? null;
+
+  return workspace.nodes
+    .filter((node) => !isArtifactNode(node) && node.id !== currentNodeId)
+    .map((node) => {
+      const title = String(node.title || "Untitled page").trim();
+      const treeTitle = treeDisplayTitle(workspace, node.rootId);
+      const hostname = urlHostname(node.url);
+      const searchQuery = String(node.searchQuery ?? "").trim();
+      const titleMatch = normalizeSuggestionText(title);
+      const treeMatch = normalizeSuggestionText(treeTitle);
+      const hostMatch = normalizeSuggestionText(hostname);
+      const searchMatch = normalizeSuggestionText(searchQuery);
+      const combined = `${titleMatch} ${treeMatch} ${hostMatch} ${searchMatch}`.trim();
+      let score = 0;
+
+      if (!combined) {
+        return null;
+      }
+
+      if (titleMatch === normalizedQuery) {
+        score += 120;
+      }
+
+      if (titleMatch.startsWith(normalizedQuery)) {
+        score += 96;
+      } else if (titleMatch.includes(normalizedQuery)) {
+        score += 72;
+      }
+
+      if (treeMatch.startsWith(normalizedQuery)) {
+        score += 56;
+      } else if (treeMatch.includes(normalizedQuery)) {
+        score += 34;
+      }
+
+      if (hostMatch.includes(normalizedQuery.replace(/\s+/gu, ""))) {
+        score += 42;
+      }
+
+      if (searchMatch.includes(normalizedQuery)) {
+        score += 30;
+      }
+
+      score += tokens.filter((token) => combined.includes(token)).length * 12;
+      score += Math.max(0, 8 - Math.min(node.depth ?? 0, 8));
+      score += currentRootId && node.rootId === currentRootId ? 10 : 0;
+      score += node.lastActiveAt ? 6 : 0;
+
+      if (score < 28) {
+        return null;
+      }
+
+      return {
+        nodeId: node.id,
+        title,
+        treeTitle,
+        hostname,
+        sameTree: currentRootId != null && node.rootId === currentRootId,
+        score,
+        updatedAt: node.updatedAt ?? 0
+      };
+    })
+    .filter(Boolean)
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.updatedAt - left.updatedAt ||
+        left.title.localeCompare(right.title)
+    )
+    .slice(0, limit);
 }
 
 function createFaviconChip(documentRef, node, className) {

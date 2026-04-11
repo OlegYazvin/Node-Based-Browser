@@ -6,6 +6,11 @@ const originalResizeObserver = globalThis.ResizeObserver;
 const originalCustomElements = globalThis.customElements;
 
 let NodelyShell;
+let findNodeJumpSuggestions;
+let createEmptyWorkspace;
+let createRootNode;
+let createChildNode;
+let updateNodeMetadata;
 
 beforeAll(async () => {
   class FakeHTMLElement extends EventTarget {}
@@ -41,8 +46,11 @@ beforeAll(async () => {
     }
   });
 
-  ({ NodelyShell } = await import(
+  ({ NodelyShell, findNodeJumpSuggestions } = await import(
     "../../gecko/overlay/browser/base/content/nodely/nodely-shell.mjs"
+  ));
+  ({ createEmptyWorkspace, createRootNode, createChildNode, updateNodeMetadata } = await import(
+    "../../gecko/overlay/browser/base/content/nodely/domain.mjs"
   ));
 });
 
@@ -127,5 +135,29 @@ describe("NodelyShell focus and context interactions", () => {
 
     expect(closeContextMenu).toHaveBeenCalledTimes(1);
     expect(render).toHaveBeenCalledTimes(1);
+  });
+
+  it("finds good node jump suggestions from typed combo-bar text", () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = updateNodeMetadata(workspace, rootId, {
+      title: "Company List - Google Docs",
+      url: "https://docs.google.com/document/d/example/edit"
+    });
+    workspace = createChildNode(workspace, rootId, "manual", { selectChild: false });
+    const childId = workspace.nodes.at(-1)?.id as string;
+    workspace = updateNodeMetadata(workspace, childId, {
+      title: "OpenAI Pricing Overview",
+      url: "https://openai.com/pricing"
+    });
+
+    const suggestions = findNodeJumpSuggestions(workspace, "pricing");
+
+    expect(suggestions[0]).toEqual(
+      expect.objectContaining({
+        nodeId: childId,
+        title: "OpenAI Pricing Overview"
+      })
+    );
   });
 });

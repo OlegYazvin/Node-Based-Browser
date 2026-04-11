@@ -65,8 +65,9 @@ describe("Gecko domain artifact nodes", () => {
     const rootBottom = rootNode!.position.y + GRAPH_NODE_HEIGHT;
     const artifactBottom = artifactNode!.position.y + GRAPH_ARTIFACT_HEIGHT;
 
-    expect(artifactNode!.position.y).toBeLessThan(rootBottom);
-    expect(artifactBottom).toBeGreaterThan(rootBottom - 3);
+    expect(artifactNode!.position.y).toBeGreaterThanOrEqual(rootBottom - 8);
+    expect(artifactNode!.position.y).toBeLessThan(rootBottom + 2);
+    expect(artifactBottom).toBeGreaterThan(rootBottom + 40);
     expect(artifactNode!.position.x).toBeGreaterThanOrEqual(rootNode!.position.x - 2);
     expect(artifactNode!.position.x).toBeLessThanOrEqual(rootNode!.position.x + rootWidth - 24);
   });
