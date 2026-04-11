@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   createEmptyWorkspace,
   createRootNode,
+  findNode,
+  GRAPH_ARTIFACT_HEIGHT,
+  GRAPH_NODE_HEIGHT,
+  nodeDimensions,
   orderTreeNodesForTabs,
+  relayoutWorkspace,
   summarizeTreeContents,
   upsertArtifactNode
 } from "../../gecko/overlay/browser/base/content/nodely/domain.mjs";
@@ -33,5 +38,36 @@ describe("Gecko domain artifact nodes", () => {
       pageCount: 1,
       artifactCount: 1
     });
+  });
+
+  it("positions artifact nodes as attached nubbins under their page node", () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+
+    workspace = upsertArtifactNode(workspace, rootId, "download", {
+      transferId: "download-2",
+      fileName: "attached.pdf",
+      status: "complete"
+    });
+    workspace = relayoutWorkspace(workspace);
+
+    const rootNode = findNode(workspace, rootId);
+    const artifactNode =
+      workspace.nodes.find(
+        (node: { kind: string; parentId: string | null }) =>
+          node.kind === "download" && node.parentId === rootId
+      ) ?? null;
+
+    expect(rootNode).toBeTruthy();
+    expect(artifactNode).toBeTruthy();
+
+    const rootWidth = nodeDimensions(rootNode!).width;
+    const rootBottom = rootNode!.position.y + GRAPH_NODE_HEIGHT;
+    const artifactBottom = artifactNode!.position.y + GRAPH_ARTIFACT_HEIGHT;
+
+    expect(artifactNode!.position.y).toBeLessThan(rootBottom);
+    expect(artifactBottom).toBeGreaterThan(rootBottom - 3);
+    expect(artifactNode!.position.x).toBeGreaterThanOrEqual(rootNode!.position.x - 2);
+    expect(artifactNode!.position.x).toBeLessThanOrEqual(rootNode!.position.x + rootWidth - 24);
   });
 });

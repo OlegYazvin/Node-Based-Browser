@@ -332,6 +332,12 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
       selectedNode == null ? null : workspace?.nodes?.find((node) => node.id === selectedNode.rootId) ?? null;
     const selectedTreeNodeCount =
       selectedRoot == null ? 0 : workspace?.nodes?.filter((node) => node.rootId === selectedRoot.id).length ?? 0;
+    const selectedRootNodeElement =
+      selectedRoot == null
+        ? null
+        : document.querySelector(
+            `.nodely-graph-node[data-node-id="${escapeAttributeValue(selectedRoot.id)}"]`
+          );
     const minimap = document.querySelector(".nodely-graph-surface__minimap");
     const minimapSvg = minimap?.querySelector("svg");
     const minimapViewport = minimap?.querySelector(".nodely-graph-surface__minimap-viewport");
@@ -339,11 +345,17 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const minimapEdges = minimap?.querySelectorAll(".nodely-graph-surface__minimap-edge");
     const minimapToolbar = document.querySelector(".nodely-graph-surface__minimap-toolbar");
     const surfaceCloseButton = document.querySelector(".nodely-shell__surface-close");
+    const surfaceCloseSvg = surfaceCloseButton?.querySelector("svg");
+    const surfaceClosePaths = surfaceCloseButton?.querySelectorAll("svg path");
     const pageToolbar = document.querySelector(".nodely-shell__address-form");
     const pageToolbarButtons = pageToolbar?.querySelectorAll(".nodely-shell__icon-button") ?? [];
     const branchNextButton = document.querySelector('[data-action="toggle-branch-next"]');
     const newChildButton = document.querySelector('[data-action="create-child-node"]');
+    const treeEditButton = document.querySelector('[data-action="start-tree-rename"]');
+    const aiChatTabs = document.querySelectorAll(".nodely-shell__tab--ai-chat");
+    const tabFavicons = document.querySelectorAll(".nodely-shell__tab .nodely-shell__tab-favicon");
     const treeFavoriteButton = document.querySelector('.nodely-shell__tree-strip [data-action="toggle-tree-favorite"]');
+    const treeCanvasLabels = document.querySelectorAll(".nodely-graph-tree-label");
     const topbarOrganizeButton = document.querySelector(".nodely-shell__topbar [data-action='auto-organize']");
     const topbarFullscreenButton = document.querySelector(".nodely-shell__topbar [data-action='toggle-fullscreen']");
     const graphOrganizeButton = minimapToolbar?.querySelector('[data-action="auto-organize"]');
@@ -404,6 +416,8 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
       ui: {
         surfaceClosePresent: Boolean(surfaceCloseButton),
         surfaceCloseLabel: surfaceCloseButton?.textContent?.trim() ?? "",
+        surfaceCloseSvgPresent: Boolean(surfaceCloseSvg),
+        surfaceClosePathCount: surfaceClosePaths?.length ?? 0,
         rootComposerPresent: Boolean(document.querySelector("input[name='root-input']")),
         composerPlacement: shell.composer?.dataset?.placement ?? "",
         pageToolbar: {
@@ -413,9 +427,15 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           branchNextPresent: Boolean(branchNextButton)
         },
         treeStrip: {
+          treeEditPresent: Boolean(treeEditButton),
+          aiChatTabCount: aiChatTabs?.length ?? 0,
+          tabFaviconCount: tabFavicons?.length ?? 0,
           newChildSvgCount: newChildButton?.querySelectorAll("svg")?.length ?? 0,
           newChildPathCount: newChildButton?.querySelectorAll("svg path")?.length ?? 0,
           treeFavoritePresent: Boolean(treeFavoriteButton)
+        },
+        canvasTreeLabels: {
+          count: treeCanvasLabels?.length ?? 0
         },
         windowFullscreen: Boolean(window.fullScreen),
         minimap: {
@@ -452,6 +472,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         topbar: describeElement(".nodely-shell__topbar"),
         composer: describeElement(".nodely-shell__composer"),
         pagebar: describeElement(".nodely-shell__pagebar"),
+        selectedRootNode: describeNode(selectedRootNodeElement),
         activeDrawer: describeNode(activeDrawerElement),
         activeDrawerTrigger: describeNode(activeDrawerTrigger),
         contextMenu: describeNode(contextMenu)
@@ -485,6 +506,10 @@ async function runSmokeScenario({ shell, writeSmokeSnapshot, scenarioName }) {
         return;
       case "focus-close-and-select-root":
         await runFocusCloseAndSelectRootScenario({ shell });
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "focus-escape-and-select-root":
+        await runFocusEscapeAndSelectRootScenario({ shell });
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       case "pagebar-new-child":
@@ -874,8 +899,8 @@ async function runFocusCloseAndSelectRootScenario({ shell }) {
     throw new Error("Smoke focus-close-and-select-root scenario could not find the canvas close button.");
   }
 
-  if (closeButton.textContent?.trim() !== "×") {
-    throw new Error("Smoke focus-close-and-select-root scenario expected an X close button in focus mode.");
+  if (!/canvas/iu.test(closeButton.textContent?.trim() ?? "")) {
+    throw new Error("Smoke focus-close-and-select-root scenario expected a Back to Canvas button in focus mode.");
   }
 
   closeButton.click();
@@ -909,6 +934,67 @@ async function runFocusCloseAndSelectRootScenario({ shell }) {
       window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === ROOT_SMOKE_URL
     );
   }, "focus root selection");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runFocusEscapeAndSelectRootScenario({ shell }) {
+  const readyState = await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length >= 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-view") === "focus" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === CHILD_SMOKE_URL
+    );
+  }, "smoke focus page ready for escape");
+  const rootNode =
+    readyState.workspace?.nodes?.find?.((node) => node.parentId === null) ?? null;
+
+  if (!rootNode?.id) {
+    throw new Error("Smoke focus-escape-and-select-root scenario could not find a root node.");
+  }
+
+  window.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      bubbles: true,
+      key: "Escape"
+    })
+  );
+
+  await waitForSmokeState(
+    () => document.documentElement?.getAttribute("nodely-browser-surface") === "canvas",
+    "focus canvas from escape"
+  );
+
+  shell.graph.centerOnNode(rootNode.id);
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  const selector = `.nodely-graph-node[data-node-id="${escapeAttributeValue(rootNode.id)}"]`;
+  const nodeElement = document.querySelector(selector);
+
+  if (!nodeElement) {
+    throw new Error(`Smoke focus-escape-and-select-root scenario could not find ${selector}.`);
+  }
+
+  synthesizeMouseActivation(nodeElement);
+
+  await waitForSmokeState((state) => {
+    const selectedNode =
+      state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      selectedNode?.id === rootNode.id &&
+      selectedNode?.url === ROOT_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === ROOT_SMOKE_URL
+    );
+  }, "focus root selection from escape");
   await nextAnimationFrame();
   await nextAnimationFrame();
 }

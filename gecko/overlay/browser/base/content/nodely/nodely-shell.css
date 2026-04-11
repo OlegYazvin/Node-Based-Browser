@@ -108,6 +108,7 @@
   --nodely-tab-research: #edf5ff;
   --nodely-tab-social: #fff2e3;
   --nodely-tab-commercial: #edf8ec;
+  --nodely-tab-ai-chat: #e8f8ef;
   --nodely-tab-general: #eef2f7;
   --nodely-new-child-text: #20456b;
   --nodely-new-child-bg: linear-gradient(180deg, rgba(234, 244, 255, 0.98), rgba(218, 232, 247, 0.98));
@@ -172,6 +173,7 @@
   --nodely-tab-research: #23384c;
   --nodely-tab-social: #493828;
   --nodely-tab-commercial: #23392b;
+  --nodely-tab-ai-chat: #1f3f31;
   --nodely-tab-general: #2a3440;
   --nodely-new-child-text: #d4e9ff;
   --nodely-new-child-bg: linear-gradient(180deg, rgba(26, 56, 88, 0.98), rgba(18, 40, 64, 0.98));
@@ -498,14 +500,16 @@
 
 .nodely-shell__surface-close {
   flex: 0 0 auto;
-  min-width: 84px;
+  min-width: 118px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 }
 
-.nodely-shell__surface-close.nodely-shell__icon-button {
-  min-width: 32px;
-  font-size: 19px;
-  font-weight: 700;
-  line-height: 1;
+.nodely-shell__surface-close svg {
+  width: 16px;
+  height: 16px;
 }
 
 .nodely-shell__inline-panel {
@@ -557,24 +561,51 @@
 .nodely-shell__tree-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
 
 .nodely-shell__tree-heading {
-  display: inline-flex;
-  align-items: baseline;
+  display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .nodely-shell__tree-header strong {
-  font-size: 12px;
+  font-size: 13.5px;
+  line-height: 1.2;
 }
 
-.nodely-shell__tree-header span {
+.nodely-shell__tree-meta {
   font-size: 11px;
   color: var(--nodely-muted);
+}
+
+.nodely-shell__tree-edit {
+  flex: 0 0 auto;
+}
+
+.nodely-shell__tree-rename-form {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.nodely-shell__tree-rename-input {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.nodely-shell__tree-rename-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .nodely-shell__tabs {
@@ -586,21 +617,21 @@
 
 .nodely-shell__tab {
   appearance: none;
-  min-width: 112px;
-  max-width: 164px;
+  min-width: 132px;
+  max-width: 196px;
   padding: 6px 8px;
   border-radius: 10px;
   border: 1px solid var(--nodely-button-border);
   text-align: left;
   display: flex;
   align-items: center;
+  gap: 8px;
   background: var(--nodely-tab-bg);
 }
 
-.nodely-shell__tab strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.nodely-shell__tab-copy {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .nodely-shell__tab strong {
@@ -608,6 +639,29 @@
   color: var(--nodely-tab-text);
   display: block;
   width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodely-shell__tab-favicon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--nodely-button-active-text);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.nodely-shell__tab-favicon img {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .nodely-shell__tab.is-active {
@@ -641,6 +695,7 @@
 .nodely-shell__tab--research { background: var(--nodely-tab-research); }
 .nodely-shell__tab--social { background: var(--nodely-tab-social); }
 .nodely-shell__tab--commercial { background: var(--nodely-tab-commercial); }
+.nodely-shell__tab--ai-chat { background: var(--nodely-tab-ai-chat); }
 .nodely-shell__tab--general { background: var(--nodely-tab-general); }
 
 .nodely-shell__focus-hint {
@@ -848,7 +903,8 @@
 
 .nodely-graph-surface__stage,
 .nodely-graph-surface__edges,
-.nodely-graph-surface__nodes {
+.nodely-graph-surface__nodes,
+.nodely-graph-surface__tree-labels {
   position: absolute;
   inset: 0;
 }
@@ -868,6 +924,12 @@
   z-index: 1;
   overflow: hidden;
   contain: layout paint;
+}
+
+.nodely-graph-surface__tree-labels {
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .nodely-graph-surface__empty {
@@ -1015,6 +1077,39 @@
   letter-spacing: 0.05em;
 }
 
+.nodely-graph-tree-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translateX(-50%);
+  min-width: 180px;
+  max-width: 320px;
+  padding: 9px 12px;
+  display: grid;
+  gap: 2px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tree-label-border) 82%, white);
+  background: color-mix(in srgb, var(--tree-label-bg) 88%, white);
+  box-shadow: 0 10px 20px rgba(27, 41, 56, 0.1);
+  color: #203246;
+}
+
+.nodely-graph-tree-label strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.nodely-graph-tree-label span {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--tree-label-accent) 72%, #203246);
+}
+
+.nodely-graph-tree-label.is-active {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tree-label-accent) 30%, white),
+    0 12px 22px rgba(27, 41, 56, 0.12);
+}
+
 .nodely-graph-surface__minimap {
   position: absolute;
   top: 8px;
@@ -1147,7 +1242,12 @@
 .nodely-shell__drawer-row--research { background: var(--nodely-tab-research); }
 .nodely-shell__drawer-row--social { background: var(--nodely-tab-social); }
 .nodely-shell__drawer-row--commercial { background: var(--nodely-tab-commercial); }
+.nodely-shell__drawer-row--ai-chat { background: var(--nodely-tab-ai-chat); }
 .nodely-shell__drawer-row--general { background: var(--nodely-tab-general); }
+
+.nodely-shell__drawer--trees {
+  width: 372px;
+}
 
 .nodely-shell__drawer-row--tree {
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1156,6 +1256,8 @@
 
 .nodely-shell__drawer-row--tree .nodely-shell__drawer-input {
   min-width: 0;
+  min-height: 34px;
+  font-size: 12.5px;
 }
 
 .nodely-shell__drawer-row--stacked {

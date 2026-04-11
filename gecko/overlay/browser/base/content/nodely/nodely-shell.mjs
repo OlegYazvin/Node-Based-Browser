@@ -22,6 +22,7 @@ const CONTEXTUAL_COMPOSER_OFFSET = 12;
 const FLOATING_PANEL_MARGIN = 12;
 const FLOATING_PANEL_GAP = 8;
 const FLOATING_MENU_WIDTH = 192;
+const CONTEXT_MENU_OPEN_GRACE_MS = 180;
 
 function createIcon(paths, viewBox = "0 0 20 20") {
   return {
@@ -131,6 +132,26 @@ function iconFullscreen() {
   ]);
 }
 
+function iconBackToCanvas() {
+  return createIcon([
+    {
+      d: "M7.6 4.2H14a2 2 0 0 1 2 2v7.6a2 2 0 0 1-2 2H7.6a2 2 0 0 1-2-2V6.2a2 2 0 0 1 2-2Z",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.35",
+      "stroke-linejoin": "round"
+    },
+    {
+      d: "M4.2 10h7.3m-3-2.9L5.6 10l2.9 2.9",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.5",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
+}
+
 function iconNodeTabPlus() {
   return createIcon([
     {
@@ -143,6 +164,26 @@ function iconNodeTabPlus() {
     },
     {
       d: "M16.8 3.2v3.8m1.9-1.9H15",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.35",
+      "stroke-linecap": "round"
+    }
+  ]);
+}
+
+function iconEdit() {
+  return createIcon([
+    {
+      d: "M4.2 15.8 5 12.2 12.9 4.3a1.5 1.5 0 0 1 2.1 0l.7.7a1.5 1.5 0 0 1 0 2.1L7.8 15l-3.6.8Z",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.35",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    },
+    {
+      d: "M11.8 5.4 14.6 8.2",
       fill: "none",
       stroke: "currentColor",
       "stroke-width": "1.35",
@@ -173,10 +214,13 @@ export class NodelyShell extends HTMLElement {
     this.composerAnchor = null;
     this.drawer = null;
     this.contextMenuState = null;
+    this.contextMenuOpenedAt = 0;
     this.permissionsPanelOpen = false;
     this.findOpen = false;
     this.findQuery = "";
     this.printSheetOpen = false;
+    this.inlineTreeRenameRootId = null;
+    this.inlineTreeRenameValue = "";
     this.lastSelectedNodeId = null;
     this.layoutSyncFrame = null;
     this.splitResizeState = null;
@@ -363,6 +407,7 @@ export class NodelyShell extends HTMLElement {
     this.drawer = null;
     this.closeContextMenu();
     this.closeInlinePanels();
+    this.closeTreeRename();
     this.composerOpen = true;
     this.composerAnchor = anchor && this.state.workspace?.nodes?.length ? normalizeComposerAnchor(anchor) : null;
     this.render();
@@ -372,6 +417,32 @@ export class NodelyShell extends HTMLElement {
   closeComposer() {
     this.composerOpen = false;
     this.composerAnchor = null;
+  }
+
+  openTreeRename(rootId, currentTitle = "") {
+    if (!rootId) {
+      return;
+    }
+
+    this.drawer = null;
+    this.closeContextMenu();
+    this.closeInlinePanels();
+    this.closeComposer();
+    this.inlineTreeRenameRootId = rootId;
+    this.inlineTreeRenameValue = currentTitle || "";
+    this.render();
+    this.pagebar.querySelector("input[name='tree-title']")?.focus();
+    this.pagebar.querySelector("input[name='tree-title']")?.select?.();
+  }
+
+  closeTreeRename() {
+    if (!this.inlineTreeRenameRootId) {
+      return false;
+    }
+
+    this.inlineTreeRenameRootId = null;
+    this.inlineTreeRenameValue = "";
+    return true;
   }
 
   resolveContextualRootPosition() {
@@ -394,6 +465,7 @@ export class NodelyShell extends HTMLElement {
   toggleDrawer(drawerName) {
     this.closeContextMenu();
     this.closeInlinePanels();
+    this.closeTreeRename();
     this.drawer = this.drawer === drawerName ? null : drawerName;
     this.render();
   }
@@ -407,6 +479,7 @@ export class NodelyShell extends HTMLElement {
     this.closeContextMenu();
     this.permissionsPanelOpen = false;
     this.printSheetOpen = false;
+    this.closeTreeRename();
     this.findOpen = true;
     this.findQuery = this.controller?.getFindQuery?.() ?? this.findQuery;
     this.render();
@@ -422,6 +495,7 @@ export class NodelyShell extends HTMLElement {
     this.drawer = null;
     this.closeContextMenu();
     this.permissionsPanelOpen = false;
+    this.closeTreeRename();
 
     if (this.findOpen) {
       this.controller?.closeFind();
@@ -465,6 +539,11 @@ export class NodelyShell extends HTMLElement {
       return true;
     }
 
+    if (this.closeTreeRename()) {
+      this.render();
+      return true;
+    }
+
     if (this.composerOpen) {
       this.closeComposer();
       this.render();
@@ -484,11 +563,13 @@ export class NodelyShell extends HTMLElement {
     this.drawer = null;
     this.closeInlinePanels();
     this.closeComposer();
+    this.closeTreeRename();
     this.contextMenuState = {
       kind,
       nodeId,
       anchor: normalizedAnchor
     };
+    this.contextMenuOpenedAt = Date.now();
     this.render();
   }
 
@@ -498,6 +579,7 @@ export class NodelyShell extends HTMLElement {
     }
 
     this.contextMenuState = null;
+    this.contextMenuOpenedAt = 0;
     return true;
   }
 
@@ -524,6 +606,10 @@ export class NodelyShell extends HTMLElement {
       this.permissionsPanelOpen = false;
       this.printSheetOpen = false;
       this.findOpen = false;
+    }
+
+    if (this.inlineTreeRenameRootId && (!selectedRoot || this.inlineTreeRenameRootId !== selectedRoot.id)) {
+      this.closeTreeRename();
     }
 
     if (!contextualComposer && this.composerAnchor) {
@@ -716,13 +802,18 @@ export class NodelyShell extends HTMLElement {
     const selectedNodeActions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__inline-actions");
 
     if (isFocusView) {
-      const closeSurfaceTitle = "Close the page and return to the canvas";
-      const closeSurfaceButton = createActionButton(this.ownerDocument, "×", "nodely-shell__icon-button nodely-shell__surface-close", {
-        action: "set-surface",
-        dataset: { surface: "canvas" },
-        title: closeSurfaceTitle
-      });
-      closeSurfaceButton.setAttribute("aria-label", closeSurfaceTitle);
+      const closeSurfaceTitle = "Back to canvas (Esc)";
+      const closeSurfaceButton = createActionButton(
+        this.ownerDocument,
+        "Canvas",
+        "nodely-shell__button nodely-shell__surface-close",
+        {
+          action: "set-surface",
+          dataset: { surface: "canvas" },
+          title: closeSurfaceTitle,
+          icon: iconBackToCanvas()
+        }
+      );
       selectedNodeActions.append(closeSurfaceButton);
     }
 
@@ -778,15 +869,15 @@ export class NodelyShell extends HTMLElement {
       const navGroup = createHtmlElement(this.ownerDocument, "div", "nodely-shell__nav-group");
       navGroup.append(
         createActionButton(this.ownerDocument, "‹", "nodely-shell__icon-button", {
-        action: "page-command",
-        dataset: { command: "back" },
-        title: "Back"
-      }),
-      createActionButton(this.ownerDocument, "›", "nodely-shell__icon-button", {
-        action: "page-command",
-        dataset: { command: "forward" },
-        title: "Forward"
-      }),
+          action: "page-command",
+          dataset: { command: "back" },
+          title: "Back"
+        }),
+        createActionButton(this.ownerDocument, "›", "nodely-shell__icon-button", {
+          action: "page-command",
+          dataset: { command: "forward" },
+          title: "Forward"
+        }),
         createActionButton(this.ownerDocument, "↻", "nodely-shell__icon-button", {
           action: "page-command",
           dataset: { command: "reload" },
@@ -931,17 +1022,68 @@ export class NodelyShell extends HTMLElement {
     const treeStrip = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tree-strip");
     const treeHeader = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tree-header");
     const treeHeading = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tree-heading");
-    const treeTitle = createHtmlElement(this.ownerDocument, "strong");
-    treeTitle.textContent = selectedRoot?.title || "Tree";
-    const treeMeta = createHtmlElement(this.ownerDocument, "span");
-    treeMeta.textContent = `${treeCounts.pageCount} pages${treeCounts.artifactCount ? ` • ${treeCounts.artifactCount} files` : ""}`;
-    treeHeading.append(treeTitle, treeMeta);
+    const isInlineTreeRename = selectedRoot && this.inlineTreeRenameRootId === selectedRoot.id;
+
+    if (isInlineTreeRename) {
+      const renameForm = createHtmlElement(this.ownerDocument, "form", "nodely-shell__tree-rename-form");
+      renameForm.dataset.rootId = selectedRoot.id;
+      const renameInput = createHtmlElement(
+        this.ownerDocument,
+        "input",
+        "nodely-shell__input nodely-shell__tree-rename-input"
+      );
+      renameInput.name = "tree-title";
+      renameInput.value = this.inlineTreeRenameValue;
+      renameInput.setAttribute("placeholder", "Rename this tree");
+      renameInput.setAttribute("autocomplete", "off");
+      const treeMeta = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tree-meta");
+      treeMeta.textContent = `${treeCounts.pageCount} pages${
+        treeCounts.artifactCount ? ` • ${treeCounts.artifactCount} files` : ""
+      }`;
+      const renameActions = createHtmlElement(
+        this.ownerDocument,
+        "div",
+        "nodely-shell__tree-rename-actions"
+      );
+      renameActions.append(
+        createActionButton(this.ownerDocument, "Save", "nodely-shell__drawer-pill", {
+          type: "submit"
+        }),
+        createActionButton(this.ownerDocument, "Cancel", "nodely-shell__drawer-pill", {
+          action: "cancel-tree-rename"
+        })
+      );
+      renameForm.append(renameInput, treeMeta, renameActions);
+      treeHeading.append(renameForm);
+    } else {
+      const treeTitle = createHtmlElement(this.ownerDocument, "strong");
+      treeTitle.textContent = selectedRoot?.title || "Tree";
+      const treeMeta = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tree-meta");
+      treeMeta.textContent = `${treeCounts.pageCount} pages${
+        treeCounts.artifactCount ? ` • ${treeCounts.artifactCount} files` : ""
+      }`;
+      treeHeading.append(treeTitle, treeMeta);
+    }
+
     treeHeader.append(treeHeading);
+
+    if (selectedRoot && !isInlineTreeRename) {
+      treeHeader.append(
+        createActionButton(this.ownerDocument, "", "nodely-shell__icon-button nodely-shell__tree-edit", {
+          action: "start-tree-rename",
+          dataset: {
+            rootId: selectedRoot.id
+          },
+          title: "Rename tree",
+          icon: iconEdit()
+        })
+      );
+    }
 
     const tabs = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tabs");
     if (selectedRoot) {
       for (const node of orderTreeNodesForTabs(workspace, selectedRoot.id)) {
-        const category = classifySiteCategory(node.url);
+        const category = classifySiteCategory(node.url, node.title);
         const tab = createActionButton(
           this.ownerDocument,
           "",
@@ -951,26 +1093,29 @@ export class NodelyShell extends HTMLElement {
             dataset: { nodeId: node.id }
           }
         );
+        const favicon = createFaviconChip(this.ownerDocument, node, "nodely-shell__tab-favicon");
+        const copy = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tab-copy");
         const label = createHtmlElement(this.ownerDocument, "strong");
         label.textContent = node.title || "Untitled";
-        tab.append(label);
+        copy.append(label);
+        tab.append(favicon, copy);
         tabs.append(tab);
       }
     }
 
-      const createChildButton = createActionButton(
-        this.ownerDocument,
-        "",
-        "nodely-shell__tab nodely-shell__tab--new-child",
-        {
-          action: "create-child-node",
-          disabled: !activeTabNodeId,
-          title: "Create a new child node from the active page",
-          icon: iconNodeTabPlus()
-        }
-      );
-      createChildButton.setAttribute("aria-label", "Create a new child node from the active page");
-      tabs.append(createChildButton);
+    const createChildButton = createActionButton(
+      this.ownerDocument,
+      "",
+      "nodely-shell__tab nodely-shell__tab--new-child",
+      {
+        action: "create-child-node",
+        disabled: !activeTabNodeId,
+        title: "Create a new child node from the active page",
+        icon: iconNodeTabPlus()
+      }
+    );
+    createChildButton.setAttribute("aria-label", "Create a new child node from the active page");
+    tabs.append(createChildButton);
 
     treeStrip.append(treeHeader, tabs);
     this.pagebar.append(pageActions, treeStrip);
@@ -981,7 +1126,8 @@ export class NodelyShell extends HTMLElement {
       const hintTitle = createHtmlElement(this.ownerDocument, "strong");
       hintTitle.textContent = "Focus Mode";
       const hintText = createHtmlElement(this.ownerDocument, "p");
-      hintText.textContent = "The page now uses the full browser content area. Use the close button to hide the page and return to the canvas.";
+      hintText.textContent =
+        "The page now uses the full browser content area. Use Back to Canvas or press Esc to return to the canvas.";
       hintCopy.append(hintTitle, hintText);
       focusHint.append(
         hintCopy,
@@ -1747,6 +1893,22 @@ export class NodelyShell extends HTMLElement {
   }
 
   handleAddressSubmit(event) {
+    const treeRenameForm = event.target.closest(".nodely-shell__tree-rename-form");
+
+    if (treeRenameForm) {
+      event.preventDefault();
+      const input = treeRenameForm.querySelector("input[name='tree-title']");
+      const rootId = treeRenameForm.dataset.rootId;
+
+      if (rootId) {
+        this.controller?.renameTree(rootId, input?.value ?? "");
+      }
+
+      this.closeTreeRename();
+      this.render();
+      return;
+    }
+
     const findForm = event.target.closest(".nodely-shell__find-form");
 
     if (findForm) {
@@ -1785,12 +1947,25 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if (action === "start-tree-rename") {
+      const rootId = button.dataset.rootId;
+      const rootNode = findNode(this.state.workspace, rootId);
+      this.openTreeRename(rootId, rootNode?.title ?? "");
+      return;
+    }
+
+    if (action === "cancel-tree-rename") {
+      this.closeTreeRename();
+      this.render();
+      return;
+    }
+
     if (action === "create-child-node") {
       this.controller?.createChildNode({ origin: "tab-button" });
       return;
     }
 
-	    if (action === "toggle-permissions-panel") {
+    if (action === "toggle-permissions-panel") {
       const nextOpen = !this.permissionsPanelOpen;
       this.closeInlinePanels();
       this.drawer = null;
@@ -1882,6 +2057,7 @@ export class NodelyShell extends HTMLElement {
 
     if (action === "set-surface") {
       this.closeInlinePanels();
+      this.closeTreeRename();
       this.controller?.setSurfaceMode(button.dataset.surface);
       return;
     }
@@ -1924,6 +2100,13 @@ export class NodelyShell extends HTMLElement {
   handlePagebarChange(_event) {}
 
   handlePagebarInput(event) {
+    const treeRenameInput = event.target.closest("input[name='tree-title']");
+
+    if (treeRenameInput) {
+      this.inlineTreeRenameValue = treeRenameInput.value;
+      return;
+    }
+
     const input = event.target.closest("input[name='find-query']");
 
     if (!input) {
@@ -2129,6 +2312,17 @@ export class NodelyShell extends HTMLElement {
     if (event.key === "Escape") {
       if (this.dismissTransientUi()) {
         event.preventDefault();
+        return;
+      }
+
+      const workspace = this.state.workspace;
+
+      if (
+        workspace?.prefs.viewMode === "focus" &&
+        workspace?.prefs.surfaceMode !== "canvas"
+      ) {
+        this.controller?.setSurfaceMode("canvas");
+        event.preventDefault();
       }
       return;
     }
@@ -2156,7 +2350,17 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
-    if (this.contextMenu?.contains(event.target)) {
+    if (this.contextMenu?.contains?.(event.target)) {
+      return;
+    }
+
+    const button = Number.isFinite(event.button) ? event.button : 0;
+
+    if (button !== 0) {
+      return;
+    }
+
+    if (Date.now() - this.contextMenuOpenedAt < CONTEXT_MENU_OPEN_GRACE_MS) {
       return;
     }
 
@@ -2457,6 +2661,36 @@ function resolveFloatingMenuPosition(anchor, view, width = FLOATING_MENU_WIDTH, 
 
 function showComposerHeight(workspace, composerOpen, contextualComposer = false) {
   return !contextualComposer && (composerOpen || !workspace?.nodes?.length);
+}
+
+function urlHostname(url) {
+  if (!url) {
+    return "";
+  }
+
+  try {
+    return new URL(url).hostname.replace(/^www\./u, "");
+  } catch {
+    return "";
+  }
+}
+
+function createFaviconChip(documentRef, node, className) {
+  const chip = createHtmlElement(documentRef, "span", className);
+  const fallback =
+    (String(node?.title || urlHostname(node?.url) || "N").trim().slice(0, 1) || "N").toUpperCase();
+
+  if (node?.faviconUrl) {
+    const image = createHtmlElement(documentRef, "img");
+    image.src = node.faviconUrl;
+    image.alt = "";
+    image.setAttribute("loading", "eager");
+    chip.append(image);
+  } else {
+    chip.textContent = fallback;
+  }
+
+  return chip;
 }
 
 function permissionSummaryLabel(permissions) {

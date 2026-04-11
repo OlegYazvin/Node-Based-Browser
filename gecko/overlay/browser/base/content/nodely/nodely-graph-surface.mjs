@@ -62,6 +62,7 @@ export class NodelyGraphSurface extends HTMLElement {
     this.persistedViewport = { ...this.viewport };
     this.livePositions = new Map();
     this.nodeElements = new Map();
+    this.treeLabelElements = new Map();
     this.dragState = null;
     this.panState = null;
     this.minimapState = null;
@@ -107,6 +108,7 @@ export class NodelyGraphSurface extends HTMLElement {
     this.stage = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__stage");
     this.canvas = createHtmlElement(this.ownerDocument, "canvas", "nodely-graph-surface__edges");
     this.nodeLayer = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__nodes");
+    this.labelLayer = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__tree-labels");
     this.emptyState = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__empty");
     this.emptyState.hidden = true;
     const emptyCard = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__empty-card");
@@ -129,7 +131,7 @@ export class NodelyGraphSurface extends HTMLElement {
 
     emptyCard.append(emptyTitle, emptyCopy);
     this.emptyState.append(emptyCard);
-    this.stage.append(this.canvas, this.nodeLayer);
+    this.stage.append(this.canvas, this.nodeLayer, this.labelLayer);
     this.append(this.stage, this.emptyState, this.minimap, this.minimapToolbar);
 
     this.context = this.canvas.getContext("2d");
@@ -377,6 +379,7 @@ export class NodelyGraphSurface extends HTMLElement {
 
     if (flags.nodes || flags.resize) {
       this.reconcileNodes(positions);
+      this.reconcileTreeLabels(positions);
     }
 
     if (flags.minimap || flags.resize) {
@@ -412,6 +415,95 @@ export class NodelyGraphSurface extends HTMLElement {
     }
 
     this.nodeElements.clear();
+
+    for (const element of this.treeLabelElements.values()) {
+      element.remove();
+    }
+
+    this.treeLabelElements.clear();
+  }
+
+  reconcileTreeLabels(positions) {
+    if (!this.workspace || !this.labelLayer) {
+      return;
+    }
+
+    const activeSelectedNode =
+      findNode(this.workspace, this.selectedNodeId ?? this.workspace.selectedNodeId) ?? null;
+    const activeRootId = activeSelectedNode?.rootId ?? null;
+    const treeStats = new Map();
+
+    for (const node of this.workspace.nodes) {
+      const stats = treeStats.get(node.rootId) ?? { pageCount: 0, artifactCount: 0 };
+
+      if (isArtifactNode(node)) {
+        stats.artifactCount += 1;
+      } else {
+        stats.pageCount += 1;
+      }
+
+      treeStats.set(node.rootId, stats);
+    }
+
+    const seenRootIds = new Set();
+
+    for (const root of findRoots(this.workspace)) {
+      seenRootIds.add(root.id);
+      const category = classifyNodeCategory(this.workspace, root);
+      const colors = SITE_CATEGORY_STYLES[category];
+      const position = positions.get(root.id) ?? root.position;
+      const point = this.screenFromWorld(position);
+      const dimensions = nodeDimensions(root);
+      const stats = treeStats.get(root.id) ?? { pageCount: 1, artifactCount: 0 };
+      const meta = `${stats.pageCount} page${stats.pageCount === 1 ? "" : "s"}${
+        stats.artifactCount ? ` • ${stats.artifactCount} file${stats.artifactCount === 1 ? "" : "s"}` : ""
+      }`;
+      const element =
+        this.treeLabelElements.get(root.id) ??
+        createHtmlElement(this.ownerDocument, "div", "nodely-graph-tree-label");
+
+      if (!this.treeLabelElements.has(root.id)) {
+        this.treeLabelElements.set(root.id, element);
+        this.labelLayer.appendChild(element);
+      }
+
+      element.className = `nodely-graph-tree-label${root.id === activeRootId ? " is-active" : ""}`;
+      element.style.setProperty("--tree-label-border", colors.border);
+      element.style.setProperty("--tree-label-accent", colors.accent);
+      element.style.setProperty("--tree-label-bg", colors.fill);
+      element.dataset.rootId = root.id;
+
+      const contentSignature = JSON.stringify([root.title, meta, category, root.id === activeRootId]);
+
+      if (element.dataset.contentSignature !== contentSignature) {
+        element.innerHTML = `
+          <strong>${escapeHtml(root.title || "Tree")}</strong>
+          <span>${escapeHtml(meta)}</span>
+        `;
+        element.dataset.contentSignature = contentSignature;
+      }
+
+      const labelHeight = Math.max(
+        42,
+        Math.round(element.getBoundingClientRect?.().height || 44)
+      );
+      const centerX = Math.round(point.x + (dimensions.width * this.viewport.zoom) / 2);
+      const preferredTop = Math.round(point.y - labelHeight - 14);
+      const labelTop =
+        preferredTop >= 12
+          ? preferredTop
+          : Math.round(point.y + dimensions.height * this.viewport.zoom + 12);
+
+      element.style.left = `${centerX}px`;
+      element.style.top = `${labelTop}px`;
+    }
+
+    for (const [rootId, element] of this.treeLabelElements.entries()) {
+      if (!seenRootIds.has(rootId)) {
+        element.remove();
+        this.treeLabelElements.delete(rootId);
+      }
+    }
   }
 
   drawEdges(rect, positions) {
@@ -434,6 +526,10 @@ export class NodelyGraphSurface extends HTMLElement {
       const target = findNode(this.workspace, edge.target);
 
       if (!source || !target) {
+        continue;
+      }
+
+      if (isArtifactNode(source) || isArtifactNode(target)) {
         continue;
       }
 
@@ -584,6 +680,10 @@ export class NodelyGraphSurface extends HTMLElement {
       const target = findNode(this.workspace, edge.target);
 
       if (!source || !target) {
+        continue;
+      }
+
+      if (isArtifactNode(source) || isArtifactNode(target)) {
         continue;
       }
 

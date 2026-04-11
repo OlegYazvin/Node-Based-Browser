@@ -176,7 +176,10 @@ async function writeSmokeProfile({ profileDir, namespace, smokeFile, scenario })
 }
 
 function seedWorkspaceOptionsForScenario(scenario = "") {
-  if (scenario === "focus-close-and-select-root") {
+  if (
+    scenario === "focus-close-and-select-root" ||
+    scenario === "focus-escape-and-select-root"
+  ) {
     return {
       viewMode: "focus",
       surfaceMode: "page"
@@ -250,12 +253,18 @@ function snapshotLooksReady(snapshot, scenario = "") {
   const topbarOrganizeMoved = snapshot.ui?.topbar?.organizePresent === false;
   const topbarFullscreenPresent = snapshot.ui?.topbar?.fullscreenPresent === true;
   const treeStripIconsReady =
+    (snapshot.ui?.treeStrip?.tabFaviconCount ?? 0) >= minimumTreeNodeCount &&
     (snapshot.ui?.treeStrip?.newChildSvgCount ?? 0) >= 1 &&
     (snapshot.ui?.treeStrip?.newChildPathCount ?? 0) >= 1 &&
     snapshot.ui?.treeStrip?.treeFavoritePresent === false;
+  const canvasTreeLabelsReady =
+    (snapshot.ui?.canvasTreeLabels?.count ?? 0) >= Math.max(1, snapshot.workspace?.rootCount ?? 0);
   const surfaceCloseMatchesView =
     snapshot.view === "focus"
-      ? snapshot.ui?.surfaceClosePresent === true && snapshot.ui?.surfaceCloseLabel === "×"
+      ? snapshot.ui?.surfaceClosePresent === true &&
+        /canvas/iu.test(snapshot.ui?.surfaceCloseLabel ?? "") &&
+        snapshot.ui?.surfaceCloseSvgPresent === true &&
+        (snapshot.ui?.surfaceClosePathCount ?? 0) >= 1
       : snapshot.ui?.surfaceClosePresent === false;
   const graphPointerReady = graphSurfaceAcceptsPointerInput(snapshot);
   const splitHandlePointerReady = splitHandleAcceptsPointerInput(snapshot);
@@ -273,6 +282,7 @@ function snapshotLooksReady(snapshot, scenario = "") {
     topbarOrganizeMoved &&
     topbarFullscreenPresent &&
     treeStripIconsReady &&
+    canvasTreeLabelsReady &&
     graphPointerReady &&
     splitHandlePointerReady &&
     layoutLooksStable
@@ -345,14 +355,17 @@ function snapshotMatchesScenario(snapshot, scenario) {
     );
   }
 
-  if (scenario === "focus-close-and-select-root") {
+  if (
+    scenario === "focus-close-and-select-root" ||
+    scenario === "focus-escape-and-select-root"
+  ) {
     return (
       snapshot.view === "focus" &&
       snapshot.browserSurface === "page" &&
       snapshot.workspace?.selectedNode?.parentId === null &&
       snapshot.workspace?.selectedNode?.url === ROOT_SMOKE_URL &&
       snapshot.workspace?.selectedNode?.runtimeState === "live" &&
-      snapshot.ui?.surfaceCloseLabel === "×" &&
+      /canvas/iu.test(snapshot.ui?.surfaceCloseLabel ?? "") &&
       runtimeMatchesSelection &&
       runtimeMatchesNode
     );

@@ -14,8 +14,6 @@ const ROOT_RING_STEP = 920;
 const ROOT_CHILD_RADIUS = 268;
 const CHILD_RADIUS = 214;
 const COMPACT_CHILD_RADIUS = 182;
-const ARTIFACT_CHILD_RADIUS = 104;
-const ARTIFACT_RING_STEP = 14;
 const DEPTH_RADIUS_STEP = 24;
 const COMPACT_DEPTH_RADIUS_STEP = 10;
 const SIBLING_RADIUS_STEP = 14;
@@ -70,7 +68,29 @@ const COMMERCIAL_HOST_PATTERNS = [
   /(^|\.)newegg\.com$/u
 ];
 
+const AI_CHAT_HOST_PATTERNS = [
+  /(^|\.)chatgpt\.com$/u,
+  /(^|\.)chat\.openai\.com$/u,
+  /(^|\.)claude\.ai$/u
+];
+
+const AI_CHAT_PATH_PATTERNS = [
+  /^\/?$/u,
+  /^\/c(?:\/|$)/u,
+  /^\/g(?:\/|$)/u,
+  /^\/new(?:\/|$)/u,
+  /^\/chat(?:\/|$)/u,
+  /^\/project(?:s)?(?:\/|$)/u
+];
+
 export const SITE_CATEGORY_STYLES = {
+  "ai-chat": {
+    label: "AI Chat",
+    fill: "#def7ea",
+    border: "#40a26e",
+    accent: "#287552",
+    minimapFill: "#67b389"
+  },
   research: {
     label: "Research",
     fill: "#dfeeff",
@@ -107,6 +127,8 @@ export const GRAPH_ARTIFACT_WIDTH = 96;
 export const GRAPH_ARTIFACT_HEIGHT = 52;
 export const GRAPH_NODE_GAP = 16;
 export const GRAPH_EDGE_CLEARANCE = 16;
+const ROOT_NODE_MAX_WIDTH = 320;
+const ROOT_NODE_WIDTH_PADDING = 92;
 
 const DRAG_SNAP_STEP = 24;
 const DRAG_SNAP_RINGS = 36;
@@ -275,15 +297,46 @@ function hostnameForUrl(url) {
   }
 }
 
+function pathnameForUrl(url) {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return null;
+  }
+}
+
 function matchesAny(hostname, patterns) {
   return patterns.some((pattern) => pattern.test(hostname));
 }
 
-export function classifySiteCategory(url) {
+function looksLikeAiChatInterface(url, title = "") {
+  const hostname = hostnameForUrl(url);
+  const pathname = pathnameForUrl(url) ?? "/";
+
+  if (!hostname || !matchesAny(hostname, AI_CHAT_HOST_PATTERNS)) {
+    return false;
+  }
+
+  if (AI_CHAT_PATH_PATTERNS.some((pattern) => pattern.test(pathname))) {
+    return true;
+  }
+
+  return /\b(chatgpt|claude|new chat|conversation)\b/iu.test(title ?? "");
+}
+
+export function classifySiteCategory(url, title = "") {
   const hostname = hostnameForUrl(url);
 
   if (!hostname) {
     return "general";
+  }
+
+  if (looksLikeAiChatInterface(url, title)) {
+    return "ai-chat";
   }
 
   if (matchesAny(hostname, RESEARCH_HOST_PATTERNS)) {
@@ -1183,6 +1236,7 @@ function radialPoint(origin, angle, radius) {
 
 function placeNode(workspace, node, position, angle, positionedNodes, branchAxis = angle) {
   const resolvedPosition = node.manualPosition ? node.position : position;
+  const resolvedSize = nodeDimensions(node);
 
   positionedNodes.set(node.id, {
     ...node,
@@ -1193,19 +1247,24 @@ function placeNode(workspace, node, position, angle, positionedNodes, branchAxis
   const artifactChildren = sortNodesForSlots(findArtifactChildren(workspace, node.id));
 
   if (artifactChildren.length) {
-    const artifactBaseAngle = node.parentId === null ? Math.PI / 2 : (angle ?? -Math.PI / 2) + Math.PI / 2;
-    const artifactSpread = Math.min(1.18, 0.42 + artifactChildren.length * 0.12);
-
     artifactChildren.forEach((child, childIndex) => {
-      const artifactAngle =
-        artifactChildren.length === 1
-          ? artifactBaseAngle
-          : artifactBaseAngle -
-            artifactSpread / 2 +
-            (artifactSpread * (childIndex + 0.5)) / artifactChildren.length;
-      const artifactRadius = ARTIFACT_CHILD_RADIUS + Math.max(0, artifactChildren.length - 1) * ARTIFACT_RING_STEP;
+      const childSize = nodeDimensions(child);
+      const attachmentStep = Math.max(60, Math.round(childSize.width * 0.7));
+      const attachmentSpan =
+        childSize.width + Math.max(0, artifactChildren.length - 1) * attachmentStep;
+      const attachedPosition = {
+        x: Math.round(
+          resolvedPosition.x +
+            resolvedSize.width / 2 -
+            attachmentSpan / 2 +
+            childIndex * attachmentStep
+        ),
+        y: Math.round(
+          resolvedPosition.y + resolvedSize.height - Math.round(childSize.height * 0.38)
+        )
+      };
 
-      placeNode(workspace, child, radialPoint(resolvedPosition, artifactAngle, artifactRadius), artifactAngle, positionedNodes, artifactAngle);
+      placeNode(workspace, child, attachedPosition, Math.PI / 2, positionedNodes, Math.PI / 2);
     });
   }
 
@@ -1276,6 +1335,19 @@ export function nodeDimensions(node) {
     return {
       width: GRAPH_ARTIFACT_WIDTH,
       height: GRAPH_ARTIFACT_HEIGHT
+    };
+  }
+
+  if (node?.parentId === null) {
+    const estimatedTitleWidth =
+      ROOT_NODE_WIDTH_PADDING + String(node?.title ?? "").trim().length * 6.1;
+
+    return {
+      width: Math.max(
+        GRAPH_NODE_WIDTH,
+        Math.min(ROOT_NODE_MAX_WIDTH, Math.round(estimatedTitleWidth))
+      ),
+      height: GRAPH_NODE_HEIGHT
     };
   }
 
@@ -1688,7 +1760,7 @@ export function classifyNodeCategory(workspace, node) {
   }
 
   if (isPageNode(node)) {
-    return classifySiteCategory(node.url);
+    return classifySiteCategory(node.url, node.title);
   }
 
   return classifySiteCategory(
@@ -1696,7 +1768,8 @@ export function classifyNodeCategory(workspace, node) {
       node.artifact?.pageUrl ??
       node.artifact?.sourceUrl ??
       findOwningPageNode(workspace, node)?.url ??
-      null
+      null,
+    node.title
   );
 }
 
@@ -1711,7 +1784,7 @@ export function buildPageFavoriteEntry(workspace, node) {
     title: node.title || "Untitled page",
     url: node.url,
     faviconUrl: node.faviconUrl,
-    category: classifySiteCategory(node.url),
+    category: classifySiteCategory(node.url, node.title),
     updatedAt: now()
   };
 }
@@ -1735,7 +1808,7 @@ export function buildTreeFavoriteEntry(workspace, rootId) {
     title: rootNode.title || representativeNode.title || "Untitled tree",
     url: representativeNode.url,
     faviconUrl: representativeNode.faviconUrl,
-    category: classifySiteCategory(representativeNode.url),
+    category: classifySiteCategory(representativeNode.url, representativeNode.title),
     updatedAt: now()
   };
 }
