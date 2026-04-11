@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-11T02:26:48.035Z",
+  "generatedAt": "2026-04-11T03:12:20.186Z",
   "installers": [
     {
       "version": "140.10.0",
@@ -13,12 +13,12 @@
       ],
       "builtBy": "github-actions",
       "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24271334012",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24272453838",
       "path": "windows/Nodely-Browser-140.10.0-windows-x64.installer.exe",
       "fileName": "Nodely-Browser-140.10.0-windows-x64.installer.exe",
       "source": "out/make/win32/x64/Nodely-Browser-140.10.0-windows-x64.installer.exe",
-      "size": 19228768,
-      "syncedAt": "2026-04-11T02:26:48.035Z"
+      "size": 19228420,
+      "syncedAt": "2026-04-11T03:12:20.186Z"
     }
   ]
 }
