@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildDesktopEntry,
   buildFlatpakWrapper,
+  buildLinuxRunStub,
   buildSystemWrapper,
   copyNativeInstaller,
   copyTreePreservingSymlinks,
@@ -214,6 +215,16 @@ describe("build-installers wrappers", () => {
     expect(wrapper).not.toContain("/nodely/gecko-profile");
     expect(wrapper).not.toContain('-new-instance');
     expect(wrapper).not.toContain('-no-remote');
+  });
+
+  it("quotes the linux run wrapper heredoc so installer-shell variables stay intact", () => {
+    const stub = buildLinuxRunStub({
+      extractFlags: "xJ",
+      iconSvg: "<svg />"
+    });
+
+    expect(stub).toContain("cat >\"$wrapper_path\" <<'WRAPPER'");
+    expect(stub).not.toContain("cat >\"$wrapper_path\" <<WRAPPER");
   });
 
   it("declares the Gecko runtime libraries needed by Ubuntu and Mint", () => {

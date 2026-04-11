@@ -616,7 +616,7 @@ function buildFlatpakMetainfo(version) {
 `;
 }
 
-function buildLinuxRunStub({ extractFlags, iconSvg }) {
+export function buildLinuxRunStub({ extractFlags, iconSvg }) {
   return `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -695,7 +695,7 @@ mkdir -p "$prefix" "$bin_dir" "$desktop_dir" "$icon_dir"
 rm -rf "$install_root"
 mv "$bundle_dir" "$install_root"
 
-cat >"$wrapper_path" <<WRAPPER
+cat >"$wrapper_path" <<'WRAPPER'
 ${buildSystemWrapper({
   installRoot: '$install_root',
   desktopFileName: systemDesktopFileName
