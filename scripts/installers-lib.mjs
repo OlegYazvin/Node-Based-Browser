@@ -10,7 +10,6 @@ export const geckoReleaseDirectory = path.join(repositoryRoot, "gecko", "release
 export const installerDirectory = path.join(repositoryRoot, "Installer");
 export const outMakeDirectory = path.join(repositoryRoot, "out", "make");
 export const installerReadmeName = "README.MD";
-export const gitHubGitFileSizeLimitBytes = 100_000_000;
 
 const platformAliases = {
   linux: "linux",
@@ -448,16 +447,17 @@ export function renderInstallerReadme(manifest) {
 
   return `# Nodely Installer Guide
 
-This directory is the small, machine-readable installer index used by release automation. Large generated installers are published as GitHub Release assets instead of committed to the repo when they exceed normal GitHub file limits. \`Installer/manifest.json\` describes the installers staged in this directory when files are present, and this file is regenerated from that manifest.
+This directory contains the installers that actually exist in this repo right now. \`Installer/manifest.json\` is the machine-readable source of truth, and this file is regenerated from that manifest.
 
 ## Quick guide
 
 - Use **Linux x64** on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs.
 - Use **Linux arm64** only on ARM64 Linux hardware.
 - On **Linux Mint**, prefer the **Ubuntu DEB** package if you want the cleanest install and uninstall experience.
-- The cross-platform installer workflow publishes release assets for the current Nodely version after Windows, macOS, and Linux checks pass.
+- Windows and macOS installers are produced on native GitHub Actions runners and only show up here after a real native build has been promoted into this directory.
 - Each staged installer records whether it came from a local build or GitHub Actions promotion.
-- If a section below says no installers are staged, check the [GitHub Releases](https://github.com/OlegYazvin/Node-Based-Browser/releases) page for published CI assets for the current version.
+- \`Installer/RELEASE_NOTES.MD\` captures the latest push-triggered installer/release summary for this repo.
+- If a section below says no installers are staged, there is nothing in this repo for that target today.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
 
 Generated from \`Installer/manifest.json\` at ${generatedAt}.
@@ -590,21 +590,13 @@ export async function syncInstallers({
       continue;
     }
 
-    const outputStats = await stat(outputPath);
-
-    if (outputStats.size > gitHubGitFileSizeLimitBytes) {
-      console.warn(
-        `Skipping ${fileName} for Installer/ staging because ${outputStats.size} bytes exceeds GitHub's git file limit. Keep it on GitHub Releases instead.`
-      );
-      continue;
-    }
-
     const relativeDestination = stagedInstallerRelativePath(normalizedPlatform, fileName);
     const destinationPath = path.join(targetDirectory, relativeDestination);
     await ensureDirectory(path.dirname(destinationPath));
     await rm(destinationPath, { force: true });
     await cp(outputPath, destinationPath);
-    const stagedStats = await stat(destinationPath);
+
+    const outputStats = await stat(destinationPath);
     nextInstallers.push({
       version,
       platform: normalizedPlatform,
@@ -618,7 +610,7 @@ export async function syncInstallers({
       path: relativeDestination,
       fileName: path.basename(destinationPath),
       source: path.relative(repositoryRoot, outputPath),
-      size: stagedStats.size,
+      size: outputStats.size,
       syncedAt: new Date().toISOString()
     });
   }
