@@ -428,6 +428,7 @@ export class NodelyGraphSurface extends HTMLElement {
       return;
     }
 
+    const bounds = this.getBoundingClientRect();
     const activeSelectedNode =
       findNode(this.workspace, this.selectedNodeId ?? this.workspace.selectedNodeId) ?? null;
     const activeRootId = activeSelectedNode?.rootId ?? null;
@@ -468,9 +469,7 @@ export class NodelyGraphSurface extends HTMLElement {
       }
 
       element.className = `nodely-graph-tree-label${root.id === activeRootId ? " is-active" : ""}`;
-      element.style.setProperty("--tree-label-border", colors.border);
       element.style.setProperty("--tree-label-accent", colors.accent);
-      element.style.setProperty("--tree-label-bg", colors.fill);
       element.dataset.rootId = root.id;
 
       const contentSignature = JSON.stringify([root.title, meta, category, root.id === activeRootId]);
@@ -484,18 +483,23 @@ export class NodelyGraphSurface extends HTMLElement {
       }
 
       const labelHeight = Math.max(
-        42,
-        Math.round(element.getBoundingClientRect?.().height || 44)
+        36,
+        Math.round(element.getBoundingClientRect?.().height || 40)
       );
-      const centerX = Math.round(point.x + (dimensions.width * this.viewport.zoom) / 2);
-      const preferredTop = Math.round(point.y - labelHeight - 14);
+      const preferredTop = Math.round(point.y + dimensions.height * this.viewport.zoom + 10);
+      const fallbackTop = Math.round(point.y - labelHeight - 10);
+      const maxTop = Math.max(8, Math.round(bounds.height - labelHeight - 8));
       const labelTop =
-        preferredTop >= 12
+        preferredTop <= maxTop
           ? preferredTop
-          : Math.round(point.y + dimensions.height * this.viewport.zoom + 12);
+          : clamp(fallbackTop, 8, maxTop);
+      const maxWidth = Math.max(220, Math.round(dimensions.width * this.viewport.zoom + 88));
+      const maxLeft = Math.max(8, Math.round(bounds.width - maxWidth - 8));
+      const labelLeft = clamp(Math.round(point.x + 8), 8, maxLeft);
 
-      element.style.left = `${centerX}px`;
+      element.style.left = `${labelLeft}px`;
       element.style.top = `${labelTop}px`;
+      element.style.maxWidth = `${maxWidth}px`;
     }
 
     for (const [rootId, element] of this.treeLabelElements.entries()) {
