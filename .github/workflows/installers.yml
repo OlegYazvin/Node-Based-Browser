@@ -362,43 +362,79 @@ jobs:
         id: release_meta
         run: |
           node --input-type=module <<'NODE'
-          import { appendFileSync, readFileSync } from "node:fs";
+          import { appendFileSync, readdirSync, statSync } from "node:fs";
+          import path from "node:path";
 
-          const manifest = JSON.parse(readFileSync("Installer/manifest.json", "utf8"));
-          const installers = Array.isArray(manifest.installers) ? manifest.installers : [];
-          const versions = [...new Set(installers.map((entry) => entry.version).filter(Boolean))];
+          import { extractInstallerVersion } from "./scripts/installers-lib.mjs";
 
-          if (!installers.length) {
-            throw new Error("Installer/manifest.json does not contain any installers to publish.");
+          const allowedExtensions = new Set([".deb", ".rpm", ".flatpak", ".run", ".exe", ".dmg", ".pkg"]);
+          const makeRoot = path.join("out", "make");
+          const assetPaths = [];
+
+          for (const platform of readdirSync(makeRoot, { withFileTypes: true })) {
+            if (!platform.isDirectory()) {
+              continue;
+            }
+
+            const platformDirectory = path.join(makeRoot, platform.name);
+
+            for (const arch of readdirSync(platformDirectory, { withFileTypes: true })) {
+              if (!arch.isDirectory()) {
+                continue;
+              }
+
+              const archDirectory = path.join(platformDirectory, arch.name);
+
+              for (const entry of readdirSync(archDirectory, { withFileTypes: true })) {
+                if (!entry.isFile()) {
+                  continue;
+                }
+
+                const extension = path.extname(entry.name).toLowerCase();
+
+                if (!allowedExtensions.has(extension) || !entry.name.startsWith("Nodely-Browser-")) {
+                  continue;
+                }
+
+                const assetPath = path.posix.join(
+                  "out",
+                  "make",
+                  platform.name,
+                  arch.name,
+                  entry.name
+                );
+
+                if (!statSync(path.join(archDirectory, entry.name)).size) {
+                  continue;
+                }
+
+                assetPaths.push(assetPath);
+              }
+            }
           }
 
+          assetPaths.sort();
+
+          if (!assetPaths.length) {
+            throw new Error("No built installer assets were found under out/make to publish.");
+          }
+
+          const versions = [...new Set(assetPaths.map((assetPath) => extractInstallerVersion(path.basename(assetPath))).filter(Boolean))];
+
           if (versions.length !== 1) {
-            throw new Error(`Expected exactly one staged Nodely version, found: ${versions.join(", ")}`);
+            throw new Error(`Expected exactly one built Nodely version, found: ${versions.join(", ")}`);
           }
 
           const version = versions[0];
-          const assets = installers.map((entry) => `Installer/${String(entry.path).replaceAll("\\\\", "/")}`);
           const outputPath = process.env.GITHUB_OUTPUT;
 
           appendFileSync(outputPath, `version=${version}\n`);
-          appendFileSync(outputPath, `tag=nodely-browser-${version}\n`);
-          appendFileSync(outputPath, `title=Nodely Browser ${version}\n`);
+          appendFileSync(outputPath, `tag=nodely-${version}\n`);
+          appendFileSync(outputPath, `title=Nodely ${version}\n`);
           appendFileSync(outputPath, "assets<<EOF\n");
-          appendFileSync(outputPath, `${assets.join("\n")}\n`);
+          appendFileSync(outputPath, `${assetPaths.join("\n")}\n`);
           appendFileSync(outputPath, "EOF\n");
           NODE
-
-      - name: Commit promoted installers
-        run: |
-          if [[ -z "$(git status --porcelain -- Installer)" ]]; then
-            echo "No Installer changes to commit."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add Installer
-            git commit -m "chore: promote generated installers and notes"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
 
       - name: Publish GitHub Release assets
         env:
@@ -423,6 +459,18 @@ jobs:
               gh release upload "$RELEASE_TAG" "$asset" --clobber
             fi
           done <<< "$RELEASE_ASSETS"
+
+      - name: Commit promoted installers
+        run: |
+          if [[ -z "$(git status --porcelain -- Installer)" ]]; then
+            echo "No Installer changes to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Installer
+            git commit -m "chore: promote generated installers and notes"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
 
       - name: Upload assembled Installer directory
         uses: actions/upload-artifact@v4

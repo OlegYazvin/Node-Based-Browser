@@ -69,13 +69,19 @@ The user-facing staged artifacts live in [gecko/release-artifacts](./gecko/relea
 
 ## Installers
 
-The final user-downloadable installers live in [Installer](./Installer).
+The public download page for installers is GitHub Releases:
+
+- latest release: <https://github.com/OlegYazvin/Node-Based-Browser/releases/latest>
+- all releases: <https://github.com/OlegYazvin/Node-Based-Browser/releases>
+
+The [Installer](./Installer) directory is the repo-staged installer snapshot and maintainer metadata, not the primary user download destination.
 
 - `npm run installers` builds the installer for the current platform from the staged Gecko package in `gecko/release-artifacts`.
 - `npm run installers:sync -- --platform <platform> --arch <arch>` copies a finished installer from `out/make/<platform>/<arch>` into `Installer/` and refreshes both `Installer/manifest.json` and [Installer/README.MD](./Installer/README.MD).
 - `npm run installers:prune -- --target <platform:arch>` removes stale installer slices before a CI promotion refresh.
 - Keep a single visible Nodely release version across `gecko/release-artifacts/` and `Installer/`; the repo snapshot can contain multiple platform installers, but they should all belong to the same Nodely version.
 - Linux uses a self-contained `.run` installer so the downloaded file is enough to install and launch Nodely on common desktop distributions.
+- Download links shared with end users should point to GitHub Releases, not the repo tree.
 - Windows and macOS installers are built from native packaged Gecko outputs and should be produced on native runners through [`.github/workflows/installers.yml`](./.github/workflows/installers.yml), which runs on pushes to `main`, skips installer-only promotion commits, only promotes installers after a fully successful build matrix, and publishes the resulting installers as GitHub Release assets for the current Nodely version.
 - `Installer/` should only contain installers that were actually built and synced for this version.
 - [INSTALLER_BOUNDARIES.MD](./INSTALLER_BOUNDARIES.MD) is the maintainer guide for keeping Gecko browser packaging separate from installer generation.

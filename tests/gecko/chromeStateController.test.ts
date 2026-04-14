@@ -1137,14 +1137,19 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     runtimeManager.selectNode.mockClear();
 
     const foreignTab = { id: "tab-2" };
+    const foreignUrl = "https://example.com/child-tab";
     await controller.handleForeignTabOpen(foreignTab, {
       parentNodeId: rootId,
-      background: false
+      background: false,
+      url: foreignUrl,
+      title: "Child tab"
     });
 
     const childNode = workspace.nodes.find((node: { parentId: string | null }) => node.parentId === rootId);
     expect(childNode).toBeTruthy();
     expect(workspace.selectedNodeId).toBe(childNode?.id);
+    expect(childNode?.url).toBe(foreignUrl);
+    expect(childNode?.title).toBe("Child tab");
     expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(childNode?.id, foreignTab);
     expect(runtimeManager.selectNode).toHaveBeenCalledWith(childNode?.id);
   });

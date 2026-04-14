@@ -380,12 +380,22 @@ export class ChromeStateController extends EventTarget {
       return;
     }
 
-    const nextWorkspace = relayoutWorkspace(
+    let nextWorkspace = relayoutWorkspace(
       createPageChildNode(this.workspace, parentNode.id, "window-open", {
         selectChild: !details.background
       })
     );
-    const childNode = nextWorkspace.nodes.at(-1);
+    let childNode = nextWorkspace.nodes.at(-1);
+
+    if (childNode && (details.url || details.title)) {
+      nextWorkspace = updateNodeMetadata(nextWorkspace, childNode.id, {
+        title: details.title ?? null,
+        url: details.url ?? null,
+        runtimeState: details.url ? "live" : "loading"
+      });
+      childNode = findNode(nextWorkspace, childNode.id);
+    }
+
     await this.persistWorkspace(
       details.background ? nextWorkspace : setSurfaceMode(nextWorkspace, "page")
     );

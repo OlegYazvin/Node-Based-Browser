@@ -26,6 +26,8 @@ const ROOT_SMOKE_URL =
   "data:text/html,%3Ctitle%3ENodely%20Smoke%20Root%3C%2Ftitle%3E%3Ch1%3ERoot%3C%2Fh1%3E";
 const CHILD_SMOKE_URL =
   "data:text/html,%3Ctitle%3ENodely%20Smoke%20Child%3C%2Ftitle%3E%3Ch1%3EChild%3C%2Fh1%3E";
+const FOREIGN_TAB_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Foreign%20Tab%3C%2Ftitle%3E%3Ch1%3EForeign%20Tab%3C%2Fh1%3E";
 const SMOKE_WAIT_TIMEOUT_MS = 15_000;
 let bootstrapRequested = false;
 let bootstrapComplete = false;
@@ -101,6 +103,10 @@ function smokeManualWebRTCConfirm() {
   } catch {
     return false;
   }
+}
+
+function smokeTriggeringPrincipal() {
+  return ServicesRef?.scriptSecurityManager?.getSystemPrincipal?.() ?? null;
 }
 
 function marionetteEnabled() {
@@ -475,7 +481,11 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           buttonCount: pageToolbarButtons.length,
           svgCount: pageToolbar?.querySelectorAll(".nodely-shell__icon-button > svg")?.length ?? 0,
           pathCount: pageToolbar?.querySelectorAll(".nodely-shell__icon-button > svg path")?.length ?? 0,
-          branchNextPresent: Boolean(branchNextButton)
+          branchNextPresent: Boolean(branchNextButton),
+          addressValue:
+            pageToolbar?.querySelector?.(".nodely-shell__address-input")?.value ??
+            nodelyLocationInput?.value ??
+            ""
         },
         treeStrip: {
           treeEditPresent: Boolean(treeEditButton),
@@ -618,6 +628,10 @@ async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenari
         return;
       case "pagebar-duplicate-tab":
         await runPagebarDuplicateTabScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "pagebar-foreign-tab":
+        await runPagebarForeignTabScenario({ controller });
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       case "graph-contextmenu-root-composer":
@@ -792,6 +806,61 @@ async function runPagebarDuplicateTabScenario() {
     () => window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === CHILD_SMOKE_URL,
     "duplicated tab runtime"
   );
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runPagebarForeignTabScenario({ controller }) {
+  const readyState = await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length === 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke pagebar foreign-tab ready");
+  const parentNodeId = readyState.workspace?.selectedNodeId ?? null;
+  const parentTab = window.gBrowser?.selectedTab ?? null;
+  const runtimeManager = controller.runtimeManager;
+
+  if (!parentNodeId || !parentTab || !runtimeManager) {
+    throw new Error("Smoke pagebar-foreign-tab scenario could not resolve the active page runtime.");
+  }
+
+  const foreignTab = window.gBrowser.addTab("about:blank", {
+    inBackground: true,
+    skipAnimation: true,
+    triggeringPrincipal: smokeTriggeringPrincipal()
+  });
+
+  runtimeManager.handleTabOpen({
+    target: foreignTab,
+    detail: {
+      ownerTab: parentTab
+    }
+  });
+  window.gBrowser.selectedTab = foreignTab;
+  foreignTab.linkedBrowser?.fixupAndLoadURIString?.(FOREIGN_TAB_SMOKE_URL, {
+    triggeringPrincipal: smokeTriggeringPrincipal()
+  });
+
+  await waitForSmokeState((state) => {
+    const selectedNode =
+      state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      state.workspace?.nodes?.length === 3 &&
+      state.workspace?.edgeCount === 2 &&
+      selectedNode?.id !== parentNodeId &&
+      selectedNode?.parentId === parentNodeId &&
+      selectedNode?.url === FOREIGN_TAB_SMOKE_URL &&
+      window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === FOREIGN_TAB_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "pagebar foreign tab");
   await nextAnimationFrame();
   await nextAnimationFrame();
 }

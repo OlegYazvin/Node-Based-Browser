@@ -114,6 +114,40 @@ describe("NodeRuntimeManager Gecko tab ownership", () => {
     );
   });
 
+  it("reclassifies a pending foreign tab as foreground when it becomes selected before the page commits", () => {
+    const windowRef = makeWindow();
+    const onForeignTabOpen = vi.fn();
+    const manager = new NodeRuntimeManager(windowRef, {
+      onForeignTabOpen
+    });
+
+    manager.registerNodeTab("node-1", windowRef.primaryTab, { owned: true });
+    const foreignTab = makeTab("foreign-selected");
+    foreignTab.owner = windowRef.primaryTab;
+    windowRef.browserToTab.set(foreignTab.linkedBrowser, foreignTab);
+
+    manager.handleTabOpen({ target: foreignTab });
+    windowRef.gBrowser.selectedTab = foreignTab;
+    foreignTab.linkedBrowser.currentURI.spec = "https://example.com/foreground-child";
+    manager.progressListener.onLocationChange(
+      foreignTab.linkedBrowser,
+      null,
+      null,
+      { spec: "https://example.com/foreground-child" } as any,
+      null
+    );
+
+    expect(onForeignTabOpen).toHaveBeenCalledWith(
+      foreignTab,
+      expect.objectContaining({
+        kind: "tab",
+        background: false,
+        parentNodeId: "node-1",
+        url: "https://example.com/foreground-child"
+      })
+    );
+  });
+
   it("ignores unrelated browser tabs that do not originate from a managed Nodely node", () => {
     const windowRef = makeWindow();
     const onForeignTabOpen = vi.fn();

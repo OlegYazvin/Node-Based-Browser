@@ -29,6 +29,8 @@ const ROOT_SMOKE_URL =
   "data:text/html,%3Ctitle%3ENodely%20Smoke%20Root%3C%2Ftitle%3E%3Ch1%3ERoot%3C%2Fh1%3E";
 const CHILD_SMOKE_URL =
   "data:text/html,%3Ctitle%3ENodely%20Smoke%20Child%3C%2Ftitle%3E%3Ch1%3EChild%3C%2Fh1%3E";
+const FOREIGN_TAB_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Foreign%20Tab%3C%2Ftitle%3E%3Ch1%3EForeign%20Tab%3C%2Fh1%3E";
 
 function usage() {
   console.log(`Usage: node gecko/scripts/run-nodely-smoke.mjs [options]
@@ -511,6 +513,19 @@ function snapshotMatchesScenario(snapshot, scenario) {
       snapshot.workspace?.edgeCount === 2 &&
       snapshot.workspace?.selectedNode?.parentId != null &&
       snapshot.workspace?.selectedNode?.url === CHILD_SMOKE_URL &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "pagebar-foreign-tab") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.nodeCount === 3 &&
+      snapshot.workspace?.edgeCount === 2 &&
+      snapshot.workspace?.selectedNode?.parentId != null &&
+      snapshot.workspace?.selectedNode?.url === FOREIGN_TAB_SMOKE_URL &&
+      snapshot.ui?.pageToolbar?.addressValue === FOREIGN_TAB_SMOKE_URL &&
       runtimeMatchesSelection &&
       runtimeMatchesNode
     );

@@ -600,8 +600,9 @@ export class NodeRuntimeManager {
       return;
     }
 
+    record.background = tab !== this.window.gBrowser?.selectedTab;
     record.url = url;
-    record.title = tab?.label ?? null;
+    record.title = tab?.label ?? record.title ?? null;
 
     if (classifyForeignNavigationTarget(url) === "transient-auth") {
       this.pendingForeignTabByTab.delete(tab);
@@ -624,8 +625,8 @@ export class NodeRuntimeManager {
     const nodeId = this.nodeIdForTab(tab);
 
     if (nodeId) {
-      this.callbacks.onNodeSelected?.(nodeId);
       this.syncNodeMetadataFromTab(tab);
+      this.callbacks.onNodeSelected?.(nodeId);
     }
   }
 
