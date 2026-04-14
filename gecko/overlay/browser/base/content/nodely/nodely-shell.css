@@ -38,6 +38,29 @@
   pointer-events: none !important;
 }
 
+:root[nodely-active="true"] #urlbar:popover-open,
+:root[nodely-active="true"] #urlbar[open],
+:root[nodely-active="true"] #urlbar[breakout-extend] {
+  position: fixed !important;
+  top: -10000px !important;
+  left: -10000px !important;
+  width: 1px !important;
+  min-width: 1px !important;
+  max-width: 1px !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+:root[nodely-active="true"] #urlbar:popover-open > .urlbarView,
+:root[nodely-active="true"] #urlbar[open] > .urlbarView,
+:root[nodely-active="true"] #PopupAutoComplete,
+:root[nodely-active="true"] #PopupAutoCompleteRichResult {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 :root[nodely-active="true"] #browser {
   position: fixed !important;
   inset:

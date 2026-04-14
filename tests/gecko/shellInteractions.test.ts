@@ -26,7 +26,10 @@ beforeAll(async () => {
     value: {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
-      requestAnimationFrame: vi.fn(() => 0),
+      requestAnimationFrame: vi.fn((callback) => {
+        callback();
+        return 0;
+      }),
       cancelAnimationFrame: vi.fn()
     }
   });
@@ -162,6 +165,54 @@ describe("NodelyShell focus and context interactions", () => {
 
     expect(setSurfaceMode).toHaveBeenCalledWith("canvas");
     expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("reroutes Ctrl/Cmd+L into Nodely's own location input", () => {
+    const shell = new NodelyShell();
+    const focusPreferredLocationInput = vi.spyOn(shell, "focusPreferredLocationInput").mockReturnValue(true);
+    const dismissNativeLocationOverlay = vi
+      .spyOn(shell, "dismissNativeLocationOverlay")
+      .mockReturnValue(true);
+    const preventDefault = vi.fn();
+
+    shell.handleWindowKeydown({
+      key: "l",
+      code: "KeyL",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      target: { tagName: "DIV" },
+      preventDefault
+    });
+
+    expect(focusPreferredLocationInput).toHaveBeenCalledTimes(1);
+    expect(dismissNativeLocationOverlay).toHaveBeenCalledTimes(1);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("reroutes Browser:OpenLocation commands into Nodely's own location input", () => {
+    const shell = new NodelyShell();
+    const focusPreferredLocationInput = vi.spyOn(shell, "focusPreferredLocationInput").mockReturnValue(true);
+    const dismissNativeLocationOverlay = vi
+      .spyOn(shell, "dismissNativeLocationOverlay")
+      .mockReturnValue(true);
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+    const stopImmediatePropagation = vi.fn();
+
+    shell.handleDocumentCommand({
+      target: { id: "Browser:OpenLocation" },
+      preventDefault,
+      stopPropagation,
+      stopImmediatePropagation
+    });
+
+    expect(focusPreferredLocationInput).toHaveBeenCalledTimes(1);
+    expect(dismissNativeLocationOverlay).toHaveBeenCalledTimes(1);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(stopImmediatePropagation).toHaveBeenCalledTimes(1);
   });
 
   it("keeps a freshly opened context menu available until the opening click cycle has passed", () => {

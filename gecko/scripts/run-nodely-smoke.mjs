@@ -527,6 +527,15 @@ function snapshotMatchesScenario(snapshot, scenario) {
     );
   }
 
+  if (scenario === "native-urlbar-overlay") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.ui?.nativeUrlbar?.suppressed === true &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
   if (scenario === "graph-contextmenu-root-composer") {
     return (
       snapshot.browserSurface === "page" &&

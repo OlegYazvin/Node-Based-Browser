@@ -397,6 +397,14 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const popupNotifications = window.PopupNotifications ?? null;
     const selectedBrowser = window.gBrowser?.selectedBrowser ?? null;
     const selectedBrowserTitle = selectedBrowser?.contentTitle ?? "";
+    const nativeUrlbar = document.getElementById("urlbar");
+    const nativeUrlbarInput = document.getElementById("urlbar-input");
+    const nativeUrlbarPopup =
+      document.getElementById("PopupAutoCompleteRichResult") ??
+      document.getElementById("PopupAutoComplete");
+    const nodelyLocationInput =
+      document.querySelector(".nodely-shell__address-form input[name='address']") ??
+      document.querySelector(".nodely-shell__composer-form input[name='root-input']");
     const webRTCPrompt =
       popupNotifications?.getNotification?.("webRTC-shareDevices", selectedBrowser) ??
       popupNotifications?.getNotification?.("webRTC-shareDevices") ??
@@ -481,6 +489,27 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           newChildSvgCount: newChildButton?.querySelectorAll("svg")?.length ?? 0,
           newChildPathCount: newChildButton?.querySelectorAll("svg path")?.length ?? 0,
           treeFavoritePresent: Boolean(treeFavoriteButton)
+        },
+        nativeUrlbar: {
+          popoverOpen: matchesSelectorSafe(nativeUrlbar, ":popover-open"),
+          open: Boolean(nativeUrlbar?.hasAttribute?.("open")),
+          breakout: Boolean(nativeUrlbar?.hasAttribute?.("breakout")),
+          breakoutExtend: Boolean(nativeUrlbar?.hasAttribute?.("breakout-extend")),
+          popupOpen:
+            matchesSelectorSafe(nativeUrlbarPopup, ":popover-open") ||
+            nativeUrlbarPopup?.state === "open",
+          nativeInputFocused: document.activeElement === nativeUrlbarInput,
+          nodelyInputFocused: document.activeElement === nodelyLocationInput,
+          activeElementId: document.activeElement?.id ?? null,
+          suppressed:
+            !matchesSelectorSafe(nativeUrlbar, ":popover-open") &&
+            !nativeUrlbar?.hasAttribute?.("open") &&
+            !nativeUrlbar?.hasAttribute?.("breakout-extend") &&
+            !(
+              matchesSelectorSafe(nativeUrlbarPopup, ":popover-open") ||
+              nativeUrlbarPopup?.state === "open"
+            ) &&
+            document.activeElement !== nativeUrlbarInput
         },
         canvasTreeLabels: {
           count: Number(graphSurface?.dataset?.treeLabelCount ?? 0),
@@ -609,6 +638,10 @@ async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenari
         return;
       case "webrtc-microphone-prompt":
         await runWebRTCMicrophonePromptScenario({ controller });
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "native-urlbar-overlay":
+        await runNativeUrlbarOverlayScenario();
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       default:
@@ -1020,6 +1053,52 @@ async function runWebRTCMicrophonePromptScenario({ controller }) {
   await nextAnimationFrame();
 }
 
+async function runNativeUrlbarOverlayScenario() {
+  await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length >= 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "native urlbar scenario ready");
+
+  const openLocationCommand = document.getElementById("Browser:OpenLocation");
+
+  if (!openLocationCommand?.doCommand) {
+    throw new Error("Smoke native-urlbar-overlay scenario could not find Browser:OpenLocation.");
+  }
+
+  openLocationCommand.doCommand();
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  await waitForCondition(() => {
+    const nativeUrlbar = document.getElementById("urlbar");
+    const nativeUrlbarInput = document.getElementById("urlbar-input");
+    const nativeUrlbarPopup =
+      document.getElementById("PopupAutoCompleteRichResult") ??
+      document.getElementById("PopupAutoComplete");
+    const nodelyLocationInput =
+      document.querySelector(".nodely-shell__address-form input[name='address']") ??
+      document.querySelector(".nodely-shell__composer-form input[name='root-input']");
+
+    return (
+      !matchesSelectorSafe(nativeUrlbar, ":popover-open") &&
+      !nativeUrlbar?.hasAttribute?.("open") &&
+      !nativeUrlbar?.hasAttribute?.("breakout-extend") &&
+      !(
+        matchesSelectorSafe(nativeUrlbarPopup, ":popover-open") ||
+        nativeUrlbarPopup?.state === "open"
+      ) &&
+      document.activeElement !== nativeUrlbarInput
+    );
+  }, "native urlbar suppressed");
+}
+
 async function runFocusCloseAndSelectRootScenario({ shell }) {
   const readyState = await waitForSmokeState((state) => {
     const selectedNode = state.workspace?.nodes?.find?.(
@@ -1162,6 +1241,18 @@ function nodeFullyVisibleWithin(container, element) {
     elementRect.left >= containerRect.left - 1 &&
     elementRect.right <= containerRect.right + 1
   );
+}
+
+function matchesSelectorSafe(element, selector) {
+  if (!element?.matches) {
+    return false;
+  }
+
+  try {
+    return element.matches(selector);
+  } catch {
+    return false;
+  }
 }
 
 function escapeAttributeValue(value) {

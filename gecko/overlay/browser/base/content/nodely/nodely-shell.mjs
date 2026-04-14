@@ -24,6 +24,8 @@ const FLOATING_PANEL_MARGIN = 12;
 const FLOATING_PANEL_GAP = 8;
 const FLOATING_MENU_WIDTH = 192;
 const CONTEXT_MENU_OPEN_GRACE_MS = 180;
+const NATIVE_LOCATION_FOCUS_SELECTOR =
+  "#urlbar-input, .urlbar-input-box, .urlbarView, #PopupAutoComplete, #PopupAutoCompleteRichResult";
 
 function createIcon(paths, viewBox = "0 0 20 20") {
   return {
@@ -249,7 +251,9 @@ export class NodelyShell extends HTMLElement {
         })
         : null;
     this.boundWindowKeydown = (event) => this.handleWindowKeydown(event);
+    this.boundWindowFocusIn = (event) => this.handleWindowFocusIn(event);
     this.boundWindowClick = (event) => this.handleWindowClick(event);
+    this.boundDocumentCommand = (event) => this.handleDocumentCommand(event);
     this.boundWindowResize = () => this.scheduleLayoutSync();
     this.boundSplitResizeMove = (event) => this.handleSplitResizeMove(event);
     this.boundSplitResizeUp = (event) => this.handleSplitResizeUp(event);
@@ -363,8 +367,10 @@ export class NodelyShell extends HTMLElement {
     });
     this.splitHandle.addEventListener("pointerdown", (event) => this.handleSplitResizeStart(event));
     window.addEventListener("keydown", this.boundWindowKeydown);
+    window.addEventListener("focusin", this.boundWindowFocusIn, true);
     window.addEventListener("click", this.boundWindowClick);
     window.addEventListener("resize", this.boundWindowResize);
+    this.ownerDocument?.addEventListener?.("command", this.boundDocumentCommand, true);
     this.layoutObserver?.observe(this.topbar);
     this.layoutObserver?.observe(this.composer);
     this.layoutObserver?.observe(this.pagebar);
@@ -372,8 +378,10 @@ export class NodelyShell extends HTMLElement {
 
   disconnectedCallback() {
     window.removeEventListener("keydown", this.boundWindowKeydown);
+    window.removeEventListener("focusin", this.boundWindowFocusIn, true);
     window.removeEventListener("click", this.boundWindowClick);
     window.removeEventListener("resize", this.boundWindowResize);
+    this.ownerDocument?.removeEventListener?.("command", this.boundDocumentCommand, true);
 
     if (this.layoutSyncFrame != null) {
       window.cancelAnimationFrame(this.layoutSyncFrame);
@@ -525,6 +533,88 @@ export class NodelyShell extends HTMLElement {
     this.printSheetOpen = true;
     this.render();
     return true;
+  }
+
+  focusPreferredLocationInput() {
+    const addressInput =
+      this.addressInput ?? this.pagebar?.querySelector?.("input[name='address']") ?? null;
+
+    if (addressInput && !this.pagebar?.hidden) {
+      addressInput.focus();
+      addressInput.select?.();
+      return true;
+    }
+
+    if (!this.composerOpen) {
+      this.openComposer();
+      return true;
+    }
+
+    const composerInput =
+      this.composerInput ?? this.composer?.querySelector?.("input[name='root-input']") ?? null;
+
+    if (!composerInput) {
+      return false;
+    }
+
+    composerInput.focus();
+    composerInput.select?.();
+    return true;
+  }
+
+  dismissNativeLocationOverlay({ refocus = false } = {}) {
+    const documentRef = this.ownerDocument ?? globalThis.document ?? null;
+    const windowRef = documentRef?.defaultView ?? globalThis.window ?? null;
+    const nativeUrlbar = documentRef?.getElementById?.("urlbar") ?? null;
+    const nativeUrlbarInput = documentRef?.getElementById?.("urlbar-input") ?? null;
+    const nativeAutocomplete =
+      documentRef?.getElementById?.("PopupAutoCompleteRichResult") ??
+      documentRef?.getElementById?.("PopupAutoComplete") ??
+      null;
+    const activeElement = documentRef?.activeElement ?? null;
+    const gURLBarRef = windowRef?.gURLBar ?? null;
+    let dismissed = false;
+
+    try {
+      if (gURLBarRef?.view?.isOpen) {
+        gURLBarRef.view.close();
+        dismissed = true;
+      }
+    } catch {}
+
+    try {
+      if (matchesSelectorSafe(nativeUrlbar, ":popover-open")) {
+        nativeUrlbar.hidePopover?.();
+        dismissed = true;
+      }
+    } catch {}
+
+    try {
+      if (nativeAutocomplete?.state === "open") {
+        nativeAutocomplete.hidePopup?.();
+        dismissed = true;
+      }
+    } catch {}
+
+    try {
+      if (activeElement === nativeUrlbarInput || activeElement?.closest?.(NATIVE_LOCATION_FOCUS_SELECTOR)) {
+        activeElement.blur?.();
+        dismissed = true;
+      }
+    } catch {}
+
+    try {
+      if (gURLBarRef?.focused) {
+        gURLBarRef.blur();
+        dismissed = true;
+      }
+    } catch {}
+
+    if (refocus) {
+      this.focusPreferredLocationInput();
+    }
+
+    return dismissed;
   }
 
   async openNodeFromGraph(nodeId) {
@@ -2524,6 +2614,14 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "l") {
+      this.dismissNativeLocationOverlay();
+      if (this.focusPreferredLocationInput()) {
+        event.preventDefault();
+      }
+      return;
+    }
+
     if (
       (event.metaKey || event.ctrlKey) &&
       !event.shiftKey &&
@@ -2547,6 +2645,44 @@ export class NodelyShell extends HTMLElement {
       if (this.openPrintPanel()) {
         event.preventDefault();
       }
+    }
+  }
+
+  handleWindowFocusIn(event) {
+    if (!event.target?.closest?.(NATIVE_LOCATION_FOCUS_SELECTOR)) {
+      return;
+    }
+
+    const view = this.ownerDocument?.defaultView ?? globalThis.window ?? null;
+    const schedule = view?.requestAnimationFrame?.bind?.(view) ?? null;
+
+    (schedule ?? queueMicrotask)(() => {
+      this.dismissNativeLocationOverlay({ refocus: true });
+    });
+  }
+
+  handleDocumentCommand(event) {
+    const commandId =
+      event.target?.id ?? event.target?.getAttribute?.("command") ?? event.target?.dataset?.command ?? "";
+
+    if (commandId !== "Browser:OpenLocation") {
+      return;
+    }
+
+    this.dismissNativeLocationOverlay();
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
+
+    const schedule = (this.ownerDocument?.defaultView ?? globalThis.window ?? null)?.requestAnimationFrame;
+    const focusLater = () => {
+      this.focusPreferredLocationInput();
+    };
+
+    if (typeof schedule === "function") {
+      schedule.call(this.ownerDocument?.defaultView ?? globalThis.window, focusLater);
+    } else {
+      queueMicrotask(focusLater);
     }
   }
 
@@ -2673,6 +2809,18 @@ function clampSplitWidth(value, windowWidth = 1366) {
 
 function clampToRange(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function matchesSelectorSafe(element, selector) {
+  if (!element?.matches) {
+    return false;
+  }
+
+  try {
+    return element.matches(selector);
+  } catch {
+    return false;
+  }
 }
 
 function escapeHtml(value) {
