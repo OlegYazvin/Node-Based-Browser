@@ -262,6 +262,10 @@ export class ChromeStateController extends EventTarget {
       this.runtimeManager.ensureRuntime(persistedChildNode, { background });
     }
 
+    if (!background) {
+      this.runtimeManager.selectNode(persistedChildNode.id);
+    }
+
     this.trace("create-child", {
       parentId: anchorNode.id,
       childId: childNode.id,
@@ -386,6 +390,11 @@ export class ChromeStateController extends EventTarget {
       details.background ? nextWorkspace : setSurfaceMode(nextWorkspace, "page")
     );
     this.runtimeManager.adoptOpenedTab(childNode.id, tab);
+
+    if (!details.background) {
+      this.runtimeManager.selectNode(childNode.id);
+    }
+
     this.trace("foreign-tab-adopted", {
       parentId: parentNode.id,
       childId: childNode.id,

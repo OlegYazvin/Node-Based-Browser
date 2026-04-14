@@ -216,4 +216,71 @@ describe("NodelyGraphSurface pointer selection", () => {
     expect(createElementNS).toHaveBeenCalledWith("http://www.w3.org/1999/xhtml", "button");
     expect(surface.nodeLayer.appendChild).toHaveBeenCalledWith(createdElement);
   });
+
+  it("tracks hovered nodes through the render path", () => {
+    const surface = new NodelyGraphSurface();
+    const requestRender = vi.spyOn(surface, "requestRender").mockImplementation(() => {});
+
+    surface.setHoveredNode("node-1");
+
+    expect(requestRender).toHaveBeenCalledWith({
+      nodes: true
+    });
+    expect(surface.hoveredNodeId).toBe("node-1");
+
+    surface.setHoveredNode(null);
+
+    expect(surface.hoveredNodeId).toBeNull();
+  });
+
+  it("renders a readable hover label overlay for the hovered node", () => {
+    const surface = new NodelyGraphSurface();
+    const style = {
+      maxWidth: "",
+      transform: "",
+      setProperty: vi.fn()
+    };
+
+    surface.dataset = {};
+    surface.hoverLabel = {
+      hidden: true,
+      textContent: "",
+      style,
+      getBoundingClientRect: vi.fn(() => ({
+        width: 180,
+        height: 42
+      }))
+    };
+    surface.viewport = { x: 0, y: 0, zoom: 0.6 };
+    surface.workspace = {
+      nodes: [
+        {
+          id: "node-1",
+          kind: "page",
+          parentId: null,
+          rootId: "node-1",
+          title: "Yama Seafood Delivery",
+          url: "https://example.com",
+          position: { x: 240, y: 180 }
+        }
+      ],
+      edges: [],
+      selectedNodeId: "node-1"
+    };
+    surface.hoveredNodeId = "node-1";
+
+    surface.updateHoverLabel(
+      {
+        width: 800,
+        height: 600
+      },
+      new Map()
+    );
+
+    expect(surface.hoverLabel.hidden).toBe(false);
+    expect(surface.hoverLabel.textContent).toBe("Yama Seafood Delivery");
+    expect(surface.dataset.hoverLabelVisible).toBe("true");
+    expect(style.setProperty).toHaveBeenCalledWith("--nodely-hover-accent", expect.any(String));
+    expect(style.transform).toMatch(/^translate3d\(/u);
+  });
 });

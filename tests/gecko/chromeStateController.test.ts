@@ -1004,6 +1004,51 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     );
   });
 
+  it("selects the new foreground child runtime when the tab button creates a node", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.org/",
+      input: "https://example.org/",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.ensureRuntime.mockClear();
+    runtimeManager.selectNode.mockClear();
+
+    await controller.createChildNode({ origin: "tab-button" });
+
+    const childNode = workspace.nodes.find((node: { parentId: string | null }) => node.parentId === rootId);
+    expect(childNode).toBeTruthy();
+    expect(workspace.selectedNodeId).toBe(childNode?.id);
+    expect(runtimeManager.ensureRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({ id: childNode?.id }),
+      expect.objectContaining({ background: false })
+    );
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(childNode?.id);
+  });
+
   it("duplicates a tab from an explicit parent node when requested", async () => {
     let workspace = createRootNode(createEmptyWorkspace());
     const rootId = workspace.selectedNodeId as string;
@@ -1056,6 +1101,52 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
       "https://example.com/source",
       expect.anything()
     );
+  });
+
+  it("selects a foreground foreign-opened tab after adopting it into the graph", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/source",
+      input: "https://example.com/source",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.adoptOpenedTab.mockClear();
+    runtimeManager.selectNode.mockClear();
+
+    const foreignTab = { id: "tab-2" };
+    await controller.handleForeignTabOpen(foreignTab, {
+      parentNodeId: rootId,
+      background: false
+    });
+
+    const childNode = workspace.nodes.find((node: { parentId: string | null }) => node.parentId === rootId);
+    expect(childNode).toBeTruthy();
+    expect(workspace.selectedNodeId).toBe(childNode?.id);
+    expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(childNode?.id, foreignTab);
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(childNode?.id);
   });
 });
 

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { access, lstat, mkdtemp, mkdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,8 @@ import { describe, expect, it } from "vitest";
 import {
   ensureMacArtifactCompatibility,
   patchApplicationIni,
-  refreshBranding
+  refreshBranding,
+  syncPackagedBrandingAssets
 } from "../../gecko/scripts/refresh-artifact-branding.mjs";
 
 describe("refresh-artifact-branding", () => {
@@ -166,6 +168,84 @@ describe("refresh-artifact-branding", () => {
       expect(wrapper).toContain('NoDisplay=true');
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("refreshes packaged branding assets inside browser omni.ja", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-packaged-branding-"));
+    const brandingDirectory = path.join(
+      tempDirectory,
+      "obj-nodely",
+      "dist",
+      "bin",
+      "browser",
+      "chrome",
+      "browser",
+      "content",
+      "branding"
+    );
+    const archivePath = path.join(
+      tempDirectory,
+      "obj-nodely",
+      "dist",
+      "nodely",
+      "browser",
+      "omni.ja"
+    );
+    const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-packaged-branding-stage-"));
+
+    try {
+      await mkdir(brandingDirectory, { recursive: true });
+      await mkdir(path.dirname(archivePath), { recursive: true });
+
+      await writeFile(path.join(brandingDirectory, "icon16.png"), "nodely-icon-16", "utf8");
+      await writeFile(path.join(brandingDirectory, "icon32.png"), "nodely-icon-32", "utf8");
+      await writeFile(path.join(brandingDirectory, "icon64.png"), "nodely-icon-64", "utf8");
+      await writeFile(path.join(brandingDirectory, "about-logo.png"), "nodely-about-logo", "utf8");
+
+      const archiveEntries = [
+        ["chrome/browser/content/branding/icon16.png", "firefox-icon-16"],
+        ["chrome/browser/content/branding/icon32.png", "firefox-icon-32"],
+        ["chrome/browser/content/branding/icon64.png", "firefox-icon-64"],
+        ["chrome/browser/content/branding/about-logo.png", "firefox-about-logo"]
+      ];
+
+      for (const [entryPath, contents] of archiveEntries) {
+        const stagedPath = path.join(stagingDirectory, entryPath);
+        await mkdir(path.dirname(stagedPath), { recursive: true });
+        await writeFile(stagedPath, contents, "utf8");
+      }
+
+      execFileSync("zip", ["-q", archivePath, ...archiveEntries.map(([entryPath]) => entryPath)], {
+        cwd: stagingDirectory
+      });
+
+      const updates = await syncPackagedBrandingAssets(tempDirectory);
+
+      expect(updates).toBeGreaterThanOrEqual(4);
+      expect(
+        execFileSync("unzip", ["-p", archivePath, "chrome/browser/content/branding/icon16.png"], {
+          encoding: "utf8"
+        })
+      ).toBe("nodely-icon-16");
+      expect(
+        execFileSync("unzip", ["-p", archivePath, "chrome/browser/content/branding/icon32.png"], {
+          encoding: "utf8"
+        })
+      ).toBe("nodely-icon-32");
+      expect(
+        execFileSync("unzip", ["-p", archivePath, "chrome/browser/content/branding/icon64.png"], {
+          encoding: "utf8"
+        })
+      ).toBe("nodely-icon-64");
+      expect(
+        execFileSync("unzip", ["-p", archivePath, "chrome/browser/content/branding/about-logo.png"], {
+          encoding: "utf8"
+        })
+      ).toBe("nodely-about-logo");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+      await rm(stagingDirectory, { recursive: true, force: true });
     }
   });
 });

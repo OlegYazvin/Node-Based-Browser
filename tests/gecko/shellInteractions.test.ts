@@ -103,6 +103,67 @@ describe("NodelyShell focus and context interactions", () => {
     expect(preventDefault).toHaveBeenCalledTimes(1);
   });
 
+  it("uses Ctrl/Cmd+\\ to reopen the selected node from focus-mode canvas", () => {
+    const shell = new NodelyShell();
+    const selectNode = vi.fn();
+    shell.state = {
+      workspace: {
+        selectedNodeId: "node-7",
+        prefs: {
+          viewMode: "focus",
+          surfaceMode: "canvas"
+        }
+      }
+    };
+    shell.controller = { selectNode };
+    shell.dismissTransientUi = vi.fn(() => false);
+    const preventDefault = vi.fn();
+
+    shell.handleWindowKeydown({
+      key: "\\",
+      code: "Backslash",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      target: { tagName: "DIV" },
+      preventDefault
+    });
+
+    expect(selectNode).toHaveBeenCalledWith("node-7");
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses Ctrl/Cmd+\\ to hide the active node and return to canvas in focus mode", () => {
+    const shell = new NodelyShell();
+    const setSurfaceMode = vi.fn();
+    shell.state = {
+      workspace: {
+        selectedNodeId: "node-7",
+        prefs: {
+          viewMode: "focus",
+          surfaceMode: "page"
+        }
+      }
+    };
+    shell.controller = { setSurfaceMode };
+    const preventDefault = vi.fn();
+
+    shell.handleWindowKeydown({
+      key: "\\",
+      code: "Backslash",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      target: { tagName: "DIV" },
+      preventDefault
+    });
+
+    expect(setSurfaceMode).toHaveBeenCalledWith("canvas");
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps a freshly opened context menu available until the opening click cycle has passed", () => {
     const shell = new NodelyShell();
     shell.contextMenu = {
@@ -159,5 +220,42 @@ describe("NodelyShell focus and context interactions", () => {
         title: "OpenAI Pricing Overview"
       })
     );
+  });
+
+  it("lets the graph pane grow to half of the viewport in split mode", () => {
+    const shell = new NodelyShell();
+    globalThis.window.innerWidth = 1440;
+    shell.state = {
+      workspace: {
+        nodes: [
+          {
+            id: "node-1",
+            kind: "page",
+            parentId: null,
+            rootId: "node-1",
+            title: "Example",
+            url: "https://example.com",
+            position: { x: 0, y: 0 }
+          }
+        ],
+        selectedNodeId: "node-1",
+        prefs: {
+          viewMode: "split",
+          splitWidth: 340
+        }
+      }
+    };
+    shell.splitResizeState = {
+      pointerId: 7
+    };
+    shell.syncDocumentLayout = vi.fn();
+
+    shell.handleSplitResizeMove({
+      pointerId: 7,
+      clientX: 720
+    });
+
+    expect(shell.splitWidthOverride).toBe(720);
+    expect(shell.syncDocumentLayout).toHaveBeenCalledTimes(1);
   });
 });

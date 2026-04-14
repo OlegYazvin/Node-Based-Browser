@@ -34,7 +34,8 @@ describe("Gecko workspace preferences", () => {
 
     expect(setSplitWidth(workspace, 180).prefs.splitWidth).toBe(240);
     expect(setSplitWidth(workspace, 420).prefs.splitWidth).toBe(420);
-    expect(setSplitWidth(workspace, 900).prefs.splitWidth).toBe(640);
+    expect(setSplitWidth(workspace, 900).prefs.splitWidth).toBe(900);
+    expect(setSplitWidth(workspace, 4096).prefs.splitWidth).toBe(2048);
   });
 
   it("normalizes surface mode to page or canvas", () => {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -37,6 +38,7 @@ Options:
   --binary <path>        Nodely browser binary path
   --profile-dir <path>   Existing profile directory to reuse
   --scenario <name>      Optional smoke scenario to run after bootstrap
+  --manual-webrtc-confirm  Leave the WebRTC allow prompt for an external/manual click
   --headed               Run with a visible browser window instead of -headless
   --timeout-ms <ms>      Timeout while waiting for smoke snapshot (default: 30000)
   --keep-profile         Keep the temporary profile after the run
@@ -51,6 +53,7 @@ function parseArguments(argv) {
     binary: null,
     profileDir: null,
     scenario: "",
+    manualWebRTCConfirm: false,
     headed: false,
     timeoutMs: 30_000,
     keepProfile: false
@@ -72,6 +75,9 @@ function parseArguments(argv) {
         break;
       case "--scenario":
         options.scenario = String(argv[++index] ?? "").trim();
+        break;
+      case "--manual-webrtc-confirm":
+        options.manualWebRTCConfirm = true;
         break;
       case "--headed":
         options.headed = true;
@@ -152,7 +158,15 @@ function buildSeedWorkspace({ viewMode = "split", surfaceMode = "page" } = {}) {
   return workspace;
 }
 
-async function writeSmokeProfile({ profileDir, namespace, smokeFile, scenario }) {
+async function writeSmokeProfile({
+  profileDir,
+  namespace,
+  smokeFile,
+  scenario,
+  smokeTargetUrl = "",
+  manualWebRTCConfirm = false,
+  extraPrefs = []
+}) {
   const workspaceDirectory = path.join(profileDir, namespace);
   const workspacePath = path.join(workspaceDirectory, "default.json");
   const workspace = buildSeedWorkspace(seedWorkspaceOptionsForScenario(scenario));
@@ -169,7 +183,10 @@ async function writeSmokeProfile({ profileDir, namespace, smokeFile, scenario })
     'user_pref("nodely.testing.enabled", true);',
     `user_pref("nodely.testing.workspace_namespace", "${escapeUserPrefValue(namespace)}");`,
     `user_pref("nodely.testing.smoke_file", "${escapeUserPrefValue(smokeFile)}");`,
-    `user_pref("nodely.testing.smoke_scenario", "${escapeUserPrefValue(scenario ?? "")}");`
+    `user_pref("nodely.testing.smoke_scenario", "${escapeUserPrefValue(scenario ?? "")}");`,
+    `user_pref("nodely.testing.smoke_target_url", "${escapeUserPrefValue(smokeTargetUrl)}");`,
+    `user_pref("nodely.testing.smoke_manual_webrtc_confirm", ${manualWebRTCConfirm ? "true" : "false"});`,
+    ...extraPrefs
   ].join("\n");
 
   await writeFile(path.join(profileDir, "user.js"), `${userJs}\n`, "utf8");
@@ -192,11 +209,110 @@ function seedWorkspaceOptionsForScenario(scenario = "") {
   };
 }
 
+async function createLocalFixtureServer({ html }) {
+  const server = createServer((request, response) => {
+    if (request.url === "/favicon.ico") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+
+    response.writeHead(200, {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store"
+    });
+    response.end(html);
+  });
+
+  const address = await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      resolve(server.address());
+    });
+  });
+
+  if (!address || typeof address !== "object") {
+    server.close();
+    throw new Error("Failed to start local smoke fixture server.");
+  }
+
+  return {
+    url: `http://127.0.0.1:${address.port}/`,
+    async close() {
+      await new Promise((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      });
+    }
+  };
+}
+
+async function createSmokeScenarioFixtures({ temporaryRoot, scenario }) {
+  if (scenario !== "webrtc-microphone-prompt") {
+    return {
+      smokeTargetUrl: "",
+      extraPrefs: [],
+      close: async () => {}
+    };
+  }
+
+  const fixtureHtml = `<!doctype html>
+<meta charset="utf-8">
+<title>Nodely Smoke Microphone</title>
+<body>requesting microphone</body>
+<script>
+(async () => {
+  try {
+    window.__nodelyGumStarted = true;
+    const devicesBefore = await navigator.mediaDevices.enumerateDevices();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const devicesAfter = await navigator.mediaDevices.enumerateDevices();
+    window.__nodelyGumResult = {
+      ok: true,
+      audioTrackCount: stream.getAudioTracks().length,
+      beforeKinds: devicesBefore.map((device) => device.kind),
+      afterKinds: devicesAfter.map((device) => device.kind),
+      afterLabels: devicesAfter.map((device) => device.label)
+    };
+    document.title = "Nodely Smoke Microphone OK";
+    document.body.textContent = "microphone-ok";
+  } catch (error) {
+    window.__nodelyGumResult = {
+      ok: false,
+      name: error?.name ?? String(error),
+      message: error?.message ?? ""
+    };
+    document.title = "Nodely Smoke Microphone Error";
+    document.body.textContent = error?.name ?? "microphone-error";
+  }
+})();
+</script>
+`;
+  const fixtureServer = await createLocalFixtureServer({ html: fixtureHtml });
+
+  return {
+    smokeTargetUrl: fixtureServer.url,
+    extraPrefs: [
+      'user_pref("media.navigator.permission.disabled", false);',
+      'user_pref("media.navigator.permission.fake", true);',
+      'user_pref("media.navigator.streams.fake", true);'
+    ],
+    close: fixtureServer.close
+  };
+}
+
 function snapshotLooksReady(snapshot, scenario = "") {
   const expectsSingleNodeTree = scenario === "graph-contextmenu-kill-root";
+  const expectsSingleTabTree = scenario === "webrtc-microphone-prompt";
   const minimumNodeCount = expectsSingleNodeTree ? 1 : 2;
   const minimumEdgeCount = expectsSingleNodeTree ? 0 : 1;
-  const minimumTreeNodeCount = expectsSingleNodeTree ? 1 : 2;
+  const minimumTreeNodeCount = expectsSingleNodeTree || expectsSingleTabTree ? 1 : 2;
   const minimumMinimapNodeShapes = expectsSingleNodeTree ? 3 : 4;
   const minimumMinimapEdges = expectsSingleNodeTree ? 0 : 1;
   const composerHeightForLayout =
@@ -256,6 +372,8 @@ function snapshotLooksReady(snapshot, scenario = "") {
     (snapshot.ui?.treeStrip?.tabFaviconCount ?? 0) >= minimumTreeNodeCount &&
     (snapshot.ui?.treeStrip?.tabCloseCount ?? 0) >= minimumTreeNodeCount &&
     (snapshot.ui?.treeStrip?.tabClosePathCount ?? 0) >= minimumTreeNodeCount &&
+    snapshot.ui?.treeStrip?.tabsFitViewport === true &&
+    snapshot.ui?.treeStrip?.newChildVisible === true &&
     (snapshot.ui?.treeStrip?.newChildSvgCount ?? 0) >= 1 &&
     (snapshot.ui?.treeStrip?.newChildPathCount ?? 0) >= 1 &&
     snapshot.ui?.treeStrip?.treeFavoritePresent === false;
@@ -398,6 +516,17 @@ function snapshotMatchesScenario(snapshot, scenario) {
     );
   }
 
+  if (scenario === "webrtc-microphone-prompt") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.ui?.webrtcPrompt?.navBarHidden === false &&
+      snapshot.ui?.webrtcPrompt?.toolboxHidden === false &&
+      snapshot.ui?.webrtcPrompt?.sharing === "microphone" &&
+      snapshot.ui?.webrtcPrompt?.microphoneState != null &&
+      runtimeMatchesSelection
+    );
+  }
+
   if (scenario === "graph-contextmenu-root-composer") {
     return (
       snapshot.browserSurface === "page" &&
@@ -471,7 +600,13 @@ async function waitForSnapshot(smokeFile, timeoutMs, scenario = "") {
           snapshotMatchesScenario(snapshot, scenario);
 
         if (scenario && snapshot.reason === `scenario:${scenario}:error`) {
-          throw new Error(`Smoke scenario failed inside Nodely: ${scenario}`);
+          throw new Error(
+            `Smoke scenario failed inside Nodely: ${scenario}\n\nLast snapshot:\n${JSON.stringify(
+              snapshot,
+              null,
+              2
+            )}`
+          );
         }
 
         if (scenario && snapshot.reason === `scenario:${scenario}:unknown`) {
@@ -524,9 +659,21 @@ async function runSmoke(options) {
   const profileDir = options.profileDir ?? path.join(temporaryRoot, "profile");
   const smokeFile = path.join(temporaryRoot, "nodely-smoke.json");
   const namespace = `nodely-smoke-${Date.now()}`;
+  const fixture = await createSmokeScenarioFixtures({
+    temporaryRoot,
+    scenario: options.scenario
+  });
 
   await mkdir(profileDir, { recursive: true });
-  await writeSmokeProfile({ profileDir, namespace, smokeFile, scenario: options.scenario });
+  await writeSmokeProfile({
+    profileDir,
+    namespace,
+    smokeFile,
+    scenario: options.scenario,
+    smokeTargetUrl: fixture.smokeTargetUrl,
+    manualWebRTCConfirm: options.manualWebRTCConfirm,
+    extraPrefs: fixture.extraPrefs
+  });
 
   const stdoutChunks = [];
   const stderrChunks = [];
@@ -563,6 +710,7 @@ async function runSmoke(options) {
     );
   } finally {
     await terminateProcess(child);
+    await fixture.close();
 
     if (!options.keepProfile && !options.profileDir) {
       await rm(temporaryRoot, { recursive: true, force: true });

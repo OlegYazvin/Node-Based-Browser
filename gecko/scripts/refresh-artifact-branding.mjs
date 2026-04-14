@@ -7,6 +7,7 @@ import {
   constants,
   copyFile,
   lstat,
+  mkdtemp,
   mkdir,
   readFile,
   readdir,
@@ -14,6 +15,7 @@ import {
   symlink,
   writeFile
 } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -27,6 +29,14 @@ const NODELY_APP_ID = "{a75f9f03-78b1-4c8a-a2c7-f12d45088b29}";
 const NODELY_CRASH_REPORT_EMAIL = "olegyazvin@gmail.com";
 const NODELY_CRASH_REPORT_EMAIL_PARAM = "olegyazvin%40gmail.com";
 const RASTER_ICON_SIZES = [16, 32, 48, 64, 128, 256];
+const ABOUT_LOGO_SIZES = [
+  { fileName: "about-logo.png", size: 192 },
+  { fileName: "about-logo@2x.png", size: 384 }
+];
+const PACKAGED_BRANDING_ENTRY_NAMES = [
+  ...RASTER_ICON_SIZES.filter((size) => size <= 128).map((size) => `icon${size}.png`),
+  ...ABOUT_LOGO_SIZES.map(({ fileName }) => fileName)
+];
 
 function usage() {
   console.log(`Usage: node gecko/scripts/refresh-artifact-branding.mjs [options]
@@ -409,6 +419,10 @@ async function refreshIconBranding(checkoutDir) {
       outputPath: path.join(checkoutDir, "browser", "branding", "unofficial", `default${size}.png`),
       size
     })),
+    ...ABOUT_LOGO_SIZES.map(({ fileName, size }) => ({
+      outputPath: path.join(checkoutDir, "browser", "branding", "unofficial", "content", fileName),
+      size
+    })),
     ...RASTER_ICON_SIZES.filter((size) => size <= 128).map((size) => ({
       outputPath: path.join(
         checkoutDir,
@@ -438,6 +452,21 @@ async function refreshIconBranding(checkoutDir) {
       ),
       size
     })),
+    ...ABOUT_LOGO_SIZES.map(({ fileName, size }) => ({
+      outputPath: path.join(
+        checkoutDir,
+        "obj-nodely",
+        "dist",
+        "bin",
+        "browser",
+        "chrome",
+        "browser",
+        "content",
+        "branding",
+        fileName
+      ),
+      size
+    })),
     ...RASTER_ICON_SIZES.filter((size) => size <= 128).map((size) => ({
       outputPath: path.join(
         checkoutDir,
@@ -463,6 +492,55 @@ async function refreshIconBranding(checkoutDir) {
   }
 
   return refreshRasterIconTargets(nodelyIconSvgPath, existingTargets);
+}
+
+async function syncPackagedBrandingAssets(checkoutDir) {
+  const looseBrandingDirectory = path.join(
+    checkoutDir,
+    "obj-nodely",
+    "dist",
+    "bin",
+    "browser",
+    "chrome",
+    "browser",
+    "content",
+    "branding"
+  );
+  const archivePath = path.join(checkoutDir, "obj-nodely", "dist", "nodely", "browser", "omni.ja");
+
+  if (!(await exists(looseBrandingDirectory)) || !(await exists(archivePath))) {
+    return 0;
+  }
+
+  const stagedEntries = [];
+  const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-branding-omni-"));
+
+  try {
+    for (const fileName of PACKAGED_BRANDING_ENTRY_NAMES) {
+      const sourcePath = path.join(looseBrandingDirectory, fileName);
+
+      if (!(await exists(sourcePath))) {
+        continue;
+      }
+
+      const entryPath = path.posix.join("chrome", "browser", "content", "branding", fileName);
+      const targetPath = path.join(stagingDirectory, entryPath);
+      await mkdir(path.dirname(targetPath), { recursive: true });
+      await writeFile(targetPath, await readFile(sourcePath));
+      stagedEntries.push(entryPath);
+    }
+
+    if (!stagedEntries.length) {
+      return 0;
+    }
+
+    await run("zip", ["-q", archivePath, ...stagedEntries], {
+      cwd: stagingDirectory
+    });
+    return stagedEntries.length;
+  } finally {
+    await rm(stagingDirectory, { recursive: true, force: true });
+  }
 }
 
 async function pruneSupersededFirefoxArtifacts(checkoutDir) {
@@ -562,15 +640,16 @@ async function refreshBranding({ checkoutDir, mode = "full" }) {
     await patchIfPresent(path.join(checkoutDir, "obj-nodely", "dist", "nodely", "application.ini"))
   ].filter(Boolean).length;
   const iconRefresh = await refreshIconBranding(checkoutDir);
+  const packagedBrandingUpdates = await syncPackagedBrandingAssets(checkoutDir);
   const prunedFirefoxArtifacts = await pruneSupersededFirefoxArtifacts(checkoutDir);
   const prunedBlinkOutputs = await pruneLegacyBlinkOutputs(repositoryRoot);
 
   console.log(
-    `Refreshed artifact branding in ${checkoutDir} (${macCompatUpdates} macOS compat updates, ${wrapperUpdates} wrapper updates, ${aliasUpdates} alias updates, ${applicationIniUpdates} application.ini updates, ${iconRefresh.updated} icon refreshes, ${prunedFirefoxArtifacts.length} Firefox artifact removals, ${prunedBlinkOutputs.length} Blink artifact removals).`
+    `Refreshed artifact branding in ${checkoutDir} (${macCompatUpdates} macOS compat updates, ${wrapperUpdates} wrapper updates, ${aliasUpdates} alias updates, ${applicationIniUpdates} application.ini updates, ${iconRefresh.updated} icon refreshes, ${packagedBrandingUpdates} packaged branding archive updates, ${prunedFirefoxArtifacts.length} Firefox artifact removals, ${prunedBlinkOutputs.length} Blink artifact removals).`
   );
 }
 
-export { NODELY_CRASH_REPORT_EMAIL, patchApplicationIni, refreshBranding };
+export { NODELY_CRASH_REPORT_EMAIL, patchApplicationIni, refreshBranding, syncPackagedBrandingAssets };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

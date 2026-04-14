@@ -541,6 +541,26 @@ export class NodelyShell extends HTMLElement {
     await this.controller.selectNode(nodeId);
   }
 
+  toggleFocusSurface() {
+    const workspace = this.state.workspace;
+
+    if (workspace?.prefs.viewMode !== "focus") {
+      return false;
+    }
+
+    if (workspace.prefs.surfaceMode === "canvas") {
+      if (!workspace.selectedNodeId) {
+        return false;
+      }
+
+      void this.controller?.selectNode?.(workspace.selectedNodeId);
+      return true;
+    }
+
+    this.controller?.setSurfaceMode("canvas");
+    return true;
+  }
+
   dismissTransientUi() {
     if (this.closeContextMenu()) {
       this.render();
@@ -677,6 +697,14 @@ export class NodelyShell extends HTMLElement {
   renderTopbar(workspace) {
     this.topbar.replaceChildren();
     const artifactCount = (workspace?.nodes ?? []).filter((node) => isArtifactNode(node)).length;
+    const selectedNode = findNode(workspace, workspace?.selectedNodeId);
+    const hiddenActiveNode =
+      workspace?.prefs.viewMode === "focus" &&
+      workspace?.prefs.surfaceMode === "canvas" &&
+      selectedNode &&
+      !isArtifactNode(selectedNode)
+        ? selectedNode
+        : null;
     const sessionRecovery = this.state.chrome?.sessionRecovery ?? {
       closedTabs: [],
       closedWindows: [],
@@ -692,6 +720,40 @@ export class NodelyShell extends HTMLElement {
     const brandStrong = createHtmlElement(this.ownerDocument, "strong");
     brandStrong.textContent = "Nodely Browser";
     brand.append(brandStrong);
+
+    if (hiddenActiveNode) {
+      const returnButton = createHtmlElement(
+        this.ownerDocument,
+        "button",
+        "nodely-shell__surface-toggle"
+      );
+      returnButton.type = "button";
+      returnButton.dataset.action = "toggle-surface";
+      returnButton.title = "Return to the active node (Ctrl/Cmd+\\)";
+      returnButton.append(
+        createFaviconChip(
+          this.ownerDocument,
+          hiddenActiveNode,
+          "nodely-shell__tab-favicon nodely-shell__surface-toggle-favicon"
+        )
+      );
+
+      const copy = createHtmlElement(this.ownerDocument, "span", "nodely-shell__surface-toggle-copy");
+      const kicker = createHtmlElement(this.ownerDocument, "span", "nodely-shell__surface-toggle-kicker");
+      kicker.textContent = "Hidden Node";
+      const title = createHtmlElement(this.ownerDocument, "strong");
+      title.textContent = hiddenActiveNode.title || hiddenActiveNode.url || "Untitled page";
+      copy.append(kicker, title);
+
+      const shortcut = createHtmlElement(
+        this.ownerDocument,
+        "span",
+        "nodely-shell__surface-toggle-shortcut"
+      );
+      shortcut.textContent = "Ctrl/Cmd+\\";
+      returnButton.append(copy, shortcut);
+      brand.append(returnButton);
+    }
 
     const actions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__topbar-actions");
     const primaryActions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__topbar-primary");
@@ -861,7 +923,7 @@ export class NodelyShell extends HTMLElement {
     );
 
     if (isFocusView) {
-      const closeSurfaceTitle = "Back to canvas (Esc)";
+      const closeSurfaceTitle = "Back to canvas (Esc). Toggle surfaces with Ctrl/Cmd+\\";
       const closeSurfaceButton = createActionButton(
         this.ownerDocument,
         "Canvas",
@@ -1205,7 +1267,7 @@ export class NodelyShell extends HTMLElement {
       hintTitle.textContent = "Focus Mode";
       const hintText = createHtmlElement(this.ownerDocument, "p");
       hintText.textContent =
-        "The page now uses the full browser content area. Use Back to Canvas or press Esc to return to the canvas.";
+        "The page now uses the full browser content area. Press Esc to return to the canvas, and Ctrl/Cmd+\\ to toggle between the canvas and the active node.";
       hintCopy.append(hintTitle, hintText);
       focusHint.append(
         hintCopy,
@@ -1938,6 +2000,11 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if (action === "toggle-surface") {
+      this.toggleFocusSurface();
+      return;
+    }
+
     if (action === "set-theme") {
       this.controller?.setThemeMode(button.dataset.theme);
       return;
@@ -2457,6 +2524,18 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if (
+      (event.metaKey || event.ctrlKey) &&
+      !event.shiftKey &&
+      !event.altKey &&
+      event.code === "Backslash"
+    ) {
+      if (this.toggleFocusSurface()) {
+        event.preventDefault();
+      }
+      return;
+    }
+
     if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "f") {
       if (this.openFindPanel()) {
         event.preventDefault();
@@ -2588,7 +2667,7 @@ export class NodelyShell extends HTMLElement {
 
 function clampSplitWidth(value, windowWidth = 1366) {
   const safeWidth = Number.isFinite(value) ? value : 340;
-  const maxWidth = Math.max(360, Math.min(640, Math.round(windowWidth * 0.5)));
+  const maxWidth = Math.max(240, Math.round(windowWidth * 0.5));
   return Math.max(240, Math.min(maxWidth, Math.round(safeWidth)));
 }
 

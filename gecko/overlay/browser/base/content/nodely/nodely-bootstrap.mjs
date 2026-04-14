@@ -79,6 +79,30 @@ function smokeScenarioName() {
   }
 }
 
+function smokeTargetUrl() {
+  if (!ServicesRef?.prefs) {
+    return "";
+  }
+
+  try {
+    return ServicesRef.prefs.getStringPref("nodely.testing.smoke_target_url", "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function smokeManualWebRTCConfirm() {
+  if (!ServicesRef?.prefs) {
+    return false;
+  }
+
+  try {
+    return ServicesRef.prefs.getBoolPref("nodely.testing.smoke_manual_webrtc_confirm", false);
+  } catch {
+    return false;
+  }
+}
+
 function marionetteEnabled() {
   if (!ServicesRef?.prefs) {
     return false;
@@ -144,10 +168,7 @@ function reportBootstrapError(stage, error) {
 
 function hideNativeBrowserChrome() {
   const idsToHide = [
-    "navigator-toolbox",
     "toolbar-menubar",
-    "TabsToolbar",
-    "nav-bar",
     "PersonalToolbar",
     "sidebar-main",
     "sidebar-box",
@@ -358,6 +379,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const tabFavicons = document.querySelectorAll(".nodely-shell__tab .nodely-shell__tab-favicon");
     const tabCloseButtons = document.querySelectorAll(".nodely-shell__tab-close");
     const tabClosePaths = document.querySelectorAll(".nodely-shell__tab-close svg path");
+    const tabsContainer = document.querySelector(".nodely-shell__tabs");
     const treeFavoriteButton = document.querySelector('.nodely-shell__tree-strip [data-action="toggle-tree-favorite"]');
     const topbarOrganizeButton = document.querySelector(".nodely-shell__topbar [data-action='auto-organize']");
     const topbarFullscreenButton = document.querySelector(".nodely-shell__topbar [data-action='toggle-fullscreen']");
@@ -372,6 +394,23 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         )
       : null;
     const contextMenu = document.querySelector(".nodely-shell__menu");
+    const popupNotifications = window.PopupNotifications ?? null;
+    const selectedBrowser = window.gBrowser?.selectedBrowser ?? null;
+    const selectedBrowserTitle = selectedBrowser?.contentTitle ?? "";
+    const webRTCPrompt =
+      popupNotifications?.getNotification?.("webRTC-shareDevices", selectedBrowser) ??
+      popupNotifications?.getNotification?.("webRTC-shareDevices") ??
+      null;
+    const popupPanel = popupNotifications?.panel ?? null;
+    const popupAnchorId = webRTCPrompt?.anchorID ?? null;
+    const popupAnchor = popupAnchorId ? document.getElementById(popupAnchorId) : null;
+    const navBar = document.getElementById("nav-bar");
+    const navigatorToolbox = document.getElementById("navigator-toolbox");
+    const webRTCPromptPanel = popupPanel?.firstElementChild ?? null;
+    const webRTCPromptPrimaryButton =
+      webRTCPromptPanel?.querySelector?.(".popup-notification-primary-button") ?? null;
+    const webRTCMicrophoneSelect =
+      popupPanel?.querySelector?.("#webRTC-selectMicrophone-menulist") ?? null;
     const snapshot = {
       reason,
       recordedAt: Date.now(),
@@ -413,6 +452,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
       runtime: {
         selectedTabNodeId,
         selectedTabUrl,
+        selectedTabTitle: selectedBrowserTitle,
         selectedTabMatchesSelection:
           selectedNode == null ? selectedTabNodeId == null : selectedTabNodeId === selectedNode.id
       },
@@ -435,6 +475,9 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           tabFaviconCount: tabFavicons?.length ?? 0,
           tabCloseCount: tabCloseButtons?.length ?? 0,
           tabClosePathCount: tabClosePaths?.length ?? 0,
+          tabsFitViewport:
+            (tabsContainer?.scrollWidth ?? 0) <= (tabsContainer?.clientWidth ?? 0) + 2,
+          newChildVisible: nodeFullyVisibleWithin(tabsContainer, newChildButton),
           newChildSvgCount: newChildButton?.querySelectorAll("svg")?.length ?? 0,
           newChildPathCount: newChildButton?.querySelectorAll("svg path")?.length ?? 0,
           treeFavoritePresent: Boolean(treeFavoriteButton)
@@ -466,6 +509,25 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         contextMenu: {
           visible: Boolean(contextMenu && !contextMenu.hidden),
           actionCount: contextMenu?.querySelectorAll?.("[data-action]")?.length ?? 0
+        },
+        webrtcPrompt: {
+          visible: Boolean(webRTCPrompt),
+          panelState: popupPanel?.state ?? "",
+          anchorId: popupAnchorId,
+          anchorConnected: Boolean(popupAnchor?.isConnected),
+          anchorHidden: Boolean(popupAnchor?.hidden),
+          anchorOpacity: popupAnchor ? window.getComputedStyle(popupAnchor).opacity : "",
+          navBarHidden: Boolean(navBar?.hidden),
+          toolboxHidden: Boolean(navigatorToolbox?.hidden),
+          primaryButtonDisabled: Boolean(webRTCPromptPrimaryButton?.disabled),
+          microphoneSelectorVisible: Boolean(webRTCMicrophoneSelect),
+          microphoneSelectorDisabled: Boolean(webRTCMicrophoneSelect?.disabled),
+          microphoneSelectorValue:
+            webRTCMicrophoneSelect?.value ??
+            webRTCMicrophoneSelect?.selectedItem?.value ??
+            null,
+          sharing: selectedTab?._sharingState?.webRTC?.sharing ?? null,
+          microphoneState: selectedTab?._sharingState?.webRTC?.microphone ?? null
         }
       },
       layout: {
@@ -478,6 +540,9 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         topbar: describeElement(".nodely-shell__topbar"),
         composer: describeElement(".nodely-shell__composer"),
         pagebar: describeElement(".nodely-shell__pagebar"),
+        navigatorToolbox: describeElement("#navigator-toolbox"),
+        navBar: describeElement("#nav-bar"),
+        popupNotifications: describeNode(popupPanel),
         selectedRootNode: describeNode(selectedRootNodeElement),
         activeDrawer: describeNode(activeDrawerElement),
         activeDrawerTrigger: describeNode(activeDrawerTrigger),
@@ -503,7 +568,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
   });
 }
 
-async function runSmokeScenario({ shell, writeSmokeSnapshot, scenarioName }) {
+async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenarioName }) {
   try {
     switch (scenarioName) {
       case "graph-select-root":
@@ -540,6 +605,10 @@ async function runSmokeScenario({ shell, writeSmokeSnapshot, scenarioName }) {
         return;
       case "topbar-drawers":
         await runTopbarDrawersScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "webrtc-microphone-prompt":
+        await runWebRTCMicrophonePromptScenario({ controller });
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       default:
@@ -879,6 +948,78 @@ async function runTopbarDrawersScenario() {
   await nextAnimationFrame();
 }
 
+async function runWebRTCMicrophonePromptScenario({ controller }) {
+  const targetUrl = smokeTargetUrl();
+
+  if (!targetUrl) {
+    throw new Error("Smoke webrtc-microphone-prompt scenario is missing nodely.testing.smoke_target_url.");
+  }
+
+  await controller.createRootFromInput(targetUrl);
+  await waitForCondition(() => {
+    const selectedBrowser = window.gBrowser?.selectedBrowser ?? null;
+    return Boolean(
+      window.PopupNotifications?.getNotification?.("webRTC-shareDevices", selectedBrowser) ??
+        window.PopupNotifications?.getNotification?.("webRTC-shareDevices")
+    );
+  }, "webrtc microphone permission prompt");
+  await waitForCondition(
+    () => window.PopupNotifications?.panel?.state === "open",
+    "webrtc microphone permission panel open"
+  );
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  const popupNotification = window.PopupNotifications?.panel?.firstElementChild ?? null;
+  const mainButton =
+    popupNotification?.button ??
+    window.PopupNotifications?.panel?.querySelector?.(".popup-notification-primary-button");
+  const promptNotification = popupNotification?.notification ?? null;
+
+  if (!mainButton) {
+    throw new Error("Smoke webrtc-microphone-prompt scenario could not find the Allow button.");
+  }
+
+  if (!smokeManualWebRTCConfirm()) {
+    if (typeof promptNotification?.mainAction?.callback === "function") {
+      await promptNotification.mainAction.callback({
+        checkboxChecked: Boolean(popupNotification?.checkbox?.checked),
+        source: "smoke"
+      });
+      window.PopupNotifications?._remove?.(promptNotification);
+    } else if (typeof mainButton.doCommand === "function") {
+      mainButton.doCommand();
+    } else {
+      mainButton.click();
+    }
+  }
+  await waitForCondition(() => {
+    const selectedBrowser = window.gBrowser?.selectedBrowser ?? null;
+    const browserTitle = selectedBrowser?.contentTitle ?? "";
+    const sharingState = window.gBrowser?.selectedTab?._sharingState?.webRTC ?? null;
+
+    return (
+      /Nodely Smoke Microphone OK/iu.test(browserTitle) ||
+      /Nodely Smoke Microphone Error/iu.test(browserTitle) ||
+      Boolean(sharingState?.microphone)
+    );
+  }, "webrtc microphone page outcome");
+
+  const selectedBrowser = window.gBrowser?.selectedBrowser ?? null;
+  const browserTitle = selectedBrowser?.contentTitle ?? "";
+
+  if (/Nodely Smoke Microphone Error/iu.test(browserTitle)) {
+    throw new Error(`Smoke webrtc-microphone-prompt page reported failure: ${browserTitle}`);
+  }
+
+  await waitForCondition(() => {
+    const sharingState = window.gBrowser?.selectedTab?._sharingState?.webRTC ?? null;
+    return Boolean(sharingState?.microphone);
+  }, "webrtc microphone capture state");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
 async function runFocusCloseAndSelectRootScenario({ shell }) {
   const readyState = await waitForSmokeState((state) => {
     const selectedNode = state.workspace?.nodes?.find?.(
@@ -1003,6 +1144,24 @@ async function runFocusEscapeAndSelectRootScenario({ shell }) {
   }, "focus root selection from escape");
   await nextAnimationFrame();
   await nextAnimationFrame();
+}
+
+function nodeFullyVisibleWithin(container, element) {
+  if (!container || !element) {
+    return false;
+  }
+
+  const containerRect = container.getBoundingClientRect?.();
+  const elementRect = element.getBoundingClientRect?.();
+
+  if (!containerRect || !elementRect) {
+    return false;
+  }
+
+  return (
+    elementRect.left >= containerRect.left - 1 &&
+    elementRect.right <= containerRect.right + 1
+  );
 }
 
 function escapeAttributeValue(value) {

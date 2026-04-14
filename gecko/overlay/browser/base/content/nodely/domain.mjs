@@ -2,7 +2,7 @@ const WORKSPACE_VERSION = 1;
 const DEFAULT_SURFACE_MODE = "page";
 const DEFAULT_SPLIT_WIDTH = 340;
 const MIN_SPLIT_WIDTH = 240;
-const MAX_SPLIT_WIDTH = 640;
+const MAX_SPLIT_WIDTH = 2048;
 const MAX_EVENT_LOG_LENGTH = 250;
 
 const URL_PROTOCOL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;

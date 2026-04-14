@@ -1,5 +1,3 @@
-:root[nodely-active="true"] #TabsToolbar,
-:root[nodely-active="true"] #nav-bar,
 :root[nodely-active="true"] #PersonalToolbar,
 :root[nodely-active="true"] #FindToolbar,
 :root[nodely-active="true"] findbar,
@@ -9,6 +7,35 @@
 :root[nodely-active="true"] #sidebar-launcher-splitter,
 :root[nodely-active="true"] #vertical-tabs {
   display: none !important;
+}
+
+:root[nodely-active="true"] #navigator-toolbox {
+  position: fixed !important;
+  inset: 0 0 auto 0 !important;
+  z-index: 1 !important;
+  background: transparent !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+}
+
+:root[nodely-active="true"] #TabsToolbar {
+  min-height: 0 !important;
+  max-height: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  visibility: collapse !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+:root[nodely-active="true"] #nav-bar {
+  min-height: var(--nodely-topbar-height, 52px) !important;
+  max-height: var(--nodely-topbar-height, 52px) !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 :root[nodely-active="true"] #browser {
@@ -233,6 +260,73 @@
 .nodely-shell__brand strong {
   font-size: 13px;
   letter-spacing: 0.01em;
+}
+
+.nodely-shell__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.nodely-shell__surface-toggle {
+  appearance: none;
+  min-width: 0;
+  max-width: min(360px, 34vw);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--nodely-button-active-border);
+  background: color-mix(in srgb, var(--nodely-button-active-bg) 72%, var(--nodely-input-bg));
+  color: var(--nodely-text);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset;
+  -moz-window-dragging: no-drag;
+}
+
+.nodely-shell__surface-toggle:hover {
+  border-color: var(--nodely-accent-border);
+  background: color-mix(in srgb, var(--nodely-button-bg-hover) 70%, var(--nodely-button-active-bg));
+}
+
+.nodely-shell__surface-toggle-favicon {
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+}
+
+.nodely-shell__surface-toggle-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  flex: 1 1 auto;
+}
+
+.nodely-shell__surface-toggle-kicker {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--nodely-muted);
+}
+
+.nodely-shell__surface-toggle-copy strong {
+  display: block;
+  min-width: 0;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nodely-shell__surface-toggle-shortcut {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--nodely-muted);
+  white-space: nowrap;
 }
 
 .nodely-shell__topbar-actions,
@@ -671,23 +765,29 @@
 
 .nodely-shell__tabs {
   display: flex;
-  gap: 6px;
-  overflow: auto hidden;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
   padding-bottom: 2px;
 }
 
 .nodely-shell__tab-wrap {
   position: relative;
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 196px;
   display: flex;
   align-items: stretch;
+  container-type: inline-size;
 }
 
 .nodely-shell__tab {
   appearance: none;
-  min-width: 132px;
-  max-width: 196px;
-  padding: 6px 34px 6px 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  padding: 6px 30px 6px 8px;
   border-radius: 10px;
   border: 1px solid var(--nodely-button-border);
   text-align: left;
@@ -771,8 +871,8 @@
 }
 
 .nodely-shell__tab--new-child {
-  min-width: 50px;
-  max-width: 50px;
+  min-width: 46px;
+  max-width: 46px;
   flex: 0 0 auto;
   padding: 6px;
   display: grid;
@@ -791,6 +891,51 @@
 .nodely-shell__tab--new-child svg {
   width: 22px;
   height: 22px;
+}
+
+@container (max-width: 120px) {
+  .nodely-shell__tab {
+    gap: 6px;
+    padding-inline-start: 7px;
+    padding-inline-end: 28px;
+  }
+
+  .nodely-shell__tab strong {
+    font-size: 11px;
+  }
+}
+
+@container (max-width: 92px) {
+  .nodely-shell__tab {
+    gap: 0;
+    padding-inline-start: 7px;
+    padding-inline-end: 26px;
+  }
+
+  .nodely-shell__tab-copy {
+    display: none;
+  }
+}
+
+@container (max-width: 64px) {
+  .nodely-shell__tab {
+    padding-inline-start: 6px;
+    padding-inline-end: 24px;
+  }
+
+  .nodely-shell__tab-favicon {
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+  }
+
+  .nodely-shell__tab-close {
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+  }
 }
 
 .nodely-shell__tab--research { background: var(--nodely-tab-research); }
@@ -1058,6 +1203,26 @@
   color: var(--nodely-empty-card-muted);
 }
 
+.nodely-graph-surface__hover-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 22;
+  max-width: 420px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--nodely-hover-accent, var(--nodely-accent-border)) 34%, white);
+  background: color-mix(in srgb, var(--nodely-input-bg) 92%, white);
+  box-shadow: 0 12px 24px rgba(27, 41, 56, 0.18);
+  color: var(--nodely-text);
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+}
+
 .nodely-graph-node {
   appearance: none;
   position: absolute;
@@ -1094,6 +1259,10 @@
 
 .nodely-graph-node--selected {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 44%, white), 0 10px 18px rgba(27, 41, 56, 0.1);
+}
+
+.nodely-graph-node--hovered {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-accent) 26%, white), 0 16px 24px rgba(27, 41, 56, 0.14);
 }
 
 .nodely-graph-node--root {

@@ -56,6 +56,40 @@ function fitTextToWidth(context, text, maxWidth) {
   return end > 0 ? `${value.slice(0, end).trimEnd()}${ellipsis}` : ellipsis;
 }
 
+function colorWithAlpha(color, alpha) {
+  if (typeof color !== "string") {
+    return `rgba(77, 96, 115, ${alpha})`;
+  }
+
+  const normalized = color.trim();
+
+  if (/^#[\da-f]{6}$/iu.test(normalized)) {
+    const red = Number.parseInt(normalized.slice(1, 3), 16);
+    const green = Number.parseInt(normalized.slice(3, 5), 16);
+    const blue = Number.parseInt(normalized.slice(5, 7), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  if (/^#[\da-f]{3}$/iu.test(normalized)) {
+    const red = Number.parseInt(normalized.slice(1, 2).repeat(2), 16);
+    const green = Number.parseInt(normalized.slice(2, 3).repeat(2), 16);
+    const blue = Number.parseInt(normalized.slice(3, 4).repeat(2), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  const rgbMatch = normalized.match(/^rgba?\(([^)]+)\)$/iu);
+
+  if (rgbMatch) {
+    const [red = "77", green = "96", blue = "115"] = rgbMatch[1]
+      .split(",")
+      .slice(0, 3)
+      .map((part) => part.trim());
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  return normalized;
+}
+
 function createIcon(paths, viewBox = "0 0 20 20") {
   return {
     viewBox,
@@ -85,6 +119,7 @@ export class NodelyGraphSurface extends HTMLElement {
     this.persistedViewport = { ...this.viewport };
     this.livePositions = new Map();
     this.nodeElements = new Map();
+    this.hoveredNodeId = null;
     this.dragState = null;
     this.panState = null;
     this.minimapState = null;
@@ -115,6 +150,10 @@ export class NodelyGraphSurface extends HTMLElement {
     this.handleNodePointerDown = this.handleNodePointerDown.bind(this);
     this.handleNodePointerUp = this.handleNodePointerUp.bind(this);
     this.handleNodeClick = this.handleNodeClick.bind(this);
+    this.handleNodePointerEnter = this.handleNodePointerEnter.bind(this);
+    this.handleNodePointerLeave = this.handleNodePointerLeave.bind(this);
+    this.handleNodeFocus = this.handleNodeFocus.bind(this);
+    this.handleNodeBlur = this.handleNodeBlur.bind(this);
     this.handleMinimapPointerDown = this.handleMinimapPointerDown.bind(this);
     this.handleMinimapToolbarClick = this.handleMinimapToolbarClick.bind(this);
   }
@@ -130,6 +169,13 @@ export class NodelyGraphSurface extends HTMLElement {
     this.stage = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__stage");
     this.canvas = createHtmlElement(this.ownerDocument, "canvas", "nodely-graph-surface__edges");
     this.nodeLayer = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__nodes");
+    this.hoverLabel = createHtmlElement(
+      this.ownerDocument,
+      "div",
+      "nodely-graph-surface__hover-label"
+    );
+    this.hoverLabel.hidden = true;
+    this.hoverLabel.setAttribute("aria-hidden", "true");
     this.emptyState = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__empty");
     this.emptyState.hidden = true;
     const emptyCard = createHtmlElement(this.ownerDocument, "div", "nodely-graph-surface__empty-card");
@@ -154,8 +200,9 @@ export class NodelyGraphSurface extends HTMLElement {
     this.emptyState.append(emptyCard);
     this.dataset.treeLabelMode = "canvas";
     this.dataset.treeLabelCount = "0";
+    this.dataset.hoverLabelVisible = "false";
     this.stage.append(this.canvas, this.nodeLayer);
-    this.append(this.stage, this.emptyState, this.minimap, this.minimapToolbar);
+    this.append(this.stage, this.emptyState, this.hoverLabel, this.minimap, this.minimapToolbar);
 
     this.context = this.canvas.getContext("2d");
     this.stage.addEventListener("pointerdown", this.handleBackgroundPointerDown);
@@ -194,6 +241,10 @@ export class NodelyGraphSurface extends HTMLElement {
 
     this.workspace = workspace;
     this.selectedNodeId = nextSelectedNodeId;
+
+    if (this.hoveredNodeId && !findNode(workspace, this.hoveredNodeId)) {
+      this.hoveredNodeId = null;
+    }
 
     if (!this.dragState && !this.panState && !this.minimapState && !sameViewport(nextViewport, this.persistedViewport)) {
       this.viewport = nextViewport;
@@ -438,6 +489,7 @@ export class NodelyGraphSurface extends HTMLElement {
 
     this.nodeElements.clear();
     this.dataset.treeLabelCount = "0";
+    this.updateHoverLabel(null, null);
   }
 
   drawEdges(rect, positions) {
@@ -454,6 +506,7 @@ export class NodelyGraphSurface extends HTMLElement {
     );
     this.context.lineCap = "round";
     this.context.lineJoin = "round";
+    this.drawTreeRootCanopies(positions);
 
     for (const edge of this.workspace.edges) {
       const source = findNode(this.workspace, edge.source);
@@ -482,6 +535,42 @@ export class NodelyGraphSurface extends HTMLElement {
 
     this.context.restore();
     this.drawTreeLabels(rect, positions);
+  }
+
+  drawTreeRootCanopies(positions) {
+    if (!this.workspace) {
+      return;
+    }
+
+    const activeSelectedNode =
+      findNode(this.workspace, this.selectedNodeId ?? this.workspace.selectedNodeId) ?? null;
+    const activeRootId = activeSelectedNode?.rootId ?? null;
+
+    for (const root of findRoots(this.workspace)) {
+      const category = classifyNodeCategory(this.workspace, root);
+      const colors = SITE_CATEGORY_STYLES[category];
+      const position = positions.get(root.id) ?? root.position;
+      const dimensions = nodeDimensions(root);
+      const center = rectCenter({ x: position.x, y: position.y, ...dimensions });
+      const isActive = root.id === activeRootId;
+      const radiusX = dimensions.width * (isActive ? 0.9 : 0.82);
+      const radiusY = dimensions.height * (isActive ? 0.96 : 0.88);
+      const gradient = this.context.createRadialGradient(
+        center.x,
+        center.y,
+        Math.max(20, Math.min(dimensions.width, dimensions.height) * 0.16),
+        center.x,
+        center.y,
+        Math.max(radiusX, radiusY)
+      );
+      gradient.addColorStop(0, colorWithAlpha(colors.accent, isActive ? 0.16 : 0.1));
+      gradient.addColorStop(0.7, colorWithAlpha(colors.accent, isActive ? 0.07 : 0.045));
+      gradient.addColorStop(1, colorWithAlpha(colors.accent, 0));
+      this.context.fillStyle = gradient;
+      this.context.beginPath();
+      this.context.ellipse(center.x, center.y, radiusX, radiusY, 0, 0, Math.PI * 2);
+      this.context.fill();
+    }
   }
 
   drawTreeLabels(rect, positions) {
@@ -537,7 +626,33 @@ export class NodelyGraphSurface extends HTMLElement {
       const maxWidth = Math.max(220, Math.round(dimensions.width * this.viewport.zoom + 88));
       const maxLeft = Math.max(8, Math.round(rect.width - maxWidth - 8));
       const labelLeft = clamp(Math.round(point.x + 8), 8, maxLeft);
+      const labelBelowRoot = preferredTop <= maxTop;
+      const guideX = clamp(
+        Math.round(point.x + dimensions.width * this.viewport.zoom * 0.34),
+        12,
+        Math.max(12, rect.width - 12)
+      );
+      const guideStartY = Math.round(
+        labelBelowRoot ? point.y + dimensions.height * this.viewport.zoom + 8 : point.y - 8
+      );
+      const guideTurnY = Math.round(labelBelowRoot ? labelTop + 8 : labelTop + blockHeight + 2);
+      const guideEndX = Math.max(12, labelLeft - 8);
       const isActive = root.id === activeRootId;
+      const markerRadius = isActive ? 4 : 3.2;
+      const markerX = Math.max(12, labelLeft - 14);
+
+      this.context.shadowColor = "transparent";
+      this.context.lineWidth = isActive ? 2.2 : 1.6;
+      this.context.strokeStyle = colorWithAlpha(colors.accent, isActive ? 0.42 : 0.24);
+      this.context.beginPath();
+      this.context.moveTo(guideX, guideStartY);
+      this.context.lineTo(guideX, guideTurnY);
+      this.context.lineTo(guideEndX, guideTurnY);
+      this.context.stroke();
+      this.context.fillStyle = isActive ? colors.accent : colorWithAlpha(colors.accent, 0.84);
+      this.context.beginPath();
+      this.context.arc(markerX, guideTurnY, markerRadius, 0, Math.PI * 2);
+      this.context.fill();
 
       this.context.shadowColor = shadowColor;
       this.context.shadowBlur = isActive ? 8 : 2;
@@ -587,11 +702,15 @@ export class NodelyGraphSurface extends HTMLElement {
         element.addEventListener("pointerdown", this.handleNodePointerDown);
         element.addEventListener("pointerup", this.handleNodePointerUp);
         element.addEventListener("click", this.handleNodeClick);
+        element.addEventListener("pointerenter", this.handleNodePointerEnter);
+        element.addEventListener("pointerleave", this.handleNodePointerLeave);
+        element.addEventListener("focus", this.handleNodeFocus);
+        element.addEventListener("blur", this.handleNodeBlur);
         this.nodeElements.set(node.id, element);
         this.nodeLayer.appendChild(element);
       }
 
-      element.className = `nodely-graph-node${node.id === activeSelectedNodeId ? " nodely-graph-node--selected" : ""}${node.parentId === null ? " nodely-graph-node--root" : ""}${isArtifactNode(node) ? " nodely-graph-node--artifact" : ""}`;
+      element.className = `nodely-graph-node${node.id === activeSelectedNodeId ? " nodely-graph-node--selected" : ""}${node.id === this.hoveredNodeId ? " nodely-graph-node--hovered" : ""}${node.parentId === null ? " nodely-graph-node--root" : ""}${isArtifactNode(node) ? " nodely-graph-node--artifact" : ""}`;
       element.dataset.nodeId = node.id;
       element.dataset.nodeKind = node.kind;
       element.style.setProperty("--node-fill", colors.fill);
@@ -646,6 +765,10 @@ export class NodelyGraphSurface extends HTMLElement {
         this.nodeElements.delete(nodeId);
       }
     }
+
+    const surfaceRect =
+      typeof this.getBoundingClientRect === "function" ? this.getBoundingClientRect() : null;
+    this.updateHoverLabel(surfaceRect, positions);
   }
 
   renderMinimap(positions, viewportRect = this.getBoundingClientRect()) {
@@ -818,6 +941,7 @@ export class NodelyGraphSurface extends HTMLElement {
     }
 
     event.preventDefault();
+    this.setHoveredNode(null);
     this.panState = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -845,6 +969,7 @@ export class NodelyGraphSurface extends HTMLElement {
     }
 
     event.stopPropagation();
+    this.setHoveredNode(null);
 
     const node = findNode(this.workspace, nodeElement.dataset.nodeId);
 
@@ -966,6 +1091,32 @@ export class NodelyGraphSurface extends HTMLElement {
     }
 
     this.dispatchNodeSelection(nodeElement.dataset.nodeId);
+  }
+
+  handleNodePointerEnter(event) {
+    const nodeElement = event.target.closest(".nodely-graph-node");
+    this.setHoveredNode(nodeElement?.dataset?.nodeId ?? null);
+  }
+
+  handleNodePointerLeave(event) {
+    const nodeElement = event.target.closest(".nodely-graph-node");
+
+    if (nodeElement?.dataset?.nodeId === this.hoveredNodeId) {
+      this.setHoveredNode(null);
+    }
+  }
+
+  handleNodeFocus(event) {
+    const nodeElement = event.target.closest(".nodely-graph-node");
+    this.setHoveredNode(nodeElement?.dataset?.nodeId ?? null);
+  }
+
+  handleNodeBlur(event) {
+    const nodeElement = event.target.closest(".nodely-graph-node");
+
+    if (nodeElement?.dataset?.nodeId === this.hoveredNodeId) {
+      this.setHoveredNode(null);
+    }
   }
 
   handleContextMenu(event) {
@@ -1128,6 +1279,63 @@ export class NodelyGraphSurface extends HTMLElement {
     return true;
   }
 
+  setHoveredNode(nodeId) {
+    const nextNodeId = typeof nodeId === "string" && nodeId ? nodeId : null;
+
+    if (this.hoveredNodeId === nextNodeId) {
+      return;
+    }
+
+    this.hoveredNodeId = nextNodeId;
+    this.requestRender({
+      nodes: true
+    });
+  }
+
+  updateHoverLabel(rect, positions) {
+    if (!this.hoverLabel) {
+      return;
+    }
+
+    const hoveredNode =
+      this.workspace && this.hoveredNodeId ? findNode(this.workspace, this.hoveredNodeId) : null;
+
+    if (!hoveredNode || !rect || !positions) {
+      this.hoverLabel.hidden = true;
+      this.hoverLabel.textContent = "";
+      this.dataset.hoverLabelVisible = "false";
+      return;
+    }
+
+    const point = this.screenFromWorld(positions.get(hoveredNode.id) ?? hoveredNode.position);
+    const dimensions = nodeDimensions(hoveredNode);
+    const category = classifyNodeCategory(this.workspace, hoveredNode);
+    const colors = SITE_CATEGORY_STYLES[category];
+    const labelText = hoverLabelText(hoveredNode);
+    const maxWidth = clamp(Math.round(rect.width * 0.42), 220, 420);
+
+    this.hoverLabel.style.maxWidth = `${maxWidth}px`;
+    this.hoverLabel.style.setProperty("--nodely-hover-accent", colors.accent);
+    this.hoverLabel.textContent = labelText;
+    this.hoverLabel.hidden = false;
+
+    const labelRect = this.hoverLabel.getBoundingClientRect();
+    const labelWidth = Math.max(120, Math.round(labelRect.width || Math.min(maxWidth, labelText.length * 8 + 28)));
+    const labelHeight = Math.max(32, Math.round(labelRect.height || 38));
+    const centerX = point.x + (dimensions.width * this.viewport.zoom) / 2;
+    const maxLeft = Math.max(8, Math.round(rect.width - labelWidth - 8));
+    const left = clamp(Math.round(centerX - labelWidth / 2), 8, maxLeft);
+    const preferredTop = Math.round(point.y - labelHeight - 14);
+    const fallbackTop = Math.round(point.y + dimensions.height * this.viewport.zoom + 14);
+    const top =
+      preferredTop >= 8
+        ? preferredTop
+        : clamp(fallbackTop, 8, Math.max(8, Math.round(rect.height - labelHeight - 8)));
+
+    this.hoverLabel.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+    this.dataset.hoverLabelVisible = "true";
+  }
+
   cleanupPointerListenersIfIdle() {
     if (!this.dragState && !this.panState && !this.minimapState) {
       window.removeEventListener("pointermove", this.handlePointerMove);
@@ -1164,6 +1372,14 @@ function minimapProjection(surface, positions) {
     padding,
     scale
   };
+}
+
+function hoverLabelText(node) {
+  if (typeof node?.title === "string" && node.title.trim()) {
+    return node.title.trim();
+  }
+
+  return isArtifactNode(node) ? "File" : "Untitled page";
 }
 
 function createGraphToolbarButton(documentRef, title, action, text, icon = null) {
