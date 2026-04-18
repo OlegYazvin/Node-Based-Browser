@@ -83,6 +83,7 @@ The [Installer](./Installer) directory is the repo-staged installer snapshot and
 - Linux uses a self-contained `.run` installer so the downloaded file is enough to install and launch Nodely on common desktop distributions.
 - Download links shared with end users should point to GitHub Releases, not the repo tree.
 - Windows and macOS installers are built from native packaged Gecko outputs and should be produced on native runners through [`.github/workflows/installers.yml`](./.github/workflows/installers.yml), which runs on pushes to `main`, skips installer-only promotion commits, only promotes installers after a fully successful build matrix, and publishes the resulting installers as GitHub Release assets for the current Nodely version.
+- If one platform's public Release asset is stale, make a real repo change outside `Installer/**` so the full cross-platform workflow reruns and republishes the whole asset set together.
 - `Installer/` should only contain installers that were actually built and synced for this version.
 - [INSTALLER_BOUNDARIES.MD](./INSTALLER_BOUNDARIES.MD) is the maintainer guide for keeping Gecko browser packaging separate from installer generation.
 
