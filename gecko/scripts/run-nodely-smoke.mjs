@@ -40,6 +40,7 @@ Options:
   --binary <path>        Nodely browser binary path
   --profile-dir <path>   Existing profile directory to reuse
   --scenario <name>      Optional smoke scenario to run after bootstrap
+  --skip-refresh-branding  Reuse the existing packaged/runtime branding without refreshing first
   --manual-webrtc-confirm  Leave the WebRTC allow prompt for an external/manual click
   --headed               Run with a visible browser window instead of -headless
   --timeout-ms <ms>      Timeout while waiting for smoke snapshot (default: 30000)
@@ -55,6 +56,7 @@ function parseArguments(argv) {
     binary: null,
     profileDir: null,
     scenario: "",
+    skipRefreshBranding: false,
     manualWebRTCConfirm: false,
     headed: false,
     timeoutMs: 30_000,
@@ -77,6 +79,9 @@ function parseArguments(argv) {
         break;
       case "--scenario":
         options.scenario = String(argv[++index] ?? "").trim();
+        break;
+      case "--skip-refresh-branding":
+        options.skipRefreshBranding = true;
         break;
       case "--manual-webrtc-confirm":
         options.manualWebRTCConfirm = true;
@@ -673,7 +678,9 @@ async function terminateProcess(child) {
 }
 
 async function runSmoke(options) {
-  await refreshArtifactBranding(options.checkoutDir);
+  if (!options.skipRefreshBranding) {
+    await refreshArtifactBranding(options.checkoutDir);
+  }
 
   if (!(await exists(options.binary))) {
     throw new Error(`Nodely browser binary not found: ${options.binary}`);

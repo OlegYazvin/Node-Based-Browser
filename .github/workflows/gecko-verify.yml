@@ -83,7 +83,7 @@ jobs:
         run: python3.12 ./mach package
 
       - name: Run Nodely Gecko smoke verification
-        run: npm run gecko:smoke -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+        run: npm run gecko:smoke -- --checkout-dir "$RUNNER_TEMP/firefox-esr" --skip-refresh-branding
 
       - name: Stage release artifacts
         run: npm run gecko:stage-release -- --checkout-dir "$RUNNER_TEMP/firefox-esr" --platform linux --arch x64 --channel ci
