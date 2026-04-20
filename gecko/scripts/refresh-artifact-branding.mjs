@@ -346,6 +346,60 @@ async function ensureMacUpdaterCompatibility(checkoutDir) {
   return updates;
 }
 
+async function ensureMacChannelPrefsCompatibility(checkoutDir) {
+  const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
+  const distBinDir = path.join(distDirectory, "bin");
+  const channelPrefsDirectory = path.join(distBinDir, "ChannelPrefs.framework");
+  const channelPrefsBinaryPath = path.join(channelPrefsDirectory, "ChannelPrefs");
+  const channelPrefsInfoPlistPath = path.join(channelPrefsDirectory, "Resources", "Info.plist");
+
+  if (!(await exists(distDirectory))) {
+    return 0;
+  }
+
+  if ((await exists(channelPrefsBinaryPath)) && (await exists(channelPrefsInfoPlistPath))) {
+    return 0;
+  }
+
+  const channelPrefsBinaryCandidates = [
+    path.join(distDirectory, "update_framework_artifacts", "ChannelPrefs-localbuild.framework", "ChannelPrefs"),
+    path.join(distBinDir, "ChannelPrefs")
+  ];
+  const sourceInfoPlistPath = path.join(
+    checkoutDir,
+    "toolkit",
+    "mozapps",
+    "macos-frameworks",
+    "ChannelPrefs",
+    "Info.plist"
+  );
+
+  let sourceBinaryPath = null;
+
+  for (const candidatePath of channelPrefsBinaryCandidates) {
+    if (await exists(candidatePath)) {
+      sourceBinaryPath = candidatePath;
+      break;
+    }
+  }
+
+  if (!sourceBinaryPath) {
+    return 0;
+  }
+
+  await mkdir(path.join(channelPrefsDirectory, "Resources"), { recursive: true });
+  await copyFile(sourceBinaryPath, channelPrefsBinaryPath);
+  await chmod(channelPrefsBinaryPath, 0o755).catch(() => {});
+
+  let updates = 1;
+
+  if (await copyFileIfPresent(sourceInfoPlistPath, channelPrefsInfoPlistPath)) {
+    updates += 1;
+  }
+
+  return updates;
+}
+
 export async function ensureMacArtifactCompatibility(checkoutDir) {
   const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
   const distBinDir = path.join(distDirectory, "bin");
@@ -777,7 +831,9 @@ async function refreshBranding({ checkoutDir, mode = "full" }) {
   const distBinDir = path.join(checkoutDir, "obj-nodely", "dist", "bin");
   const packagedNodelyDir = path.join(checkoutDir, "obj-nodely", "dist", "nodely");
   const macCompatUpdates =
-    (await ensureMacArtifactCompatibility(checkoutDir)) + (await ensureMacUpdaterCompatibility(checkoutDir));
+    (await ensureMacArtifactCompatibility(checkoutDir)) +
+    (await ensureMacUpdaterCompatibility(checkoutDir)) +
+    (await ensureMacChannelPrefsCompatibility(checkoutDir));
 
   if (mode === "compat") {
     console.log(`Refreshed artifact branding in ${checkoutDir} (${macCompatUpdates} macOS compat updates, compat-only mode).`);
@@ -815,7 +871,14 @@ async function refreshBranding({ checkoutDir, mode = "full" }) {
   );
 }
 
-export { NODELY_CRASH_REPORT_EMAIL, ensureMacUpdaterCompatibility, patchApplicationIni, refreshBranding, syncPackagedBrandingAssets };
+export {
+  NODELY_CRASH_REPORT_EMAIL,
+  ensureMacChannelPrefsCompatibility,
+  ensureMacUpdaterCompatibility,
+  patchApplicationIni,
+  refreshBranding,
+  syncPackagedBrandingAssets
+};
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {

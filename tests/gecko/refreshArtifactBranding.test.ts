@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ensureMacArtifactCompatibility,
+  ensureMacChannelPrefsCompatibility,
   ensureMacUpdaterCompatibility,
   patchApplicationIni,
   refreshBranding,
@@ -244,6 +245,50 @@ describe("refresh-artifact-branding", () => {
       expect(await readFile(updaterBundlePath, "utf8")).toBe("updater-binary");
       expect(await readFile(frameworkBinaryPath, "utf8")).toBe("update-settings-binary");
       expect((await readFile(localizedStringsPath)).toString("utf16le")).toContain("Nodely Software Update");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("reconstructs the mac ChannelPrefs framework from artifact-build inputs", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-mac-channel-prefs-"));
+    const localbuildFrameworkDirectory = path.join(
+      tempDirectory,
+      "obj-nodely",
+      "dist",
+      "update_framework_artifacts",
+      "ChannelPrefs-localbuild.framework"
+    );
+    const sourceInfoPlistPath = path.join(
+      tempDirectory,
+      "toolkit",
+      "mozapps",
+      "macos-frameworks",
+      "ChannelPrefs",
+      "Info.plist"
+    );
+
+    try {
+      await mkdir(localbuildFrameworkDirectory, { recursive: true });
+      await mkdir(path.dirname(sourceInfoPlistPath), { recursive: true });
+
+      await writeFile(path.join(localbuildFrameworkDirectory, "ChannelPrefs"), "channel-prefs-binary", "utf8");
+      await writeFile(sourceInfoPlistPath, "<plist>ChannelPrefs</plist>", "utf8");
+
+      const updates = await ensureMacChannelPrefsCompatibility(tempDirectory);
+      const frameworkRoot = path.join(
+        tempDirectory,
+        "obj-nodely",
+        "dist",
+        "bin",
+        "ChannelPrefs.framework"
+      );
+
+      expect(updates).toBe(2);
+      expect(await readFile(path.join(frameworkRoot, "ChannelPrefs"), "utf8")).toBe("channel-prefs-binary");
+      expect(await readFile(path.join(frameworkRoot, "Resources", "Info.plist"), "utf8")).toBe(
+        "<plist>ChannelPrefs</plist>"
+      );
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }
