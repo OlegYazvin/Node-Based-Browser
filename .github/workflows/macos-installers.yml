@@ -1,0 +1,220 @@
+name: Build macOS Installers
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "Installer/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-installers:
+    name: Build macOS installer (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Intel
+            os: macos-15-intel
+            arch: x64
+          - label: Apple Silicon
+            os: macos-15
+            arch: arm64
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Choose Gecko checkout directory
+        run: echo "GECKO_CHECKOUT_DIR=$RUNNER_TEMP/firefox-esr" >> "$GITHUB_ENV"
+
+      - name: Bootstrap Gecko ESR checkout
+        run: |
+          set -o pipefail
+          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-bootstrap.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-bootstrap.log --mode bootstrap)"
+            echo "::error title=Gecko bootstrap failed::$summary"
+            exit 1
+          fi
+
+      - name: Write Gecko mozconfig
+        run: npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+
+      - name: Build Gecko overlay target
+        env:
+          MOZCONFIG: mozconfig.nodely
+          NODEJS: node
+        run: |
+          set -o pipefail
+          if ! (
+            cd "$GECKO_CHECKOUT_DIR"
+            python ./mach configure
+            python ./mach artifact install
+            cd "$GITHUB_WORKSPACE"
+            npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+            npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR" --mode compat
+            cd "$GECKO_CHECKOUT_DIR"
+            python ./mach build faster
+          ) 2>&1 | tee gecko-build.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-build.log --mode build)"
+            echo "::error title=Gecko overlay build failed::$summary"
+            exit 1
+          fi
+
+      - name: Refresh artifact-build Nodely branding
+        run: npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
+
+      - name: Package Gecko build
+        env:
+          MOZCONFIG: mozconfig.nodely
+          NODEJS: node
+        run: |
+          set -o pipefail
+          if ! (
+            cd "$GECKO_CHECKOUT_DIR"
+            python ./mach package
+          ) 2>&1 | tee gecko-package.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-package.log --mode package)"
+            echo "::error title=Gecko package failed::$summary"
+            exit 1
+          fi
+
+      - name: Stage Gecko release artifact
+        run: |
+          set -o pipefail
+          if ! npm run gecko:stage-release -- --checkout-dir "$GECKO_CHECKOUT_DIR" --platform darwin --arch ${{ matrix.arch }} --channel ci 2>&1 | tee gecko-stage-release.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-stage-release.log --mode stage)"
+            echo "::error title=Gecko release artifact staging failed::$summary"
+            exit 1
+          fi
+
+      - name: Build macOS installer
+        run: |
+          set -o pipefail
+          if ! npm run installers -- --platform darwin --arch ${{ matrix.arch }} --channel ci --no-sync --strict 2>&1 | tee installer-build.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log installer-build.log --mode installer)"
+            echo "::error title=macOS installer build failed::$summary"
+            exit 1
+          fi
+
+      - name: Derive macOS release metadata
+        id: release_meta
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readdirSync, statSync } from "node:fs";
+          import path from "node:path";
+
+          import { extractInstallerVersion } from "./scripts/installers-lib.mjs";
+
+          const outputDirectory = path.join("out", "make", "darwin", "${{ matrix.arch }}");
+          const fileNames = readdirSync(outputDirectory)
+            .filter((name) => name.startsWith("Nodely-Browser-"))
+            .filter((name) => /\.(?:dmg|pkg)$/iu.test(name))
+            .sort();
+
+          if (!fileNames.length) {
+            throw new Error(`No macOS installer assets were found in ${outputDirectory}.`);
+          }
+
+          const assets = fileNames
+            .map((name) => path.join(outputDirectory, name))
+            .filter((assetPath) => statSync(assetPath).size > 0)
+            .map((assetPath) => assetPath.replaceAll(path.sep, path.posix.sep));
+
+          if (!assets.length) {
+            throw new Error(`macOS installer assets in ${outputDirectory} were empty.`);
+          }
+
+          const versions = [...new Set(fileNames.map((name) => extractInstallerVersion(name)).filter(Boolean))];
+
+          if (versions.length !== 1) {
+            throw new Error(`Expected exactly one macOS installer version, found: ${versions.join(", ")}`);
+          }
+
+          const version = versions[0];
+          const outputPath = process.env.GITHUB_OUTPUT;
+
+          appendFileSync(outputPath, `version=${version}\n`);
+          appendFileSync(outputPath, `tag=nodely-${version}\n`);
+          appendFileSync(outputPath, `title=Nodely ${version}\n`);
+          appendFileSync(outputPath, "assets<<EOF\n");
+          appendFileSync(outputPath, `${assets.join("\n")}\n`);
+          appendFileSync(outputPath, "EOF\n");
+          NODE
+
+      - name: Publish macOS release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.release_meta.outputs.title }}
+          RELEASE_VERSION: ${{ steps.release_meta.outputs.version }}
+          RELEASE_ASSETS: ${{ steps.release_meta.outputs.assets }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            cat > macos-release-notes.md <<EOF
+          Refreshed macOS installer assets for Nodely ${RELEASE_VERSION}.
+
+          Generated by ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}.
+          EOF
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes-file macos-release-notes.md \
+              --target "$GITHUB_SHA"
+          fi
+
+          while IFS= read -r asset; do
+            if [[ -n "$asset" ]]; then
+              gh release upload "$RELEASE_TAG" "$asset" --clobber
+            fi
+          done <<< "$RELEASE_ASSETS"
+
+      - name: Report macOS installer outputs
+        run: |
+          find out/make/darwin/${{ matrix.arch }} -maxdepth 1 -type f -printf 'Installer output: %f\n' | sort
+          echo "macOS installer verification uploads artifacts and refreshes the matching GitHub Release assets directly."
+
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer-failure-logs-${{ matrix.arch }}
+          path: |
+            gecko-bootstrap.log
+            gecko-build.log
+            gecko-package.log
+            gecko-stage-release.log
+            installer-build.log
+          if-no-files-found: ignore
+
+      - name: Upload macOS installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installers-${{ matrix.arch }}
+          path: out/make/darwin/${{ matrix.arch }}
+          if-no-files-found: error

@@ -147,6 +147,25 @@ describe("refresh-artifact-branding", () => {
     }
   });
 
+  it("creates prebuild mac aliases when artifact install has not materialized a bundle yet", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-mac-compat-prebuild-"));
+    const distDirectory = path.join(tempDirectory, "obj-nodely", "dist");
+
+    try {
+      await mkdir(distDirectory, { recursive: true });
+
+      const updates = await ensureMacArtifactCompatibility(tempDirectory);
+      const distBinDirectory = path.join(distDirectory, "bin");
+
+      expect(updates).toBe(3);
+      expect(await readlink(path.join(distBinDirectory, "firefox"))).toBe("firefox-bin");
+      expect(await readlink(path.join(distBinDirectory, "nodely"))).toBe("firefox");
+      expect(await readlink(path.join(distBinDirectory, "nodely-bin"))).toBe("firefox-bin");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("makes the packaged nodely wrapper desktop-aware on Linux builds", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-linux-wrapper-"));
     const packagedTargetPath = path.join(tempDirectory, "obj-nodely", "dist", "nodely", "nodely-bin");

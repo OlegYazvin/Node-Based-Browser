@@ -4,14 +4,8 @@ on:
   push:
     branches:
       - main
-    paths:
-      - ".github/workflows/linux-mint-x64-installer.yml"
-      - "scripts/build-installers.mjs"
-      - "scripts/installers-lib.mjs"
-      - "scripts/verify-ubuntu-deb-compat.sh"
-      - "gecko/scripts/**"
-      - "package.json"
-      - "package-lock.json"
+    paths-ignore:
+      - "Installer/**"
   workflow_dispatch:
 
 permissions:

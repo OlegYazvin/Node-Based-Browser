@@ -82,9 +82,11 @@ The [Installer](./Installer) directory is the repo-staged installer snapshot and
 - Keep a single visible Nodely release version across `gecko/release-artifacts/` and `Installer/`; the repo snapshot can contain multiple platform installers, but they should all belong to the same Nodely version.
 - Linux uses a self-contained `.run` installer so the downloaded file is enough to install and launch Nodely on common desktop distributions.
 - Download links shared with end users should point to GitHub Releases, not the repo tree.
-- Windows and macOS installers are built from native packaged Gecko outputs and should be produced on native runners through [`.github/workflows/installers.yml`](./.github/workflows/installers.yml), which runs on pushes to `main`, skips installer-only promotion commits, only promotes installers after a fully successful build matrix, and publishes the resulting installers as GitHub Release assets for the current Nodely version.
-- Windows x64 also has a dedicated [`.github/workflows/windows-x64-installer.yml`](./.github/workflows/windows-x64-installer.yml) path so a successful Windows build can refresh the public `.exe` even when unrelated Linux or macOS jobs are failing elsewhere.
-- If one platform's public Release asset is stale, make a real repo change outside `Installer/**` so the full cross-platform workflow reruns and republishes the whole asset set together.
+- The full [`.github/workflows/installers.yml`](./.github/workflows/installers.yml) workflow is the unified promotion path: it refreshes the repo-staged `Installer/` snapshot, generates `Installer/RELEASE_NOTES.MD`, and republishes the full GitHub Release asset set only after the entire matrix succeeds.
+- Windows x64 also has a dedicated [`.github/workflows/windows-x64-installer.yml`](./.github/workflows/windows-x64-installer.yml) path so a successful Windows build can refresh the public `.exe` on every real push to `main`, even when unrelated Linux or macOS jobs are failing elsewhere.
+- Linux x64 has a dedicated [`.github/workflows/linux-mint-x64-installer.yml`](./.github/workflows/linux-mint-x64-installer.yml) path so the public Linux Mint / Ubuntu-family assets refresh directly on normal pushes to `main`.
+- macOS Intel and Apple Silicon have a dedicated [`.github/workflows/macos-installers.yml`](./.github/workflows/macos-installers.yml) path so the public `.dmg` / `.pkg` assets refresh directly on normal pushes to `main`.
+- Public end-user downloads should come from GitHub Releases; `Installer/` is the repo-staged snapshot for the latest fully successful matrix promotion.
 - `Installer/` should only contain installers that were actually built and synced for this version.
 - [INSTALLER_BOUNDARIES.MD](./INSTALLER_BOUNDARIES.MD) is the maintainer guide for keeping Gecko browser packaging separate from installer generation.
 

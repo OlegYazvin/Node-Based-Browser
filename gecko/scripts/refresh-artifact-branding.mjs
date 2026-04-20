@@ -10,6 +10,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readlink,
   readdir,
   rm,
   symlink,
@@ -154,6 +155,29 @@ async function ensureAlias(directory, aliasName, sourceName) {
   return true;
 }
 
+async function ensureReferenceAlias(directory, aliasName, referenceName) {
+  const aliasPath = path.join(directory, aliasName);
+
+  if (await exists(aliasPath)) {
+    const aliasStat = await lstat(aliasPath);
+
+    if (aliasStat.isSymbolicLink()) {
+      try {
+        if ((await readlink(aliasPath)) === referenceName) {
+          return false;
+        }
+      } catch {
+        // Recreate broken links below.
+      }
+    }
+
+    await rm(aliasPath, { force: true, recursive: true });
+  }
+
+  await symlink(referenceName, aliasPath);
+  return true;
+}
+
 async function resolveMacCompatSource(distDirectory, distBinDir) {
   const executableCandidates = ["firefox", "firefox-bin", "nodely", "nodely-bin"];
 
@@ -196,12 +220,18 @@ export async function ensureMacArtifactCompatibility(checkoutDir) {
   }
 
   const source = await resolveMacCompatSource(distDirectory, distBinDir);
+  await mkdir(distBinDir, { recursive: true });
 
   if (!source) {
-    return 0;
+    const prebuildAliasUpdates = [
+      await ensureReferenceAlias(distBinDir, "firefox", "firefox-bin"),
+      await ensureReferenceAlias(distBinDir, "nodely", "firefox"),
+      await ensureReferenceAlias(distBinDir, "nodely-bin", "firefox-bin")
+    ].filter(Boolean).length;
+
+    return prebuildAliasUpdates;
   }
 
-  await mkdir(distBinDir, { recursive: true });
   const aliasNames = ["firefox", "firefox-bin", "nodely", "nodely-bin"];
   let updates = 0;
 
