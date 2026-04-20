@@ -75,15 +75,15 @@ jobs:
       - name: Refresh artifact-build Nodely branding
         run: npm run gecko:refresh-branding -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
 
-      - name: Run Nodely Gecko smoke verification
-        run: npm run gecko:smoke -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
-
       - name: Package Gecko build
         working-directory: ${{ runner.temp }}/firefox-esr
         env:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
         run: python3.12 ./mach package
+
+      - name: Run Nodely Gecko smoke verification
+        run: npm run gecko:smoke -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
 
       - name: Stage release artifacts
         run: npm run gecko:stage-release -- --checkout-dir "$RUNNER_TEMP/firefox-esr" --platform linux --arch x64 --channel ci

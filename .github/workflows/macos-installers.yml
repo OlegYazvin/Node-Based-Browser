@@ -199,7 +199,20 @@ jobs:
 
       - name: Report macOS installer outputs
         run: |
-          find out/make/darwin/${{ matrix.arch }} -maxdepth 1 -type f -printf 'Installer output: %f\n' | sort
+          node --input-type=module <<'NODE'
+          import { readdirSync, statSync } from "node:fs";
+          import path from "node:path";
+
+          const outputDirectory = path.join("out", "make", "darwin", "${{ matrix.arch }}");
+
+          for (const name of readdirSync(outputDirectory).sort()) {
+            const assetPath = path.join(outputDirectory, name);
+
+            if (statSync(assetPath).isFile()) {
+              console.log(`Installer output: ${name}`);
+            }
+          }
+          NODE
           echo "macOS installer verification uploads artifacts and refreshes the matching GitHub Release assets directly."
 
       - name: Upload failure logs
