@@ -60,6 +60,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Resolve published Gecko ESR release
+        run: node gecko/scripts/resolve-supported-esr-release.mjs >> "$GITHUB_ENV"
+
       - name: Install Linux build prerequisites
         if: matrix.platform == 'linux'
         run: |
@@ -125,7 +128,7 @@ jobs:
         run: |
           set -o pipefail
 
-          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-bootstrap.log; then
+          if ! npm run gecko:bootstrap -- --checkout-dir "$GECKO_CHECKOUT_DIR" --ref "$FIREFOX_ESR_REF" 2>&1 | tee gecko-bootstrap.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-bootstrap.log --mode bootstrap)"
             echo "::error title=Gecko bootstrap failed::$summary"
             exit 1
@@ -139,24 +142,6 @@ jobs:
           else
             npm run gecko:mozconfig -- --checkout-dir "$GECKO_CHECKOUT_DIR"
           fi
-
-      - name: Derive Gecko runtime version
-        run: |
-          version_file="$GECKO_CHECKOUT_DIR/browser/config/version_display.txt"
-
-          if [[ ! -f "$version_file" ]]; then
-            echo "Missing Gecko version file: $version_file" >&2
-            exit 1
-          fi
-
-          gecko_version="$(tr -d '\r\n' < "$version_file")"
-
-          if [[ -z "$gecko_version" ]]; then
-            echo "Derived empty Gecko version from $version_file" >&2
-            exit 1
-          fi
-
-          echo "GECKO_VERSION=$gecko_version" >> "$GITHUB_ENV"
 
       - name: Build Gecko overlay target
         env:
@@ -176,7 +161,7 @@ jobs:
               cd "$GECKO_CHECKOUT_DIR"
               python ./mach build faster
             elif [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
-              printf '%s\n' "Using prepared Linux runtime flow for ${GECKO_VERSION}."
+              printf '%s\n' "Using prepared Linux runtime flow for ${FIREFOX_ESR_VERSION}."
             else
               python ./mach build faster
             fi
@@ -191,8 +176,8 @@ jobs:
         run: |
           set -o pipefail
 
-          runtime_url="https://archive.mozilla.org/pub/firefox/releases/${GECKO_VERSION}/linux-x86_64/en-US/firefox-${GECKO_VERSION}.tar.xz"
-          runtime_archive="$RUNNER_TEMP/firefox-${GECKO_VERSION}.tar.xz"
+          runtime_url="${FIREFOX_ESR_RUNTIME_URL}"
+          runtime_archive="$RUNNER_TEMP/firefox-${FIREFOX_ESR_VERSION}.tar.xz"
           dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
 
           if ! curl --fail --location --retry 3 --retry-delay 10 --output "$runtime_archive" "$runtime_url" 2>&1 | tee official-esr-package.log; then
@@ -234,7 +219,7 @@ jobs:
 
           if ! (
             if [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
-              artifact="$GECKO_CHECKOUT_DIR/obj-nodely/dist/nodely-browser-${GECKO_VERSION}.en-US.linux-x86_64.tar.xz"
+              artifact="$GECKO_CHECKOUT_DIR/obj-nodely/dist/nodely-browser-${FIREFOX_ESR_VERSION}.en-US.linux-x86_64.tar.xz"
               tar -cJf "$artifact" -C "$GECKO_CHECKOUT_DIR/obj-nodely/dist" nodely
               tar -tf "$artifact" | grep -E '(^|/)nodely-bin$|(^|/)firefox-bin$|(^|/)libxul\.so$|(^|/)application\.ini$'
             else
@@ -268,7 +253,7 @@ jobs:
           )
 
           if [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
-            installer_args+=(--version "$GECKO_VERSION")
+            installer_args+=(--version "$FIREFOX_ESR_VERSION")
           fi
 
           if [[ "${{ matrix.platform }}" != "linux" || "${{ matrix.arch }}" != "x64" ]]; then
