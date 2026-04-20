@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ensureMacArtifactCompatibility,
+  ensureMacUpdaterCompatibility,
   patchApplicationIni,
   refreshBranding,
   syncPackagedBrandingAssets
@@ -161,6 +162,88 @@ describe("refresh-artifact-branding", () => {
       expect(await readlink(path.join(distBinDirectory, "firefox"))).toBe("firefox-bin");
       expect(await readlink(path.join(distBinDirectory, "nodely"))).toBe("firefox");
       expect(await readlink(path.join(distBinDirectory, "nodely-bin"))).toBe("firefox-bin");
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("reconstructs the mac updater bundle from artifact-build inputs", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-mac-updater-"));
+    const distBinDirectory = path.join(tempDirectory, "obj-nodely", "dist", "bin");
+    const updateFrameworkDirectory = path.join(
+      tempDirectory,
+      "obj-nodely",
+      "dist",
+      "update_framework_artifacts",
+      "UpdateSettings-localbuild.framework"
+    );
+    const updaterTemplateDirectory = path.join(
+      tempDirectory,
+      "toolkit",
+      "mozapps",
+      "update",
+      "updater",
+      "macbuild",
+      "Contents"
+    );
+    const updateSettingsInfoPlistPath = path.join(
+      tempDirectory,
+      "toolkit",
+      "mozapps",
+      "update",
+      "updater",
+      "macos-frameworks",
+      "UpdateSettings",
+      "Info.plist"
+    );
+
+    try {
+      await mkdir(path.join(distBinDirectory), { recursive: true });
+      await mkdir(path.join(updateFrameworkDirectory), { recursive: true });
+      await mkdir(path.join(updaterTemplateDirectory, "Resources", "English.lproj"), { recursive: true });
+      await mkdir(path.dirname(updateSettingsInfoPlistPath), { recursive: true });
+
+      await writeFile(path.join(distBinDirectory, "org.mozilla.updater"), "updater-binary", "utf8");
+      await writeFile(path.join(distBinDirectory, "Info.plist"), "main-info-plist", "utf8");
+      await writeFile(path.join(updateFrameworkDirectory, "UpdateSettings"), "update-settings-binary", "utf8");
+      await writeFile(path.join(updaterTemplateDirectory, "PkgInfo"), "APPL????", "utf8");
+      await writeFile(path.join(updaterTemplateDirectory, "Resources", "updater.icns"), "icon", "utf8");
+      await writeFile(
+        path.join(updaterTemplateDirectory, "Resources", "English.lproj", "InfoPlist.strings.in"),
+        'CFBundleDisplayName = "@APP_NAME@ Software Update";',
+        "utf8"
+      );
+      await writeFile(updateSettingsInfoPlistPath, "<plist>UpdateSettings</plist>", "utf8");
+
+      const updates = await ensureMacUpdaterCompatibility(tempDirectory);
+      const updaterBundlePath = path.join(
+        distBinDirectory,
+        "updater.app",
+        "Contents",
+        "MacOS",
+        "org.mozilla.updater"
+      );
+      const localizedStringsPath = path.join(
+        distBinDirectory,
+        "updater.app",
+        "Contents",
+        "Resources",
+        "English.lproj",
+        "InfoPlist.strings"
+      );
+      const frameworkBinaryPath = path.join(
+        distBinDirectory,
+        "updater.app",
+        "Contents",
+        "Frameworks",
+        "UpdateSettings.framework",
+        "UpdateSettings"
+      );
+
+      expect(updates).toBeGreaterThan(0);
+      expect(await readFile(updaterBundlePath, "utf8")).toBe("updater-binary");
+      expect(await readFile(frameworkBinaryPath, "utf8")).toBe("update-settings-binary");
+      expect((await readFile(localizedStringsPath)).toString("utf16le")).toContain("Nodely Software Update");
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }

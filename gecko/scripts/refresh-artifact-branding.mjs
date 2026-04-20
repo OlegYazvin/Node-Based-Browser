@@ -178,6 +178,20 @@ async function ensureReferenceAlias(directory, aliasName, referenceName) {
   return true;
 }
 
+async function copyFileIfPresent(sourcePath, destinationPath) {
+  if (!(await exists(sourcePath))) {
+    return false;
+  }
+
+  await mkdir(path.dirname(destinationPath), { recursive: true });
+  await copyFile(sourcePath, destinationPath);
+  return true;
+}
+
+function renderUtf16File(contents) {
+  return Buffer.from(`\ufeff${contents}`, "utf16le");
+}
+
 async function resolveMacCompatSource(distDirectory, distBinDir) {
   const executableCandidates = ["firefox", "firefox-bin", "nodely", "nodely-bin"];
 
@@ -209,6 +223,127 @@ async function resolveMacCompatSource(distDirectory, distBinDir) {
   }
 
   return null;
+}
+
+async function ensureMacUpdaterCompatibility(checkoutDir) {
+  const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
+  const distBinDir = path.join(distDirectory, "bin");
+  const updaterBinaryPath = path.join(distBinDir, "org.mozilla.updater");
+  const updaterBundleBinaryPath = path.join(
+    distBinDir,
+    "updater.app",
+    "Contents",
+    "MacOS",
+    "org.mozilla.updater"
+  );
+
+  if (!(await exists(distDirectory)) || !(await exists(updaterBinaryPath))) {
+    return 0;
+  }
+
+  if (await exists(updaterBundleBinaryPath)) {
+    return 0;
+  }
+
+  const updaterTemplateDirectory = path.join(
+    checkoutDir,
+    "toolkit",
+    "mozapps",
+    "update",
+    "updater",
+    "macbuild",
+    "Contents"
+  );
+  const updateSettingsInfoPlistPath = path.join(
+    checkoutDir,
+    "toolkit",
+    "mozapps",
+    "update",
+    "updater",
+    "macos-frameworks",
+    "UpdateSettings",
+    "Info.plist"
+  );
+  const infoPlistTemplatePath = path.join(updaterTemplateDirectory, "Info.plist.in");
+  const localizedStringsTemplatePath = path.join(
+    updaterTemplateDirectory,
+    "Resources",
+    "English.lproj",
+    "InfoPlist.strings.in"
+  );
+  const updaterBundleDirectory = path.join(distBinDir, "updater.app");
+  const contentsDirectory = path.join(updaterBundleDirectory, "Contents");
+  const resourcesDirectory = path.join(contentsDirectory, "Resources");
+  const localizedStringsDirectory = path.join(resourcesDirectory, "English.lproj");
+  const frameworksDirectory = path.join(contentsDirectory, "Frameworks", "UpdateSettings.framework");
+  const frameworksResourcesDirectory = path.join(frameworksDirectory, "Resources");
+  const updateSettingsBinaryCandidates = [
+    path.join(distBinDir, "UpdateSettings"),
+    path.join(distDirectory, "update_framework_artifacts", "UpdateSettings-localbuild.framework", "UpdateSettings")
+  ];
+  const distInfoPlistPath = path.join(distBinDir, "Info.plist");
+
+  await mkdir(path.join(contentsDirectory, "MacOS"), { recursive: true });
+  await mkdir(localizedStringsDirectory, { recursive: true });
+  await mkdir(frameworksResourcesDirectory, { recursive: true });
+
+  let updates = 0;
+
+  if (await copyFileIfPresent(path.join(updaterTemplateDirectory, "PkgInfo"), path.join(contentsDirectory, "PkgInfo"))) {
+    updates += 1;
+  }
+
+  if (
+    await copyFileIfPresent(
+      path.join(updaterTemplateDirectory, "Resources", "updater.icns"),
+      path.join(resourcesDirectory, "updater.icns")
+    )
+  ) {
+    updates += 1;
+  }
+
+  if (await exists(distInfoPlistPath)) {
+    if (await copyFileIfPresent(distInfoPlistPath, path.join(contentsDirectory, "Info.plist"))) {
+      updates += 1;
+    }
+  } else if (await exists(infoPlistTemplatePath)) {
+    const templateContents = await readFile(infoPlistTemplatePath, "utf8");
+    const renderedContents = templateContents.replace("@MOZ_SMAUTHORIZEDCLIENTS_REQUIREMENTS@", "");
+    await writeFile(path.join(contentsDirectory, "Info.plist"), renderedContents, "utf8");
+    updates += 1;
+  }
+
+  if (await exists(localizedStringsTemplatePath)) {
+    const templateContents = await readFile(localizedStringsTemplatePath, "utf8");
+    const renderedContents = templateContents.replace("@APP_NAME@", "Nodely");
+    await writeFile(path.join(localizedStringsDirectory, "InfoPlist.strings"), renderUtf16File(renderedContents));
+    updates += 1;
+  }
+
+  await copyFile(updaterBinaryPath, updaterBundleBinaryPath);
+  await chmod(updaterBundleBinaryPath, 0o755).catch(() => {});
+  updates += 1;
+
+  for (const candidatePath of updateSettingsBinaryCandidates) {
+    if (!(await exists(candidatePath))) {
+      continue;
+    }
+
+    await copyFile(candidatePath, path.join(frameworksDirectory, "UpdateSettings"));
+    updates += 1;
+    break;
+  }
+
+  if (
+    await copyFileIfPresent(
+      updateSettingsInfoPlistPath,
+      path.join(frameworksResourcesDirectory, "Info.plist")
+    )
+  ) {
+    updates += 1;
+  }
+
+  return updates;
 }
 
 export async function ensureMacArtifactCompatibility(checkoutDir) {
@@ -641,7 +776,8 @@ async function pruneLegacyBlinkOutputs(repositoryDirectory) {
 async function refreshBranding({ checkoutDir, mode = "full" }) {
   const distBinDir = path.join(checkoutDir, "obj-nodely", "dist", "bin");
   const packagedNodelyDir = path.join(checkoutDir, "obj-nodely", "dist", "nodely");
-  const macCompatUpdates = await ensureMacArtifactCompatibility(checkoutDir);
+  const macCompatUpdates =
+    (await ensureMacArtifactCompatibility(checkoutDir)) + (await ensureMacUpdaterCompatibility(checkoutDir));
 
   if (mode === "compat") {
     console.log(`Refreshed artifact branding in ${checkoutDir} (${macCompatUpdates} macOS compat updates, compat-only mode).`);
@@ -679,7 +815,7 @@ async function refreshBranding({ checkoutDir, mode = "full" }) {
   );
 }
 
-export { NODELY_CRASH_REPORT_EMAIL, patchApplicationIni, refreshBranding, syncPackagedBrandingAssets };
+export { NODELY_CRASH_REPORT_EMAIL, ensureMacUpdaterCompatibility, patchApplicationIni, refreshBranding, syncPackagedBrandingAssets };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
