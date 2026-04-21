@@ -558,6 +558,29 @@ function snapshotMatchesScenario(snapshot, scenario) {
     );
   }
 
+  if (scenario === "compat-kondo-install") {
+    const kondoRecord =
+      snapshot.compatExtensions?.records?.find?.(
+        (record) => record.extensionId === "kojhnafkiednagnljfgakalcbfbklbdk"
+      ) ?? null;
+    const selectedUrl = snapshot.workspace?.selectedNode?.url ?? "";
+
+    return (
+      snapshot.browserSurface === "page" &&
+      (
+        selectedUrl.includes("chromewebstore.google.com/detail/kondo") ||
+        selectedUrl.startsWith("https://app.trykondo.com/")
+      ) &&
+      snapshot.compatExtensions?.experimentalMode === true &&
+      kondoRecord?.installState === "installed" &&
+      kondoRecord?.active === true &&
+      Boolean(kondoRecord?.installedVersion) &&
+      snapshot.ui?.compatExtensions?.disableButtonPresent === true &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
   if (scenario === "graph-contextmenu-root-composer") {
     return (
       snapshot.browserSurface === "page" &&

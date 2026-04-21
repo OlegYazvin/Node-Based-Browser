@@ -1,3 +1,14 @@
+import {
+  buildCompatExtensionFilePatches,
+  buildChromeStoreCrxDownloadUrl,
+  compareVersionStrings,
+  createCompatExtensionRecord,
+  getCompatRecipe,
+  normalizeCompatExtensionsState,
+  stripCrxHeader,
+  transformChromeManifestForRecipe
+} from "./chrome-extension-compat.mjs";
+
 const AUTH_PROMPT_EVENT = "nodely-auth-prompt-state";
 const EXTERNAL_PROTOCOL_EVENT = "nodely-external-protocol-state";
 const SESSION_CLOSED_OBJECTS_TOPIC = "sessionstore-closed-objects-changed";
@@ -13,6 +24,7 @@ let contentDispatchChooserPatched = false;
 try {
   if (typeof ChromeUtils !== "undefined") {
     ChromeUtils.defineESModuleGetters(lazy, {
+      AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
       Downloads: "resource://gre/modules/Downloads.sys.mjs",
       DownloadsCommon: "resource:///modules/DownloadsCommon.sys.mjs",
       FileUtils: "resource://gre/modules/FileUtils.sys.mjs",
@@ -22,6 +34,23 @@ try {
     });
   }
 } catch {}
+
+const ArrayBufferInputStream =
+  typeof Components !== "undefined"
+    ? Components.Constructor(
+        "@mozilla.org/io/arraybuffer-input-stream;1",
+        "nsIArrayBufferInputStream",
+        "setData"
+      )
+    : null;
+const BinaryInputStream =
+  typeof Components !== "undefined"
+    ? Components.Constructor(
+        "@mozilla.org/binaryinputstream;1",
+        "nsIBinaryInputStream",
+        "setInputStream"
+      )
+    : null;
 
 function safeSpec(value) {
   if (!value) {
@@ -226,6 +255,269 @@ function snapshotPermissionPrompt(notification, browser, nodeId = null) {
     allowLabel: notification.mainAction?.label ?? "Allow",
     blockLabel: notification.secondaryActions?.[0]?.label ?? "Block"
   };
+}
+
+function addonManagerRef() {
+  return lazy.AddonManager ?? globalThis.AddonManager ?? null;
+}
+
+function canUseProfileStorage() {
+  return (
+    typeof IOUtils !== "undefined" &&
+    typeof PathUtils !== "undefined" &&
+    typeof PathUtils.profileDir === "string"
+  );
+}
+
+function compatExtensionsRootPath() {
+  return canUseProfileStorage()
+    ? PathUtils.join(PathUtils.profileDir, "nodely-compat-extensions")
+    : null;
+}
+
+function compatPackagesRootPath() {
+  const rootPath = compatExtensionsRootPath();
+  return rootPath ? PathUtils.join(rootPath, "packages") : null;
+}
+
+function compatWorkRootPath() {
+  const rootPath = compatExtensionsRootPath();
+  return rootPath ? PathUtils.join(rootPath, "work") : null;
+}
+
+function sanitizePathSegment(value, fallback = "item") {
+  const normalized = String(value ?? "")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+
+  return normalized || fallback;
+}
+
+function nsFileForPath(filePath) {
+  if (!filePath || typeof Cc === "undefined" || typeof Ci === "undefined") {
+    return null;
+  }
+
+  const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+  file.initWithPath(filePath);
+  return file;
+}
+
+async function ensureDirectory(directoryPath) {
+  if (directoryPath && canUseProfileStorage()) {
+    await IOUtils.makeDirectory(directoryPath, {
+      createAncestors: true,
+      ignoreExisting: true
+    });
+  }
+}
+
+async function removePath(path, { recursive = false } = {}) {
+  if (!path || !canUseProfileStorage()) {
+    return;
+  }
+
+  await IOUtils.remove(path, {
+    ignoreAbsent: true,
+    recursive
+  });
+}
+
+function decodeUtf8(bytes) {
+  return new TextDecoder().decode(bytes);
+}
+
+function encodeUtf8(value) {
+  return new TextEncoder().encode(value);
+}
+
+function readInputStreamBytes(inputStream) {
+  if (!BinaryInputStream || !inputStream) {
+    return new Uint8Array();
+  }
+
+  const stream = new BinaryInputStream(inputStream);
+  const available = inputStream.available?.() ?? 0;
+  const byteArray = available > 0 ? stream.readByteArray(available) : [];
+  return Uint8Array.from(byteArray);
+}
+
+function zipEntryNames(zipReader) {
+  const entries = [];
+
+  for (const entryName of zipReader.findEntries(null)) {
+    entries.push(entryName);
+  }
+
+  return entries.sort();
+}
+
+async function readZipEntryBytes(zipPath, entryName) {
+  const zipReader = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
+  zipReader.open(nsFileForPath(zipPath));
+
+  try {
+    const inputStream = zipReader.getInputStream(entryName);
+
+    try {
+      return readInputStreamBytes(inputStream);
+    } finally {
+      inputStream.close();
+    }
+  } finally {
+    zipReader.close();
+  }
+}
+
+async function readZipManifest(zipPath) {
+  return JSON.parse(decodeUtf8(await readZipEntryBytes(zipPath, "manifest.json")));
+}
+
+async function extractZipToDirectory(zipPath, directoryPath) {
+  await ensureDirectory(directoryPath);
+  const zipReader = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
+  zipReader.open(nsFileForPath(zipPath));
+
+  try {
+    for (const entryName of zipEntryNames(zipReader)) {
+      const entry = zipReader.getEntry(entryName);
+      const targetPath = PathUtils.join(directoryPath, ...entryName.split("/"));
+
+      if (entry.isDirectory) {
+        await ensureDirectory(targetPath);
+        continue;
+      }
+
+      await ensureDirectory(PathUtils.parent(targetPath));
+      const inputStream = zipReader.getInputStream(entryName);
+
+      try {
+        await IOUtils.write(targetPath, readInputStreamBytes(inputStream));
+      } finally {
+        inputStream.close();
+      }
+    }
+  } finally {
+    zipReader.close();
+  }
+}
+
+function collectDirectoryFiles(directoryFile, rootPath, files = []) {
+  if (!directoryFile?.exists?.()) {
+    return files;
+  }
+
+  if (directoryFile.isFile()) {
+    const relativePath = directoryFile.path
+      .slice(rootPath.length + 1)
+      .replaceAll("\\", "/");
+    files.push({
+      relativePath,
+      file: directoryFile
+    });
+    return files;
+  }
+
+  for (const entry of directoryFile.directoryEntries) {
+    collectDirectoryFiles(entry.QueryInterface(Ci.nsIFile), rootPath, files);
+  }
+
+  return files;
+}
+
+async function zipDirectoryToFile(directoryPath, targetZipPath) {
+  await ensureDirectory(PathUtils.parent(targetZipPath));
+  const directoryFile = nsFileForPath(directoryPath);
+  const zipWriter = Cc["@mozilla.org/zipwriter;1"].createInstance(Ci.nsIZipWriter);
+  zipWriter.open(
+    nsFileForPath(targetZipPath),
+    lazy.FileUtils.MODE_RDWR | lazy.FileUtils.MODE_CREATE | lazy.FileUtils.MODE_TRUNCATE
+  );
+
+  try {
+    const files = collectDirectoryFiles(directoryFile, directoryPath).sort((left, right) =>
+      left.relativePath.localeCompare(right.relativePath)
+    );
+
+    files.forEach(({ relativePath, file }) => {
+      zipWriter.addEntryFile(
+        relativePath,
+        Ci.nsIZipWriter.COMPRESSION_DEFAULT,
+        file,
+        false
+      );
+    });
+  } finally {
+    zipWriter.close();
+  }
+}
+
+function installAddonFromFile(filePath) {
+  return addonManagerRef()?.getInstallForFile?.(nsFileForPath(filePath)) ?? null;
+}
+
+async function finalizeAddonInstall(install) {
+  if (!install) {
+    throw new Error("Nodely could not prepare the compat extension install.");
+  }
+
+  install.promptHandler = () => Promise.resolve();
+
+  const addonPromise = new Promise((resolve, reject) => {
+    install.addListener({
+      onInstallEnded(_install, addon) {
+        resolve(addon);
+      },
+      onInstallCancelled(cancelledInstall) {
+        reject(cancelledInstall?.error ?? new Error("Compat extension install was cancelled."));
+      },
+      onInstallFailed(failedInstall) {
+        reject(
+          failedInstall?.error ??
+            new Error("Compat extension install failed before Firefox could enable it.")
+        );
+      }
+    });
+  });
+
+  await install.install();
+  return addonPromise;
+}
+
+async function setAddonEnabledState(addon, enabled) {
+  if (!addon) {
+    return;
+  }
+
+  if (enabled) {
+    if (typeof addon.enable === "function") {
+      await addon.enable();
+    } else {
+      addon.userDisabled = false;
+    }
+    return;
+  }
+
+  if (typeof addon.disable === "function") {
+    await addon.disable();
+  } else {
+    addon.userDisabled = true;
+  }
+}
+
+function compatExtensionRecordFromAddon(record, addon, experimentalMode) {
+  const active = experimentalMode ? Boolean(addon?.isActive ?? !addon?.userDisabled) : false;
+
+  return createCompatExtensionRecord({
+    ...record,
+    installedVersion: addon?.version ?? record.installedVersion,
+    enabled: record.enabled,
+    active,
+    installState: addon ? "installed" : "missing",
+    updatedAt: Date.now(),
+    lastError: record.lastError ?? null
+  });
 }
 
 function isAuthPromptArgs(args) {
@@ -792,6 +1084,264 @@ export class BrowserBasicsBridge {
 
     permissionPanel.setAnchor(anchorNode, "bottomright topright");
     permissionPanel.openPopup();
+  }
+
+  async syncCompatExtensionsState(state, { applyMode = true } = {}) {
+    const normalizedState = normalizeCompatExtensionsState(state);
+    const records = [];
+
+    for (const record of normalizedState.extensions) {
+      const syncedRecord = await this.syncCompatExtensionRecord(record, {
+        experimentalMode: normalizedState.experimentalMode,
+        applyMode
+      });
+      records.push(syncedRecord);
+    }
+
+    return normalizeCompatExtensionsState({
+      ...normalizedState,
+      extensions: records
+    });
+  }
+
+  async syncCompatExtensionRecord(record, { experimentalMode = false, applyMode = false } = {}) {
+    const addonManager = addonManagerRef();
+
+    if (!addonManager?.getAddonByID || !record?.geckoId) {
+      return createCompatExtensionRecord({
+        ...record,
+        active: false,
+        installState: record?.installState ?? "missing"
+      });
+    }
+
+    const addon = await addonManager.getAddonByID(record.geckoId);
+
+    if (!addon) {
+      return createCompatExtensionRecord({
+        ...record,
+        active: false,
+        installState: record?.installState === "error" ? "error" : "missing"
+      });
+    }
+
+    if (applyMode) {
+      await setAddonEnabledState(addon, experimentalMode && record.enabled !== false);
+    }
+
+    return compatExtensionRecordFromAddon(record, addon, experimentalMode);
+  }
+
+  async downloadChromeStorePackage(extensionId) {
+    const recipe = getCompatRecipe(extensionId);
+
+    if (!recipe) {
+      throw new Error("Not yet supported in Nodely experimental Chrome extensions.");
+    }
+
+    const response = await fetch(buildChromeStoreCrxDownloadUrl(extensionId), {
+      credentials: "omit",
+      redirect: "follow"
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chrome Web Store download failed with status ${response.status}.`);
+    }
+
+    const crxBytes = new Uint8Array(await response.arrayBuffer());
+    const strippedCrx = await stripCrxHeader(crxBytes);
+
+    if (strippedCrx.derivedExtensionId !== extensionId) {
+      throw new Error("The downloaded Chrome Web Store package did not match the expected extension ID.");
+    }
+
+    return {
+      recipe,
+      ...strippedCrx
+    };
+  }
+
+  async prepareCompatExtensionPackage(extensionId) {
+    const downloadedPackage = await this.downloadChromeStorePackage(extensionId);
+    const { recipe, zipBytes } = downloadedPackage;
+    const rootPath = compatExtensionsRootPath();
+    const workRootPath = compatWorkRootPath();
+    const packagesRootPath = compatPackagesRootPath();
+
+    if (!rootPath || !workRootPath || !packagesRootPath) {
+      throw new Error("Nodely compat extensions need profile storage to be available.");
+    }
+
+    const workDirectory = PathUtils.join(workRootPath, sanitizePathSegment(extensionId));
+    const extractDirectory = PathUtils.join(workDirectory, "extracted");
+    const sourceZipPath = PathUtils.join(workDirectory, "source.zip");
+
+    await removePath(workDirectory, { recursive: true });
+    await ensureDirectory(workDirectory);
+    await IOUtils.write(sourceZipPath, zipBytes);
+    await extractZipToDirectory(sourceZipPath, extractDirectory);
+
+    const manifestPath = PathUtils.join(extractDirectory, "manifest.json");
+    const originalManifest = JSON.parse(await IOUtils.readUTF8(manifestPath));
+    const transformedManifest = transformChromeManifestForRecipe(originalManifest, recipe);
+    const extractedFiles = collectDirectoryFiles(nsFileForPath(extractDirectory), extractDirectory);
+    const sourceFiles = {};
+
+    for (const { relativePath } of extractedFiles) {
+      if (!relativePath.endsWith(".js")) {
+        continue;
+      }
+
+      const filePath = PathUtils.join(extractDirectory, ...relativePath.split("/"));
+      sourceFiles[relativePath] = await IOUtils.readUTF8(filePath);
+    }
+
+    const filePatches = buildCompatExtensionFilePatches(sourceFiles, recipe, {
+      originalManifest,
+      transformedManifest
+    });
+
+    for (const [relativePath, source] of Object.entries(filePatches)) {
+      const filePath = PathUtils.join(extractDirectory, ...relativePath.split("/"));
+      await ensureDirectory(PathUtils.parent(filePath));
+      await IOUtils.write(filePath, encodeUtf8(source));
+    }
+
+    await IOUtils.write(manifestPath, encodeUtf8(JSON.stringify(transformedManifest, null, 2)));
+
+    const version = transformedManifest.version ?? "0.0.0";
+    const packageDirectory = PathUtils.join(packagesRootPath, sanitizePathSegment(extensionId), sanitizePathSegment(version));
+    const packagePath = PathUtils.join(
+      packageDirectory,
+      `${sanitizePathSegment(recipe.name, "chrome-extension")}.xpi`
+    );
+
+    await ensureDirectory(packageDirectory);
+    await zipDirectoryToFile(extractDirectory, packagePath);
+
+    return {
+      recipe,
+      manifest: transformedManifest,
+      packagePath
+    };
+  }
+
+  async installCompatExtensionPackage(packageInfo) {
+    const addon = await finalizeAddonInstall(
+      await installAddonFromFile(packageInfo.packagePath)
+    );
+
+    return createCompatExtensionRecord({
+      extensionId: packageInfo.recipe.extensionId,
+      recipeId: packageInfo.recipe.recipeId,
+      geckoId: packageInfo.recipe.geckoId,
+      name: packageInfo.manifest.name ?? packageInfo.recipe.name,
+      chromeStoreUrl: packageInfo.recipe.chromeStoreUrl,
+      installedVersion: addon?.version ?? packageInfo.manifest.version,
+      enabled: true,
+      active: Boolean(addon?.isActive ?? true),
+      installState: "installed",
+      artifactPath: packageInfo.packagePath,
+      installedAt: Date.now(),
+      updatedAt: Date.now(),
+      lastError: null
+    });
+  }
+
+  async installChromeStoreExtension(extensionId, currentRecord = null) {
+    const packageInfo = await this.prepareCompatExtensionPackage(extensionId);
+    const nextRecord = await this.installCompatExtensionPackage(packageInfo);
+
+    return createCompatExtensionRecord({
+      ...currentRecord,
+      ...nextRecord,
+      artifactPath: packageInfo.packagePath,
+      enabled: currentRecord?.enabled ?? true
+    });
+  }
+
+  async setCompatExtensionEnabled(record, enabled, experimentalMode) {
+    const addonManager = addonManagerRef();
+    const addon = record?.geckoId ? await addonManager?.getAddonByID?.(record.geckoId) : null;
+
+    if (addon) {
+      await setAddonEnabledState(addon, experimentalMode && enabled);
+    }
+
+    return this.syncCompatExtensionRecord(
+      {
+        ...record,
+        enabled: enabled === true
+      },
+      {
+        experimentalMode,
+        applyMode: false
+      }
+    );
+  }
+
+  async removeCompatExtension(record) {
+    const addonManager = addonManagerRef();
+    const addon = record?.geckoId ? await addonManager?.getAddonByID?.(record.geckoId) : null;
+
+    if (addon?.uninstall) {
+      await addon.uninstall();
+    }
+
+    if (record?.artifactPath) {
+      await removePath(PathUtils.parent(record.artifactPath), { recursive: true });
+    }
+  }
+
+  async checkCompatExtensionUpdates(records) {
+    const nextRecords = [];
+
+    for (const record of records ?? []) {
+      const nextRecord = await this.checkCompatExtensionUpdate(record);
+      nextRecords.push(nextRecord);
+    }
+
+    return nextRecords;
+  }
+
+  async checkCompatExtensionUpdate(record) {
+    const recipe = getCompatRecipe(record?.extensionId ?? "");
+
+    if (!recipe) {
+      return createCompatExtensionRecord({
+        ...record,
+        updateAvailableVersion: null,
+        lastCheckedAt: Date.now()
+      });
+    }
+
+    const downloadedPackage = await this.downloadChromeStorePackage(recipe.extensionId);
+    const rootPath = compatWorkRootPath();
+
+    if (!rootPath) {
+      throw new Error("Nodely compat updates need profile storage to be available.");
+    }
+
+    const probeDirectory = PathUtils.join(rootPath, sanitizePathSegment(recipe.extensionId), "probe");
+    const zipPath = PathUtils.join(probeDirectory, "source.zip");
+
+    await removePath(probeDirectory, { recursive: true });
+    await ensureDirectory(probeDirectory);
+    await IOUtils.write(zipPath, downloadedPackage.zipBytes);
+
+    const manifest = await readZipManifest(zipPath);
+    const updateAvailableVersion =
+      compareVersionStrings(manifest.version, record.installedVersion ?? "") > 0
+        ? manifest.version
+        : null;
+
+    return createCompatExtensionRecord({
+      ...record,
+      name: manifest.name ?? record.name,
+      updateAvailableVersion,
+      lastCheckedAt: Date.now(),
+      lastError: null
+    });
   }
 
   openLocalFile(filePath) {

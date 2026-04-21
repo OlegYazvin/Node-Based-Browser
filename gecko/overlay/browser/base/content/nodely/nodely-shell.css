@@ -415,8 +415,33 @@
   position: relative;
 }
 
+.nodely-shell__button.has-icon-label,
+.nodely-shell__primary.has-icon-label,
+.nodely-shell__drawer-pill.has-icon-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nodely-shell__button.has-icon svg,
+.nodely-shell__primary.has-icon svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.nodely-shell__button.has-icon-label span,
+.nodely-shell__primary.has-icon-label span,
+.nodely-shell__drawer-pill.has-icon-label span {
+  line-height: 1;
+}
+
 .nodely-shell__button--utility {
   padding-inline: 8px;
+}
+
+.nodely-shell__button--extensions {
+  padding-inline: 9px;
 }
 
 .nodely-shell__button:hover,
@@ -708,6 +733,11 @@
   border-radius: 12px;
   border: 1px solid var(--nodely-focus-hint-border);
   background: var(--nodely-focus-hint-bg);
+}
+
+.nodely-shell__compat-panel {
+  border-color: rgba(70, 102, 151, 0.26);
+  background: rgba(244, 248, 255, 0.96);
 }
 
 .nodely-shell__inline-panel-heading strong {
@@ -1581,6 +1611,10 @@
   width: 408px;
 }
 
+.nodely-shell__drawer--extensions {
+  width: 432px;
+}
+
 .nodely-shell__drawer-row--tree {
   grid-template-columns: minmax(0, 1fr) max-content;
   background: var(--nodely-button-bg);
@@ -1607,6 +1641,15 @@
 
 .nodely-shell__drawer-row--stacked {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.nodely-shell__drawer-row--extensions-toggle {
+  background: rgba(244, 248, 255, 0.94);
+}
+
+.nodely-shell__drawer-row--error {
+  background: rgba(255, 238, 238, 0.95);
+  border-color: rgba(182, 73, 73, 0.28);
 }
 
 .nodely-shell__drawer-action-row {
@@ -1638,10 +1681,27 @@
   font-size: 11.5px;
 }
 
+.nodely-shell__drawer-note {
+  font-size: 10.5px;
+  color: #9b4332;
+}
+
 .nodely-shell__drawer-link span,
 .nodely-shell__drawer-empty {
   font-size: 11px;
   color: var(--nodely-muted);
+}
+
+.nodely-shell__drawer-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+}
+
+.nodely-shell__drawer-toggle input {
+  width: 16px;
+  height: 16px;
 }
 
 .nodely-shell__drawer-folder-header {

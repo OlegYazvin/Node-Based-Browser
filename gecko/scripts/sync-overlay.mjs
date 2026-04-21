@@ -226,6 +226,13 @@ function patchFirefoxDefaultsContents(contents) {
     );
   }
 
+  if (!next.includes('pref("xpinstall.signatures.required", false);')) {
+    next = next.replace(
+      'pref("xpinstall.signatures.required", true);',
+      'pref("xpinstall.signatures.required", false);'
+    );
+  }
+
   return next;
 }
 

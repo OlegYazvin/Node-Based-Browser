@@ -121,3 +121,113 @@ describe("BrowserBasicsBridge persistent storage prompt handling", () => {
     });
   });
 });
+
+describe("BrowserBasicsBridge compat extension management", () => {
+  it("syncs managed compat add-ons against Gecko add-on state", async () => {
+    const windowRef = {
+      gBrowser: {
+        selectedBrowser: null,
+        tabContainer: {
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn()
+        }
+      },
+      PopupNotifications: {
+        getNotification: vi.fn(() => null),
+        panel: {
+          state: "closed"
+        }
+      }
+    };
+    const addon = {
+      id: "kondo.chrome-compat@nodely.browser",
+      version: "1.12.1",
+      isActive: true,
+      userDisabled: false
+    };
+    Object.defineProperty(globalThis, "AddonManager", {
+      configurable: true,
+      value: {
+        getAddonByID: vi.fn(async (id) =>
+          id === "kondo.chrome-compat@nodely.browser" ? addon : null
+        )
+      }
+    });
+
+    const bridge = new BrowserBasicsBridge(windowRef as any);
+    const synced = await bridge.syncCompatExtensionsState({
+      experimentalMode: true,
+      extensions: [
+        {
+          extensionId: "kojhnafkiednagnljfgakalcbfbklbdk",
+          recipeId: "kondo",
+          geckoId: "kondo.chrome-compat@nodely.browser",
+          name: "Kondo",
+          installedVersion: "1.0.0",
+          enabled: true
+        }
+      ]
+    });
+
+    expect(synced.extensions[0]).toEqual(
+      expect.objectContaining({
+        installedVersion: "1.12.1",
+        installState: "installed",
+        active: true
+      })
+    );
+  });
+
+  it("updates the desired enable state even when experimental mode is off", async () => {
+    const addon = {
+      disable: vi.fn(async () => {}),
+      enable: vi.fn(async () => {}),
+      isActive: false,
+      userDisabled: true,
+      version: "1.12.1"
+    };
+    Object.defineProperty(globalThis, "AddonManager", {
+      configurable: true,
+      value: {
+        getAddonByID: vi.fn(async () => addon)
+      }
+    });
+
+    const bridge = new BrowserBasicsBridge({
+      gBrowser: {
+        selectedBrowser: null,
+        tabContainer: {
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn()
+        }
+      },
+      PopupNotifications: {
+        getNotification: vi.fn(() => null),
+        panel: {
+          state: "closed"
+        }
+      }
+    } as any);
+
+    const record = await bridge.setCompatExtensionEnabled(
+      {
+        extensionId: "kojhnafkiednagnljfgakalcbfbklbdk",
+        recipeId: "kondo",
+        geckoId: "kondo.chrome-compat@nodely.browser",
+        name: "Kondo",
+        installedVersion: "1.12.1",
+        enabled: true
+      },
+      false,
+      false
+    );
+
+    expect(addon.disable).toHaveBeenCalledTimes(1);
+    expect(record).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        active: false
+      })
+    );
+  });
+});

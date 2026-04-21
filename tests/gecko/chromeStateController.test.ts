@@ -14,8 +14,15 @@ import {
 function makeRuntimeManager() {
   return {
     callbacks: {},
+    window: {
+      gBrowser: {
+        selectedTab: null,
+        getIcon: vi.fn(() => null)
+      }
+    },
     attach: vi.fn(),
     tabForNode: vi.fn((_nodeId?: string) => null as { id: string } | null),
+    nodeIdForTab: vi.fn((_tab?: unknown) => null as string | null),
     currentUrlForNode: vi.fn((_nodeId?: string) => null as string | null),
     loadNode: vi.fn(),
     ensureRuntime: vi.fn(),
@@ -29,6 +36,16 @@ function makeBasicsBridge() {
   return {
     callbacks: {},
     attach: vi.fn(async () => {}),
+    syncCompatExtensionsState: vi.fn(async (state) => state),
+    installChromeStoreExtension: vi.fn(async (_extensionId, _record) => null),
+    setCompatExtensionEnabled: vi.fn(async (record, enabled, experimentalMode) => ({
+      ...record,
+      enabled,
+      active: experimentalMode && enabled,
+      installState: "installed"
+    })),
+    removeCompatExtension: vi.fn(async () => {}),
+    checkCompatExtensionUpdates: vi.fn(async (records) => records),
     pageCommand: vi.fn(),
     findInPage: vi.fn(),
     findAgain: vi.fn(),
@@ -60,6 +77,100 @@ function makeBasicsBridge() {
 }
 
 describe("ChromeStateController Gecko startup/runtime flow", () => {
+  it("persists experimental Chrome extension mode and installs a managed compat add-on", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://chromewebstore.google.com/detail/kondo/kojhnafkiednagnljfgakalcbfbklbdk",
+      input: "https://chromewebstore.google.com/detail/kondo/kojhnafkiednagnljfgakalcbfbklbdk",
+      query: null,
+      origin: "omnibox-url"
+    });
+    let compatState = {
+      experimentalMode: false,
+      extensions: []
+    };
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const compatExtensionsStore = {
+      loadState: vi.fn(async () => compatState),
+      saveState: vi.fn(async (nextState) => {
+        compatState = nextState;
+        return nextState;
+      })
+    };
+    const basicsBridge = makeBasicsBridge();
+    const runtimeManager = makeRuntimeManager();
+    runtimeManager.window.gBrowser.selectedTab = {
+      label: "Kondo",
+      linkedBrowser: {
+        currentURI: {
+          spec: "https://app.trykondo.com/"
+        },
+        contentTitle: "Kondo"
+      }
+    };
+    runtimeManager.window.gBrowser.getIcon.mockReturnValue("https://app.trykondo.com/favicon.ico");
+    basicsBridge.installChromeStoreExtension.mockResolvedValue({
+      extensionId: "kojhnafkiednagnljfgakalcbfbklbdk",
+      recipeId: "kondo",
+      geckoId: "kondo.chrome-compat@nodely.browser",
+      name: "Kondo",
+      chromeStoreUrl:
+        "https://chromewebstore.google.com/detail/kondo/kojhnafkiednagnljfgakalcbfbklbdk",
+      installedVersion: "1.12.1",
+      enabled: true,
+      active: true,
+      installState: "installed",
+      artifactPath: "/tmp/kondo.xpi"
+    });
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      compatExtensionsStore,
+      runtimeManager,
+      basicsBridge
+    });
+
+    await controller.initialize();
+    await controller.setExperimentalChromeExtensionsEnabled(true);
+    await controller.installChromeStoreExtension("kojhnafkiednagnljfgakalcbfbklbdk");
+
+    expect(compatExtensionsStore.saveState).toHaveBeenCalled();
+    expect(basicsBridge.installChromeStoreExtension).toHaveBeenCalledWith(
+      "kojhnafkiednagnljfgakalcbfbklbdk",
+      null
+    );
+    expect(controller.getState().chrome.compatExtensions).toEqual(
+      expect.objectContaining({
+        experimentalMode: true,
+        extensions: [
+          expect.objectContaining({
+            name: "Kondo",
+            installState: "installed",
+            installedVersion: "1.12.1"
+          })
+        ]
+      })
+    );
+    expect(workspace.nodes).toHaveLength(2);
+    expect(findNode(workspace, workspace.selectedNodeId)?.url).toBe("https://app.trykondo.com/");
+    expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(
+      workspace.selectedNodeId,
+      runtimeManager.window.gBrowser.selectedTab
+    );
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(workspace.selectedNodeId);
+  });
+
   it("restores the selected saved node into a runtime on initialize", async () => {
     let workspace = createRootNode(createEmptyWorkspace());
     const root = workspace.nodes[0];
@@ -82,6 +193,7 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
+      compatExtensionsStore: null,
       runtimeManager,
       basicsBridge: makeBasicsBridge()
     });
@@ -112,6 +224,7 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
+      compatExtensionsStore: null,
       runtimeManager,
       basicsBridge: makeBasicsBridge()
     });
@@ -153,6 +266,7 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
+      compatExtensionsStore: null,
       runtimeManager,
       basicsBridge: makeBasicsBridge()
     });
@@ -206,6 +320,7 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
+      compatExtensionsStore: null,
       runtimeManager: makeRuntimeManager(),
       basicsBridge
     });
@@ -256,6 +371,7 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
+      compatExtensionsStore: null,
       runtimeManager: makeRuntimeManager(),
       basicsBridge: makeBasicsBridge()
     });
@@ -306,6 +422,7 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
+      compatExtensionsStore: null,
       runtimeManager,
       basicsBridge: makeBasicsBridge()
     });

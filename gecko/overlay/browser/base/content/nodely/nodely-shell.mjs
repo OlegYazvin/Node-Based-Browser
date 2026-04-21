@@ -12,6 +12,10 @@ import {
   treeDisplayTitle,
   treeHasInitializedPage
 } from "./domain.mjs";
+import {
+  resolveChromeStorePageSupport,
+  resolveCompatExtensionRecord
+} from "./chrome-extension-compat.mjs";
 import "./nodely-graph-surface.mjs";
 
 const HTML_NS = "http://www.w3.org/1999/xhtml";
@@ -53,6 +57,18 @@ function iconTree(filled = false) {
       fill: filled ? "currentColor" : "none",
       stroke: "currentColor",
       "stroke-width": "1.35",
+      "stroke-linejoin": "round"
+    }
+  ]);
+}
+
+function iconExtension() {
+  return createIcon([
+    {
+      d: "M8.45 3.4a1.55 1.55 0 1 1 3.1 0v1.05h1.95c.88 0 1.6.72 1.6 1.6V8h1.05a1.55 1.55 0 1 1 0 3.1H15.1v2.85c0 .88-.72 1.6-1.6 1.6h-2.85V14.5a1.55 1.55 0 1 0-3.1 0v1.05H6.05c-.88 0-1.6-.72-1.6-1.6V11.1H3.4a1.55 1.55 0 1 1 0-3.1h1.05V6.05c0-.88.72-1.6 1.6-1.6h2.4V3.4Z",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.3",
       "stroke-linejoin": "round"
     }
   ]);
@@ -343,6 +359,11 @@ export class NodelyShell extends HTMLElement {
       "aside",
       "nodely-shell__drawer nodely-shell__drawer--recover"
     );
+    this.extensionsDrawer = createHtmlElement(
+      this.ownerDocument,
+      "aside",
+      "nodely-shell__drawer nodely-shell__drawer--extensions"
+    );
     this.treesDrawer = createHtmlElement(
       this.ownerDocument,
       "aside",
@@ -374,6 +395,7 @@ export class NodelyShell extends HTMLElement {
       this.favoritesDrawer,
       this.downloadsDrawer,
       this.recoverDrawer,
+      this.extensionsDrawer,
       this.treesDrawer,
       this.contextMenu,
       this.promptStack,
@@ -397,6 +419,8 @@ export class NodelyShell extends HTMLElement {
     this.favoritesDrawer.addEventListener("submit", (event) => this.handleFavoritesSubmit(event));
     this.downloadsDrawer.addEventListener("click", (event) => this.handleDownloadsClick(event));
     this.recoverDrawer.addEventListener("click", (event) => this.handleRecoverClick(event));
+    this.extensionsDrawer.addEventListener("click", (event) => this.handleExtensionsClick(event));
+    this.extensionsDrawer.addEventListener("change", (event) => this.handleExtensionsChange(event));
     this.treesDrawer.addEventListener("click", (event) => this.handleTreesClick(event));
     this.treesDrawer.addEventListener("focusout", (event) => this.handleTreesFocusOut(event));
     this.treesDrawer.addEventListener("submit", (event) => this.handleTreesSubmit(event));
@@ -888,6 +912,7 @@ export class NodelyShell extends HTMLElement {
     this.renderFavoritesDrawer();
     this.renderDownloadsDrawer(workspace);
     this.renderRecoverDrawer(workspace);
+    this.renderExtensionsDrawer();
     this.renderTreesDrawer(workspace, activeFavoriteIds);
     this.renderTreePreview(workspace);
     this.renderContextMenu(workspace);
@@ -996,6 +1021,11 @@ export class NodelyShell extends HTMLElement {
       createActionButton(this.ownerDocument, "Favorites", `nodely-shell__button${this.drawer === "favorites" ? " is-active" : ""}`, {
         action: "toggle-drawer",
         dataset: { drawer: "favorites" }
+      }),
+      createActionButton(this.ownerDocument, "Extensions", `nodely-shell__button nodely-shell__button--extensions${this.drawer === "extensions" ? " is-active" : ""}`, {
+        action: "toggle-drawer",
+        dataset: { drawer: "extensions" },
+        icon: iconExtension()
       }),
       createCountButton(this.ownerDocument, "Downloads", artifactCount, `nodely-shell__button${this.drawer === "downloads" ? " is-active" : ""}`, {
         action: "toggle-drawer",
@@ -1133,6 +1163,17 @@ export class NodelyShell extends HTMLElement {
     const treeCounts = selectedRoot ? summarizeTreeContents(workspace, selectedRoot.id) : { pageCount: 0, artifactCount: 0 };
     const activeTabNodeId = isArtifactNode(selectedNode) ? findOwningPageNode(workspace, selectedNode)?.id ?? null : selectedNode.id;
     const isFocusView = workspace.prefs.viewMode === "focus";
+    const compatExtensionsState = this.state.chrome?.compatExtensions ?? {
+      experimentalMode: false,
+      extensions: [],
+      busyExtensionId: null,
+      busyAction: null,
+      checkingUpdates: false,
+      lastActionError: null
+    };
+    const chromeStorePage = !isArtifactNode(selectedNode)
+      ? resolveChromeStorePageSupport(selectedNode.url)
+      : null;
     const selectedNodeActions = createHtmlElement(
       this.ownerDocument,
       "div",
@@ -1357,6 +1398,12 @@ export class NodelyShell extends HTMLElement {
         );
         printPanel.append(heading, actions);
         pageActions.append(printPanel);
+      }
+
+      if (chromeStorePage) {
+        pageActions.append(
+          this.renderChromeStoreCompatPanel(chromeStorePage, compatExtensionsState)
+        );
       }
     }
 
@@ -1932,6 +1979,146 @@ export class NodelyShell extends HTMLElement {
     this.recoverDrawer.append(header, body);
   }
 
+  renderExtensionsDrawer() {
+    const compatExtensionsState = this.state.chrome?.compatExtensions ?? {
+      experimentalMode: false,
+      checkingUpdates: false,
+      busyExtensionId: null,
+      busyAction: null,
+      lastActionError: null,
+      extensions: []
+    };
+
+    this.extensionsDrawer.hidden = this.drawer !== "extensions";
+    this.extensionsDrawer.replaceChildren();
+
+    const header = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-header");
+    const title = createHtmlElement(this.ownerDocument, "strong");
+    title.textContent = "Extensions";
+    const headerActions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-header-actions");
+    headerActions.append(
+      createActionButton(this.ownerDocument, "Check Updates", "nodely-shell__drawer-pill", {
+        action: "check-compat-extension-updates",
+        disabled:
+          compatExtensionsState.checkingUpdates ||
+          compatExtensionsState.busyAction === "check-compat-extension-updates"
+      })
+    );
+    header.append(title, headerActions);
+
+    const body = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-body");
+    const toggleRow = createHtmlElement(
+      this.ownerDocument,
+      "div",
+      "nodely-shell__drawer-row nodely-shell__drawer-row--extensions-toggle"
+    );
+    const toggleCopy = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-link");
+    const toggleTitle = createHtmlElement(this.ownerDocument, "strong");
+    toggleTitle.textContent = "Experimental Chrome Extensions";
+    const toggleSubtitle = createHtmlElement(this.ownerDocument, "span");
+    toggleSubtitle.textContent = compatExtensionsState.experimentalMode
+      ? "Enabled. Supported Chrome Web Store pages can install into Nodely."
+      : "Off by default. Turn this on to install supported Chrome extensions like Kondo.";
+    toggleCopy.append(toggleTitle, toggleSubtitle);
+    const toggleLabel = createHtmlElement(this.ownerDocument, "label", "nodely-shell__drawer-toggle");
+    const toggleInput = createHtmlElement(this.ownerDocument, "input");
+    toggleInput.type = "checkbox";
+    toggleInput.checked = compatExtensionsState.experimentalMode;
+    toggleInput.dataset.action = "toggle-experimental-chrome-extensions";
+    toggleLabel.append(toggleInput);
+    toggleRow.append(toggleCopy, toggleLabel);
+    body.append(toggleRow);
+
+    if (compatExtensionsState.lastActionError) {
+      const errorRow = createHtmlElement(
+        this.ownerDocument,
+        "div",
+        "nodely-shell__drawer-row nodely-shell__drawer-row--error"
+      );
+      const copy = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-link");
+      const errorTitle = createHtmlElement(this.ownerDocument, "strong");
+      errorTitle.textContent = "Compat install error";
+      const errorBody = createHtmlElement(this.ownerDocument, "span");
+      errorBody.textContent = compatExtensionsState.lastActionError;
+      copy.append(errorTitle, errorBody);
+      errorRow.append(copy);
+      body.append(errorRow);
+    }
+
+    if (!compatExtensionsState.extensions.length) {
+      const empty = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-empty");
+      empty.textContent = "No Chrome Web Store compat extensions installed yet.";
+      body.append(empty);
+    } else {
+      compatExtensionsState.extensions.forEach((record) => {
+        const row = createHtmlElement(
+          this.ownerDocument,
+          "div",
+          "nodely-shell__drawer-row nodely-shell__drawer-row--extension"
+        );
+        const copy = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-link");
+        const heading = createHtmlElement(this.ownerDocument, "strong");
+        heading.textContent = record.name;
+        const summary = createHtmlElement(this.ownerDocument, "span");
+        const summaryParts = [];
+        if (record.installedVersion) {
+          summaryParts.push(`Installed ${record.installedVersion}`);
+        }
+        summaryParts.push(record.active ? "Active" : record.enabled ? "Ready" : "Disabled");
+        if (record.updateAvailableVersion) {
+          summaryParts.push(`Update ${record.updateAvailableVersion} available`);
+        } else if (record.lastCheckedAt) {
+          summaryParts.push(`Checked ${new Date(record.lastCheckedAt).toLocaleString()}`);
+        }
+        summary.textContent = summaryParts.join(" • ");
+        copy.append(heading, summary);
+
+        if (record.lastError) {
+          const error = createHtmlElement(this.ownerDocument, "span", "nodely-shell__drawer-note");
+          error.textContent = record.lastError;
+          copy.append(error);
+        }
+
+        const actions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__drawer-action-row");
+        actions.append(
+          createActionButton(
+            this.ownerDocument,
+            record.enabled ? "Disable" : "Enable",
+            "nodely-shell__drawer-pill",
+            {
+              action: record.enabled ? "disable-compat-extension" : "enable-compat-extension",
+              dataset: { extensionId: record.extensionId },
+              disabled: compatExtensionsState.busyExtensionId === record.extensionId
+            }
+          )
+        );
+
+        if (record.updateAvailableVersion) {
+          actions.append(
+            createActionButton(this.ownerDocument, "Update", "nodely-shell__primary", {
+              action: "install-chrome-store-extension",
+              dataset: { extensionId: record.extensionId },
+              disabled: compatExtensionsState.busyExtensionId === record.extensionId
+            })
+          );
+        }
+
+        actions.append(
+          createActionButton(this.ownerDocument, "Remove", "nodely-shell__drawer-pill is-danger", {
+            action: "remove-compat-extension",
+            dataset: { extensionId: record.extensionId },
+            disabled: compatExtensionsState.busyExtensionId === record.extensionId
+          })
+        );
+
+        row.append(copy, actions);
+        body.append(row);
+      });
+    }
+
+    this.extensionsDrawer.append(header, body);
+  }
+
   renderTreesDrawer(workspace, activeFavoriteIds = new Set()) {
     this.treesDrawer.hidden = this.drawer !== "trees";
     this.treesDrawer.replaceChildren();
@@ -2044,6 +2231,121 @@ export class NodelyShell extends HTMLElement {
 
     dialog.append(header, body);
     this.treePreviewDialog.append(backdrop, dialog);
+  }
+
+  renderChromeStoreCompatPanel(storePage, compatExtensionsState) {
+    const panel = createHtmlElement(this.ownerDocument, "div", "nodely-shell__inline-panel nodely-shell__compat-panel");
+    const heading = createHtmlElement(this.ownerDocument, "div", "nodely-shell__inline-panel-heading");
+    const title = createHtmlElement(this.ownerDocument, "strong");
+    title.textContent = "Chrome Web Store";
+    const subtitle = createHtmlElement(this.ownerDocument, "span");
+    subtitle.textContent = storePage.supported
+      ? `${storePage.recipe.name} is supported in Nodely's experimental Chrome-extension mode.`
+      : "This Chrome Web Store listing is not yet supported in Nodely.";
+    heading.append(title, subtitle);
+    panel.append(heading);
+
+    const actions = createHtmlElement(this.ownerDocument, "div", "nodely-shell__inline-actions");
+    const record = resolveCompatExtensionRecord(compatExtensionsState, storePage.extensionId);
+
+    if (!storePage.supported) {
+      actions.append(
+        createActionButton(this.ownerDocument, "Open Extensions", "nodely-shell__drawer-pill", {
+          action: "open-extensions-drawer"
+        })
+      );
+      panel.append(actions);
+      return panel;
+    }
+
+    const copy = createHtmlElement(this.ownerDocument, "p", "nodely-shell__prompt-card-copy");
+
+    if (!compatExtensionsState.experimentalMode) {
+      copy.textContent =
+        "Turn on Experimental Chrome Extensions to install this supported Chrome Web Store extension into Nodely.";
+      actions.append(
+        createActionButton(this.ownerDocument, "Enable Experimental Mode", "nodely-shell__primary", {
+          action: "enable-experimental-chrome-extensions"
+        }),
+        createActionButton(this.ownerDocument, "Open Extensions", "nodely-shell__drawer-pill", {
+          action: "open-extensions-drawer"
+        })
+      );
+      panel.append(copy, actions);
+      return panel;
+    }
+
+    if (!record || record.installState === "missing") {
+      copy.textContent =
+        "Nodely can download this Chrome Web Store package, convert it into a Gecko-compatible local add-on, and install it as a managed experimental extension.";
+      actions.append(
+        createActionButton(
+          this.ownerDocument,
+          compatExtensionsState.busyExtensionId === storePage.extensionId
+            ? "Installing…"
+            : storePage.recipe.storeLabel,
+          "nodely-shell__primary",
+          {
+            action: "install-chrome-store-extension",
+            dataset: { extensionId: storePage.extensionId },
+            disabled: compatExtensionsState.busyExtensionId === storePage.extensionId
+          }
+        ),
+        createActionButton(this.ownerDocument, "Open Extensions", "nodely-shell__drawer-pill", {
+          action: "open-extensions-drawer"
+        })
+      );
+      panel.append(copy, actions);
+      return panel;
+    }
+
+    copy.textContent = [
+      record.installedVersion ? `Installed ${record.installedVersion}` : "Installed",
+      record.active ? "active in Nodely" : record.enabled ? "ready to re-enable" : "disabled"
+    ].join(" • ");
+    panel.append(copy);
+
+    actions.append(
+      createActionButton(
+        this.ownerDocument,
+        record.enabled ? "Disable" : "Enable",
+        "nodely-shell__drawer-pill",
+        {
+          action: record.enabled ? "disable-compat-extension" : "enable-compat-extension",
+          dataset: { extensionId: record.extensionId },
+          disabled: compatExtensionsState.busyExtensionId === record.extensionId
+        }
+      )
+    );
+
+    if (record.updateAvailableVersion) {
+      actions.append(
+        createActionButton(
+          this.ownerDocument,
+          `Update to ${record.updateAvailableVersion}`,
+          "nodely-shell__primary",
+          {
+            action: "install-chrome-store-extension",
+            dataset: { extensionId: record.extensionId },
+            disabled: compatExtensionsState.busyExtensionId === record.extensionId
+          }
+        )
+      );
+    }
+
+    actions.append(
+      createActionButton(this.ownerDocument, "Remove", "nodely-shell__drawer-pill is-danger", {
+        action: "remove-compat-extension",
+        dataset: { extensionId: record.extensionId },
+        disabled: compatExtensionsState.busyExtensionId === record.extensionId
+      }),
+      createActionButton(this.ownerDocument, "Open Extensions", "nodely-shell__drawer-pill", {
+        action: "open-extensions-drawer"
+      })
+    );
+    panel.append(actions);
+
+    return panel;
   }
 
   renderContextMenu(workspace) {
@@ -2314,6 +2616,8 @@ export class NodelyShell extends HTMLElement {
         return this.downloadsDrawer;
       case "recover":
         return this.recoverDrawer;
+      case "extensions":
+        return this.extensionsDrawer;
       case "trees":
         return this.treesDrawer;
       default:
@@ -2326,6 +2630,7 @@ export class NodelyShell extends HTMLElement {
       this.favoritesDrawer,
       this.downloadsDrawer,
       this.recoverDrawer,
+      this.extensionsDrawer,
       this.treesDrawer
     ]) {
       drawer?.style?.removeProperty("left");
@@ -2740,6 +3045,42 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if (action === "open-extensions-drawer") {
+      this.drawer = "extensions";
+      this.render();
+      return;
+    }
+
+    if (action === "enable-experimental-chrome-extensions") {
+      this.controller?.setExperimentalChromeExtensionsEnabled(true);
+      return;
+    }
+
+    if (action === "install-chrome-store-extension") {
+      this.controller?.installChromeStoreExtension(button.dataset.extensionId);
+      return;
+    }
+
+    if (action === "enable-compat-extension") {
+      this.controller?.setCompatExtensionEnabled(button.dataset.extensionId, true);
+      return;
+    }
+
+    if (action === "disable-compat-extension") {
+      this.controller?.setCompatExtensionEnabled(button.dataset.extensionId, false);
+      return;
+    }
+
+    if (action === "remove-compat-extension") {
+      this.controller?.removeCompatExtension(button.dataset.extensionId);
+      return;
+    }
+
+    if (action === "check-compat-extension-updates") {
+      this.controller?.checkCompatExtensionUpdates();
+      return;
+    }
+
     if (action === "jump-node-suggestion") {
       void this.jumpToSuggestedNode(button.dataset.nodeId);
     }
@@ -2950,6 +3291,44 @@ export class NodelyShell extends HTMLElement {
       default:
         break;
     }
+  }
+
+  handleExtensionsClick(event) {
+    const button = event.target.closest("[data-action]");
+
+    if (!button) {
+      return;
+    }
+
+    switch (button.dataset.action) {
+      case "check-compat-extension-updates":
+        this.controller?.checkCompatExtensionUpdates();
+        break;
+      case "enable-compat-extension":
+        this.controller?.setCompatExtensionEnabled(button.dataset.extensionId, true);
+        break;
+      case "disable-compat-extension":
+        this.controller?.setCompatExtensionEnabled(button.dataset.extensionId, false);
+        break;
+      case "install-chrome-store-extension":
+        this.controller?.installChromeStoreExtension(button.dataset.extensionId);
+        break;
+      case "remove-compat-extension":
+        this.controller?.removeCompatExtension(button.dataset.extensionId);
+        break;
+      default:
+        break;
+    }
+  }
+
+  handleExtensionsChange(event) {
+    const input = event.target.closest("input[data-action='toggle-experimental-chrome-extensions']");
+
+    if (!input) {
+      return;
+    }
+
+    this.controller?.setExperimentalChromeExtensionsEnabled(input.checked);
   }
 
   handleTreesClick(event) {
@@ -3414,11 +3793,13 @@ function createActionButton(documentRef, text, className, { action = "", dataset
   button.disabled = disabled;
 
   if (icon) {
+    button.classList.add("has-icon");
     appendSvgIcon(documentRef, button, icon);
   }
 
   if (text) {
     if (icon) {
+      button.classList.add("has-icon-label");
       const label = createHtmlElement(documentRef, "span");
       label.textContent = text;
       button.append(label);

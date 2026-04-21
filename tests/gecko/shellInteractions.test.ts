@@ -215,6 +215,57 @@ describe("NodelyShell focus and context interactions", () => {
     expect(stopImmediatePropagation).toHaveBeenCalledTimes(1);
   });
 
+  it("dispatches the experimental Chrome extension enable action from the pagebar", () => {
+    const shell = new NodelyShell();
+    const setExperimentalChromeExtensionsEnabled = vi.fn();
+    shell.controller = {
+      setExperimentalChromeExtensionsEnabled
+    };
+
+    shell.handlePagebarClick({
+      target: {
+        closest: vi.fn((selector) =>
+          selector === "[data-action]"
+            ? {
+                dataset: {
+                  action: "enable-experimental-chrome-extensions"
+                }
+              }
+            : null
+        )
+      }
+    });
+
+    expect(setExperimentalChromeExtensionsEnabled).toHaveBeenCalledWith(true);
+  });
+
+  it("dispatches a Chrome Web Store compat install from the pagebar", () => {
+    const shell = new NodelyShell();
+    const installChromeStoreExtension = vi.fn();
+    shell.controller = {
+      installChromeStoreExtension
+    };
+
+    shell.handlePagebarClick({
+      target: {
+        closest: vi.fn((selector) =>
+          selector === "[data-action]"
+            ? {
+                dataset: {
+                  action: "install-chrome-store-extension",
+                  extensionId: "kojhnafkiednagnljfgakalcbfbklbdk"
+                }
+              }
+            : null
+        )
+      }
+    });
+
+    expect(installChromeStoreExtension).toHaveBeenCalledWith(
+      "kojhnafkiednagnljfgakalcbfbklbdk"
+    );
+  });
+
   it("keeps a freshly opened context menu available until the opening click cycle has passed", () => {
     const shell = new NodelyShell();
     shell.contextMenu = {

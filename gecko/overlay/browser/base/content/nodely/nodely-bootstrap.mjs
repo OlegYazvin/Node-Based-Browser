@@ -1,5 +1,6 @@
 import { BrowserBasicsBridge } from "./browser-basics-bridge.mjs";
 import { ChromeStateController } from "./chrome-state-controller.mjs";
+import { CompatExtensionsStore } from "./compat-extensions-store.mjs";
 import { FavoritesStore } from "./favorites-store.mjs";
 import { describeNodelyShellEligibility, NodeRuntimeManager } from "./node-runtime-manager.mjs";
 import { treeDisplayTitle } from "./domain.mjs";
@@ -28,6 +29,9 @@ const CHILD_SMOKE_URL =
   "data:text/html,%3Ctitle%3ENodely%20Smoke%20Child%3C%2Ftitle%3E%3Ch1%3EChild%3C%2Fh1%3E";
 const FOREIGN_TAB_SMOKE_URL =
   "data:text/html,%3Ctitle%3ENodely%20Smoke%20Foreign%20Tab%3C%2Ftitle%3E%3Ch1%3EForeign%20Tab%3C%2Fh1%3E";
+const KONDO_CHROME_STORE_URL =
+  "https://chromewebstore.google.com/detail/kondo/kojhnafkiednagnljfgakalcbfbklbdk";
+const KONDO_EXTENSION_ID = "kojhnafkiednagnljfgakalcbfbklbdk";
 const SMOKE_WAIT_TIMEOUT_MS = 15_000;
 let bootstrapRequested = false;
 let bootstrapComplete = false;
@@ -229,6 +233,7 @@ function configureNodelyStartupPrefs() {
   setPref("string", "browser.startup.homepage_override.mstone", "ignore");
   setPref("bool", "browser.aboutwelcome.enabled", false);
   setPref("bool", "browser.newtabpage.enabled", false);
+  setPref("bool", "xpinstall.signatures.required", false);
 }
 
 function waitForBrowserDelayedStartup() {
@@ -491,6 +496,23 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         selectedTabMatchesSelection:
           selectedNode == null ? selectedTabNodeId == null : selectedTabNodeId === selectedNode.id
       },
+      compatExtensions: {
+        experimentalMode: Boolean(state.chrome?.compatExtensions?.experimentalMode),
+        recordCount: state.chrome?.compatExtensions?.extensions?.length ?? 0,
+        busyExtensionId: state.chrome?.compatExtensions?.busyExtensionId ?? null,
+        busyAction: state.chrome?.compatExtensions?.busyAction ?? null,
+        lastActionError: state.chrome?.compatExtensions?.lastActionError ?? null,
+        records:
+          state.chrome?.compatExtensions?.extensions?.map?.((record) => ({
+            extensionId: record.extensionId,
+            geckoId: record.geckoId,
+            installedVersion: record.installedVersion,
+            updateAvailableVersion: record.updateAvailableVersion,
+            enabled: record.enabled,
+            active: record.active,
+            installState: record.installState
+          })) ?? []
+      },
       ui: {
         surfaceClosePresent: Boolean(surfaceCloseButton),
         surfaceCloseLabel: surfaceCloseButton?.textContent?.trim() ?? "",
@@ -567,6 +589,23 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
             shell.treesDrawer?.querySelectorAll?.('[data-action="toggle-tree-favorite"]')?.length ?? 0,
           rootRowCount:
             shell.treesDrawer?.querySelectorAll?.('form[data-root-id]')?.length ?? 0
+        },
+        compatExtensions: {
+          installButtonPresent: Boolean(
+            document.querySelector(
+              `[data-action="install-chrome-store-extension"][data-extension-id="${KONDO_EXTENSION_ID}"]`
+            )
+          ),
+          disableButtonPresent: Boolean(
+            document.querySelector(
+              `[data-action="disable-compat-extension"][data-extension-id="${KONDO_EXTENSION_ID}"]`
+            )
+          ),
+          drawerTogglePresent: Boolean(
+            shell.extensionsDrawer?.querySelector?.(
+              "input[data-action='toggle-experimental-chrome-extensions']"
+            )
+          )
         },
         contextMenu: {
           visible: Boolean(contextMenu && !contextMenu.hidden),
@@ -679,6 +718,10 @@ async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenari
         return;
       case "native-urlbar-overlay":
         await runNativeUrlbarOverlayScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "compat-kondo-install":
+        await runCompatKondoInstallScenario({ controller });
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       default:
@@ -1238,6 +1281,62 @@ async function runNativeUrlbarOverlayScenario() {
   }, "native urlbar suppressed");
 }
 
+async function runCompatKondoInstallScenario({ controller }) {
+  const targetUrl = smokeTargetUrl() || KONDO_CHROME_STORE_URL;
+
+  await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "compat scenario ready");
+
+  await controller.setExperimentalChromeExtensionsEnabled(true);
+  await controller.submitAddress(targetUrl);
+
+  await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+    const installButton = document.querySelector(
+      `[data-action="install-chrome-store-extension"][data-extension-id="${KONDO_EXTENSION_ID}"]`
+    );
+
+    return selectedNode?.url === targetUrl && Boolean(installButton);
+  }, "compat page ready");
+
+  const installButton = document.querySelector(
+    `[data-action="install-chrome-store-extension"][data-extension-id="${KONDO_EXTENSION_ID}"]`
+  );
+
+  if (!installButton) {
+    throw new Error("Smoke compat-kondo-install scenario could not find the install button.");
+  }
+
+  synthesizeMouseActivation(installButton);
+
+  await waitForSmokeState((state) => {
+    const compatRecord =
+      state.chrome?.compatExtensions?.extensions?.find?.(
+        (record) => record.extensionId === KONDO_EXTENSION_ID
+      ) ?? null;
+    const disableButton = document.querySelector(
+      `[data-action="disable-compat-extension"][data-extension-id="${KONDO_EXTENSION_ID}"]`
+    );
+
+    return (
+      compatRecord?.installState === "installed" &&
+      compatRecord?.active === true &&
+      compatRecord?.installedVersion &&
+      Boolean(disableButton)
+    );
+  }, "compat extension install");
+}
+
 async function runFocusCloseAndSelectRootScenario({ shell }) {
   const readyState = await waitForSmokeState((state) => {
     const selectedNode = state.workspace?.nodes?.find?.(
@@ -1547,11 +1646,13 @@ function initializeNodelyShell() {
     const shell = document.createElementNS(HTML_NS, "nodely-shell");
     const workspaceStore = new WorkspaceStore({ namespace: workspaceNamespace() });
     const favoritesStore = new FavoritesStore();
+    const compatExtensionsStore = new CompatExtensionsStore();
     const runtimeManager = new NodeRuntimeManager(window);
     const basicsBridge = new BrowserBasicsBridge(window, { runtimeManager });
     const controller = new ChromeStateController({
       workspaceStore,
       favoritesStore,
+      compatExtensionsStore,
       runtimeManager,
       basicsBridge
     });
@@ -1567,6 +1668,7 @@ function initializeNodelyShell() {
       controller,
       workspaceStore,
       favoritesStore,
+      compatExtensionsStore,
       runtimeManager,
       basicsBridge
     });

@@ -33,16 +33,31 @@ import {
   upsertArtifactNode,
   updateNodeMetadata
 } from "./domain.mjs";
+import {
+  createEmptyCompatExtensionsState,
+  normalizeCompatExtensionsState,
+  removeCompatExtensionRecord,
+  replaceCompatExtensionRecord,
+  resolveCompatExtensionRecord
+} from "./chrome-extension-compat.mjs";
 
 export class ChromeStateController extends EventTarget {
-  constructor({ workspaceStore, favoritesStore, runtimeManager, basicsBridge }) {
+  constructor({
+    workspaceStore,
+    favoritesStore,
+    compatExtensionsStore = null,
+    runtimeManager,
+    basicsBridge
+  }) {
     super();
     this.workspaceStore = workspaceStore;
     this.favoritesStore = favoritesStore;
+    this.compatExtensionsStore = compatExtensionsStore;
     this.runtimeManager = runtimeManager;
     this.basicsBridge = basicsBridge;
     this.workspace = null;
     this.workspacePersistChain = Promise.resolve();
+    this.compatExtensionsPersistChain = Promise.resolve();
     this.treeTitleRefreshTimer = null;
     this.treeTitleRefreshChain = Promise.resolve();
     this.favorites = [];
@@ -112,6 +127,16 @@ export class ChromeStateController extends EventTarget {
     this.workspace = relayoutWorkspace(await this.workspaceStore.loadWorkspace());
     this.favorites = await this.favoritesStore.listFavorites();
     this.chrome.sessionRecovery = this.basicsBridge.getSessionRecoveryState?.() ?? createChromeState().sessionRecovery;
+    let compatExtensionsState =
+      (await this.compatExtensionsStore?.loadState?.()) ?? createEmptyCompatExtensionsState();
+    compatExtensionsState =
+      (await this.basicsBridge.syncCompatExtensionsState?.(compatExtensionsState)) ??
+      normalizeCompatExtensionsState(compatExtensionsState);
+    this.chrome = {
+      ...this.chrome,
+      compatExtensions: compatExtensionsState
+    };
+    await this.compatExtensionsStore?.saveState?.(compatExtensionsState);
     this.trace("initialize:workspace-loaded", {
       nodeCount: this.workspace.nodes.length,
       selectedNodeId: this.workspace.selectedNodeId,
@@ -146,6 +171,77 @@ export class ChromeStateController extends EventTarget {
 
     await this.workspacePersistChain;
     return persistedWorkspace;
+  }
+
+  setCompatExtensionsState(nextStateOrUpdater) {
+    const nextState = normalizeCompatExtensionsState(
+      typeof nextStateOrUpdater === "function"
+        ? nextStateOrUpdater(this.chrome.compatExtensions ?? createEmptyCompatExtensionsState())
+        : nextStateOrUpdater
+    );
+
+    this.chrome = {
+      ...this.chrome,
+      compatExtensions: nextState
+    };
+    this.emitStateChange();
+    return nextState;
+  }
+
+  async persistCompatExtensionsState(nextStateOrUpdater) {
+    let persistedState = this.chrome.compatExtensions ?? createEmptyCompatExtensionsState();
+
+    this.compatExtensionsPersistChain = this.compatExtensionsPersistChain
+      .catch(() => {})
+      .then(async () => {
+        const nextState =
+          typeof nextStateOrUpdater === "function"
+            ? nextStateOrUpdater(this.chrome.compatExtensions ?? createEmptyCompatExtensionsState())
+            : nextStateOrUpdater;
+        const savedState =
+          (await this.compatExtensionsStore?.saveState?.(nextState)) ??
+          normalizeCompatExtensionsState(nextState);
+        persistedState = this.setCompatExtensionsState(savedState);
+        return persistedState;
+      });
+
+    await this.compatExtensionsPersistChain;
+    return persistedState;
+  }
+
+  async runCompatExtensionsMutation(
+    { busyExtensionId = null, busyAction = null, checkingUpdates = false } = {},
+    mutation
+  ) {
+    const baselineState = this.setCompatExtensionsState((state) => ({
+      ...state,
+      busyExtensionId,
+      busyAction,
+      checkingUpdates,
+      lastActionError: null
+    }));
+
+    try {
+      const nextState = await mutation(normalizeCompatExtensionsState(baselineState));
+      return await this.persistCompatExtensionsState({
+        ...normalizeCompatExtensionsState(nextState),
+        busyExtensionId: null,
+        busyAction: null,
+        checkingUpdates: false,
+        lastActionError: null
+      });
+    } catch (error) {
+      const message = error?.message ?? String(error);
+      const failedState = {
+        ...normalizeCompatExtensionsState(this.chrome.compatExtensions),
+        busyExtensionId: null,
+        busyAction: null,
+        checkingUpdates: false,
+        lastActionError: message
+      };
+      await this.persistCompatExtensionsState(failedState);
+      throw error;
+    }
   }
 
   scheduleTreeTitleRefresh() {
@@ -429,6 +525,60 @@ export class ChromeStateController extends EventTarget {
     });
   }
 
+  async adoptForegroundCompatInstallTab(parentNodeId) {
+    const gBrowser = this.runtimeManager.window?.gBrowser ?? null;
+    const tab = gBrowser?.selectedTab ?? null;
+
+    if (!tab || this.runtimeManager.nodeIdForTab?.(tab)) {
+      return false;
+    }
+
+    const browser = tab.linkedBrowser ?? null;
+    const url = browser?.currentURI?.spec ?? null;
+
+    if (!url || url === "about:blank" || url === "about:newtab" || url === "about:home") {
+      return false;
+    }
+
+    const openerNode = findNode(this.workspace, parentNodeId ?? this.workspace.selectedNodeId);
+    const parentNode = isArtifactNode(openerNode) ? findOwningPageNode(this.workspace, openerNode) : openerNode;
+
+    if (!parentNode) {
+      return false;
+    }
+
+    let nextWorkspace = relayoutWorkspace(
+      createPageChildNode(this.workspace, parentNode.id, "compat-install", {
+        selectChild: true
+      })
+    );
+    let childNode = findNode(nextWorkspace, nextWorkspace.selectedNodeId);
+
+    if (!childNode) {
+      return false;
+    }
+
+    nextWorkspace = updateNodeMetadata(nextWorkspace, childNode.id, {
+      title: tab.label || browser?.contentTitle || "Untitled page",
+      url,
+      faviconUrl: gBrowser?.getIcon?.(tab) ?? null,
+      runtimeState: "live"
+    });
+    nextWorkspace = setSurfaceMode(nextWorkspace, "page");
+    await this.persistWorkspace(nextWorkspace);
+
+    childNode = findNode(nextWorkspace, childNode.id);
+    this.runtimeManager.adoptOpenedTab(childNode.id, tab);
+    this.runtimeManager.selectNode(childNode.id);
+    await this.refreshSelectedPermissions(nextWorkspace, childNode);
+    this.trace("compat-install-tab-adopted", {
+      parentId: parentNode.id,
+      childId: childNode.id,
+      url
+    });
+    return true;
+  }
+
   async updateNodePosition(nodeId, position) {
     const nextWorkspace = {
       ...this.workspace,
@@ -614,6 +764,120 @@ export class ChromeStateController extends EventTarget {
 
   async setSplitWidth(splitWidth) {
     await this.persistWorkspace(setSplitWidth(this.workspace, splitWidth));
+  }
+
+  async setExperimentalChromeExtensionsEnabled(enabled) {
+    return this.runCompatExtensionsMutation(
+      { busyAction: "toggle-experimental-chrome-extensions" },
+      async (currentState) =>
+        (await this.basicsBridge.syncCompatExtensionsState?.(
+          {
+            ...currentState,
+            experimentalMode: enabled === true
+          },
+          {
+            applyMode: true
+          }
+        )) ??
+        normalizeCompatExtensionsState({
+          ...currentState,
+          experimentalMode: enabled === true
+        })
+    );
+  }
+
+  async installChromeStoreExtension(extensionId) {
+    const parentNodeId = this.workspace?.selectedNodeId ?? null;
+
+    return this.runCompatExtensionsMutation(
+      { busyExtensionId: extensionId, busyAction: "install-chrome-store-extension" },
+      async (currentState) => {
+        if (!currentState.experimentalMode) {
+          throw new Error("Turn on Experimental Chrome Extensions before installing from the Chrome Web Store.");
+        }
+
+        const nextRecord = await this.basicsBridge.installChromeStoreExtension?.(
+          extensionId,
+          resolveCompatExtensionRecord(currentState, extensionId)
+        );
+
+        if (!nextRecord) {
+          throw new Error("Nodely could not install that Chrome extension.");
+        }
+
+        const nextState =
+          (await this.basicsBridge.syncCompatExtensionsState?.(
+            replaceCompatExtensionRecord(currentState, nextRecord),
+            {
+              applyMode: true
+            }
+          )) ??
+          replaceCompatExtensionRecord(currentState, nextRecord);
+
+        await this.adoptForegroundCompatInstallTab(parentNodeId);
+        return nextState;
+      }
+    );
+  }
+
+  async setCompatExtensionEnabled(extensionId, enabled) {
+    return this.runCompatExtensionsMutation(
+      {
+        busyExtensionId: extensionId,
+        busyAction: enabled ? "enable-compat-extension" : "disable-compat-extension"
+      },
+      async (currentState) => {
+        const currentRecord = resolveCompatExtensionRecord(currentState, extensionId);
+
+        if (!currentRecord) {
+          throw new Error("That experimental Chrome extension is not installed.");
+        }
+
+        const nextRecord = await this.basicsBridge.setCompatExtensionEnabled?.(
+          currentRecord,
+          enabled,
+          currentState.experimentalMode
+        );
+
+        if (!nextRecord) {
+          throw new Error("Nodely could not update that Chrome extension.");
+        }
+
+        return replaceCompatExtensionRecord(currentState, nextRecord);
+      }
+    );
+  }
+
+  async removeCompatExtension(extensionId) {
+    return this.runCompatExtensionsMutation(
+      { busyExtensionId: extensionId, busyAction: "remove-compat-extension" },
+      async (currentState) => {
+        const currentRecord = resolveCompatExtensionRecord(currentState, extensionId);
+
+        if (!currentRecord) {
+          return currentState;
+        }
+
+        await this.basicsBridge.removeCompatExtension?.(currentRecord);
+        return removeCompatExtensionRecord(currentState, extensionId);
+      }
+    );
+  }
+
+  async checkCompatExtensionUpdates() {
+    return this.runCompatExtensionsMutation(
+      { busyAction: "check-compat-extension-updates", checkingUpdates: true },
+      async (currentState) => {
+        const updatedRecords =
+          (await this.basicsBridge.checkCompatExtensionUpdates?.(currentState.extensions)) ??
+          currentState.extensions;
+
+        return normalizeCompatExtensionsState({
+          ...currentState,
+          extensions: updatedRecords
+        });
+      }
+    );
   }
 
   async restoreSelectedNodeRuntime() {
@@ -1104,7 +1368,8 @@ function createChromeState() {
     transientAuth: null,
     authPrompt: null,
     permissionPrompt: null,
-    externalProtocol: null
+    externalProtocol: null,
+    compatExtensions: createEmptyCompatExtensionsState()
   };
 }
 
