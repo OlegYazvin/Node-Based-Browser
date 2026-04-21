@@ -375,6 +375,7 @@ function snapshotLooksReady(snapshot, scenario = "") {
   const branchNextRemoved = snapshot.ui?.pageToolbar?.branchNextPresent === false;
   const topbarOrganizeMoved = snapshot.ui?.topbar?.organizePresent === false;
   const topbarFullscreenPresent = snapshot.ui?.topbar?.fullscreenPresent === true;
+  const topbarViewToggleNearBrand = snapshot.ui?.topbar?.viewSegmentedNearBrand === true;
   const treeStripIconsReady =
     (snapshot.ui?.treeStrip?.tabFaviconCount ?? 0) >= minimumTreeNodeCount &&
     (snapshot.ui?.treeStrip?.tabCloseCount ?? 0) >= minimumTreeNodeCount &&
@@ -409,6 +410,7 @@ function snapshotLooksReady(snapshot, scenario = "") {
     branchNextRemoved &&
     topbarOrganizeMoved &&
     topbarFullscreenPresent &&
+    topbarViewToggleNearBrand &&
     treeStripIconsReady &&
     canvasTreeLabelsReady &&
     graphPointerReady &&

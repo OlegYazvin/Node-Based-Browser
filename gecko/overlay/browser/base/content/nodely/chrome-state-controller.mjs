@@ -54,6 +54,8 @@ export class ChromeStateController extends EventTarget {
       onSessionRecoveryChanged: (sessionRecovery) =>
         this.handleSessionRecoveryChanged(sessionRecovery),
       onAuthPromptChanged: (authPrompt) => this.handleAuthPromptChanged(authPrompt),
+      onPermissionPromptChanged: (permissionPrompt) =>
+        this.handlePermissionPromptChanged(permissionPrompt),
       onExternalProtocolChanged: (externalProtocol) =>
         this.handleExternalProtocolChanged(externalProtocol),
       onBrowserCrashed: (crash) => this.handleBrowserCrashed(crash)
@@ -567,6 +569,21 @@ export class ChromeStateController extends EventTarget {
     this.emitStateChange();
   }
 
+  async createFavoriteFolder(title) {
+    this.favorites = await this.favoritesStore.createFolder(title);
+    this.emitStateChange();
+  }
+
+  async renameFavoriteFolder(folderId, title) {
+    this.favorites = await this.favoritesStore.renameFolder(folderId, title);
+    this.emitStateChange();
+  }
+
+  async moveFavoriteToFolder(favoriteId, folderId = null) {
+    this.favorites = await this.favoritesStore.moveFavoriteToFolder(favoriteId, folderId);
+    this.emitStateChange();
+  }
+
   async setViewMode(viewMode) {
     await this.persistWorkspace(setViewMode(this.workspace, viewMode));
   }
@@ -889,6 +906,14 @@ export class ChromeStateController extends EventTarget {
     }
   }
 
+  handlePermissionPromptChanged(permissionPrompt) {
+    this.chrome = {
+      ...this.chrome,
+      permissionPrompt: permissionPrompt?.open ? permissionPrompt : null
+    };
+    this.emitStateChange();
+  }
+
   handleExternalProtocolChanged(externalProtocol) {
     this.chrome = {
       ...this.chrome,
@@ -1036,6 +1061,36 @@ export class ChromeStateController extends EventTarget {
       });
     });
   }
+
+  async allowPermissionPrompt() {
+    if (await this.basicsBridge.resolvePermissionPrompt?.("allow")) {
+      this.chrome = {
+        ...this.chrome,
+        permissionPrompt: null
+      };
+      this.emitStateChange();
+    }
+  }
+
+  async blockPermissionPrompt() {
+    if (await this.basicsBridge.resolvePermissionPrompt?.("block")) {
+      this.chrome = {
+        ...this.chrome,
+        permissionPrompt: null
+      };
+      this.emitStateChange();
+    }
+  }
+
+  async dismissPermissionPrompt() {
+    if (await this.basicsBridge.dismissPermissionPrompt?.()) {
+      this.chrome = {
+        ...this.chrome,
+        permissionPrompt: null
+      };
+      this.emitStateChange();
+    }
+  }
 }
 
 function createChromeState() {
@@ -1048,6 +1103,7 @@ function createChromeState() {
     },
     transientAuth: null,
     authPrompt: null,
+    permissionPrompt: null,
     externalProtocol: null
   };
 }

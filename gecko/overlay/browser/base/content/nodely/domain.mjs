@@ -1265,6 +1265,9 @@ function orderedRoots(workspace) {
   const roots = sortNodesForSlots(findRoots(workspace));
   const selectedNode = findNode(workspace, workspace.selectedNodeId);
   const centerRootId = selectedNode?.rootId ?? roots[0]?.id ?? null;
+  const activityByRootId = new Map(
+    roots.map((root) => [root.id, summarizeTreeActivity(workspace, root.id)])
+  );
 
   if (!centerRootId) {
     return roots;
@@ -1279,8 +1282,62 @@ function orderedRoots(workspace) {
       return 1;
     }
 
-    return left.slotIndex - right.slotIndex || left.createdAt - right.createdAt;
+    const leftActivity = activityByRootId.get(left.id) ?? EMPTY_TREE_ACTIVITY;
+    const rightActivity = activityByRootId.get(right.id) ?? EMPTY_TREE_ACTIVITY;
+
+    return (
+      rightActivity.freshness - leftActivity.freshness ||
+      rightActivity.engagement - leftActivity.engagement ||
+      left.slotIndex - right.slotIndex ||
+      left.createdAt - right.createdAt
+    );
   });
+}
+
+const EMPTY_TREE_ACTIVITY = Object.freeze({
+  freshness: 0,
+  engagement: 0
+});
+
+function summarizeTreeActivity(workspace, rootId) {
+  let freshness = 0;
+  let engagement = 0;
+
+  for (const node of findTreeNodes(workspace, rootId)) {
+    freshness = Math.max(
+      freshness,
+      Number(node.lastActiveAt) || 0,
+      Number(node.lastVisitedAt) || 0,
+      Number(node.updatedAt) || 0
+    );
+
+    if (node.kind === "page") {
+      engagement += 1;
+
+      if (node.url) {
+        engagement += 1;
+      }
+
+      if (node.lastVisitedAt) {
+        engagement += 1.25;
+      }
+
+      if (node.lastActiveAt) {
+        engagement += 1.5;
+      }
+
+      if (node.id === workspace.selectedNodeId) {
+        engagement += 1.75;
+      }
+    } else {
+      engagement += 0.2;
+    }
+  }
+
+  return {
+    freshness,
+    engagement
+  };
 }
 
 function rootAnchorPolar(index) {
@@ -2035,8 +2092,25 @@ export function buildTreeFavoriteId(workspaceId, rootId) {
   return `tree:${workspaceId}:${rootId}`;
 }
 
+export function buildFavoriteFolderId() {
+  return `folder:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 9)}`;
+}
+
 export function sortFavorites(favorites) {
-  return [...favorites].sort((left, right) => right.updatedAt - left.updatedAt || left.title.localeCompare(right.title));
+  return [...favorites].sort((left, right) => {
+    if (left.kind === "folder" && right.kind !== "folder") {
+      return -1;
+    }
+
+    if (right.kind === "folder" && left.kind !== "folder") {
+      return 1;
+    }
+
+    return (
+      right.updatedAt - left.updatedAt ||
+      String(left.title ?? "").localeCompare(String(right.title ?? ""))
+    );
+  });
 }
 
 export function toggleFavorite(entries, favorite) {
@@ -2046,7 +2120,82 @@ export function toggleFavorite(entries, favorite) {
 }
 
 export function removeFavorite(entries, favoriteId) {
-  return sortFavorites(entries.filter((entry) => entry.id !== favoriteId));
+  const removedEntry = entries.find((entry) => entry.id === favoriteId) ?? null;
+
+  if (removedEntry?.kind !== "folder") {
+    return sortFavorites(entries.filter((entry) => entry.id !== favoriteId));
+  }
+
+  return sortFavorites(
+    entries
+      .filter((entry) => entry.id !== favoriteId)
+      .map((entry) =>
+        entry.folderId === favoriteId
+          ? {
+              ...entry,
+              folderId: null,
+              updatedAt: now()
+            }
+          : entry
+      )
+  );
+}
+
+export function createFavoriteFolder(entries, title) {
+  const normalizedTitle = normalizeOptionalTitle(title);
+
+  if (!normalizedTitle) {
+    return sortFavorites(entries);
+  }
+
+  return sortFavorites([
+    ...entries,
+    {
+      id: buildFavoriteFolderId(),
+      kind: "folder",
+      title: normalizedTitle,
+      updatedAt: now()
+    }
+  ]);
+}
+
+export function renameFavoriteFolder(entries, folderId, title) {
+  const normalizedTitle = normalizeOptionalTitle(title);
+
+  if (!normalizedTitle) {
+    return sortFavorites(entries);
+  }
+
+  return sortFavorites(
+    entries.map((entry) =>
+      entry.id === folderId && entry.kind === "folder"
+        ? {
+            ...entry,
+            title: normalizedTitle,
+            updatedAt: now()
+          }
+        : entry
+    )
+  );
+}
+
+export function moveFavoriteToFolder(entries, favoriteId, folderId = null) {
+  const normalizedFolderId =
+    folderId && entries.some((entry) => entry.id === folderId && entry.kind === "folder")
+      ? folderId
+      : null;
+
+  return sortFavorites(
+    entries.map((entry) =>
+      entry.id === favoriteId && entry.kind !== "folder"
+        ? {
+            ...entry,
+            folderId: normalizedFolderId,
+            updatedAt: now()
+          }
+        : entry
+    )
+  );
 }
 
 export function removeTreeFavorites(entries, workspaceId, rootId, nodeIds) {

@@ -1,6 +1,9 @@
 import {
+  createFavoriteFolder,
+  moveFavoriteToFolder,
   removeFavorite,
   removeNodeFavorites,
+  renameFavoriteFolder,
   removeTreeFavorites,
   sortFavorites,
   toggleFavorite
@@ -51,6 +54,18 @@ export class FavoritesStore {
 
   async removeFavorite(favoriteId) {
     return this.saveFavorites(removeFavorite(await this.listFavorites(), favoriteId));
+  }
+
+  async createFolder(title) {
+    return this.saveFavorites(createFavoriteFolder(await this.listFavorites(), title));
+  }
+
+  async renameFolder(folderId, title) {
+    return this.saveFavorites(renameFavoriteFolder(await this.listFavorites(), folderId, title));
+  }
+
+  async moveFavoriteToFolder(favoriteId, folderId = null) {
+    return this.saveFavorites(moveFavoriteToFolder(await this.listFavorites(), favoriteId, folderId));
   }
 
   async removeTreeFavorites(workspaceId, rootId, nodeIds) {

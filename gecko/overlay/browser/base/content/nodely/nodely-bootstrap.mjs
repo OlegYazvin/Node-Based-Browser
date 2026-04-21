@@ -250,6 +250,25 @@ function waitForBrowserDelayedStartup() {
   });
 }
 
+function actionAtElementCenter(element) {
+  if (!element?.getBoundingClientRect) {
+    return null;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  const probe = document.elementFromPoint(
+    rect.left + rect.width / 2,
+    rect.top + rect.height / 2
+  );
+
+  return probe?.closest?.("[data-action]")?.dataset?.action ?? null;
+}
+
 function installTestBridge({ shell, controller, workspaceStore, favoritesStore, runtimeManager, basicsBridge }) {
   if (!testingEnabled()) {
     return;
@@ -381,6 +400,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const branchNextButton = document.querySelector('[data-action="toggle-branch-next"]');
     const newChildButton = document.querySelector('[data-action="create-child-node"]');
     const treeEditButton = document.querySelector('[data-action="start-tree-rename"]');
+    const treeSeedButton = document.querySelector('.nodely-shell__tree-seed[data-action="toggle-composer"]');
     const aiChatTabs = document.querySelectorAll(".nodely-shell__tab--ai-chat");
     const tabFavicons = document.querySelectorAll(".nodely-shell__tab .nodely-shell__tab-favicon");
     const tabCloseButtons = document.querySelectorAll(".nodely-shell__tab-close");
@@ -389,6 +409,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const treeFavoriteButton = document.querySelector('.nodely-shell__tree-strip [data-action="toggle-tree-favorite"]');
     const topbarOrganizeButton = document.querySelector(".nodely-shell__topbar [data-action='auto-organize']");
     const topbarFullscreenButton = document.querySelector(".nodely-shell__topbar [data-action='toggle-fullscreen']");
+    const topbarViewSegmented = document.querySelector(".nodely-shell__brand .nodely-shell__segmented");
     const graphOrganizeButton = minimapToolbar?.querySelector('[data-action="auto-organize"]');
     const activeDrawerName = shell.drawer ?? null;
     const activeDrawerElement = activeDrawerName
@@ -489,6 +510,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         },
         treeStrip: {
           treeEditPresent: Boolean(treeEditButton),
+          treeSeedPresent: Boolean(treeSeedButton),
           aiChatTabCount: aiChatTabs?.length ?? 0,
           tabFaviconCount: tabFavicons?.length ?? 0,
           tabCloseCount: tabCloseButtons?.length ?? 0,
@@ -537,7 +559,8 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         },
         topbar: {
           organizePresent: Boolean(topbarOrganizeButton),
-          fullscreenPresent: Boolean(topbarFullscreenButton)
+          fullscreenPresent: Boolean(topbarFullscreenButton),
+          viewSegmentedNearBrand: Boolean(topbarViewSegmented)
         },
         treesDrawer: {
           favoriteButtonCount:
@@ -1003,6 +1026,10 @@ async function runTopbarDrawersScenario() {
     const trigger = document.querySelector('[data-action="toggle-drawer"][data-drawer="trees"]');
     const drawerRect = drawer?.getBoundingClientRect?.();
     const triggerRect = trigger?.getBoundingClientRect?.();
+    const firstTreeInput = document.querySelector('.nodely-shell__drawer--trees form[data-root-id] input[name="title"]');
+    const firstTreeShowButton = document.querySelector('.nodely-shell__drawer--trees [data-action="show-tree"]');
+    const firstTreeInputRect = firstTreeInput?.getBoundingClientRect?.();
+    const firstTreeShowRect = firstTreeShowButton?.getBoundingClientRect?.();
     const favoriteButtons =
       document.querySelectorAll('.nodely-shell__drawer--trees [data-action="toggle-tree-favorite"]')
         ?.length ?? 0;
@@ -1016,11 +1043,54 @@ async function runTopbarDrawersScenario() {
       !drawer.hidden &&
       trigger &&
       favoriteButtons === treeRows &&
+      (firstTreeInputRect == null ||
+        firstTreeShowRect == null ||
+        firstTreeShowRect.left >= firstTreeInputRect.right - 2) &&
       (drawerRect?.left ?? 0) <= (triggerRect?.right ?? 0) + 14 &&
       (drawerRect?.right ?? 0) >= (triggerRect?.left ?? 0) - 14 &&
       Math.abs((drawerRect?.top ?? 0) - ((triggerRect?.bottom ?? 0) + 8)) <= 14
     );
   }, "trees drawer anchored");
+
+  const treeShowButton = document.querySelector('.nodely-shell__drawer--trees [data-action="show-tree"]');
+
+  if (!treeShowButton) {
+    throw new Error("Smoke topbar-drawers scenario could not find a tree Show button.");
+  }
+
+  treeShowButton.click();
+  await waitForCondition(() => {
+    const dialog = document.querySelector(".nodely-shell__tree-preview-dialog");
+    const previewNode = document.querySelector('.nodely-shell__tree-preview-node[data-action="show-tree-node"]');
+    const closeButton = document.querySelector('.nodely-shell__tree-preview [data-action="close-tree-preview"]');
+
+    return (
+      dialog &&
+      previewNode &&
+      closeButton &&
+      actionAtElementCenter(previewNode) === "show-tree-node" &&
+      actionAtElementCenter(closeButton) === "close-tree-preview"
+    );
+  }, "tree preview clickable");
+
+  const closeTreePreviewButton = document.querySelector('.nodely-shell__tree-preview [data-action="close-tree-preview"]');
+  closeTreePreviewButton?.click();
+  await waitForCondition(
+    () => !document.querySelector(".nodely-shell__tree-preview-dialog"),
+    "tree preview closed"
+  );
+
+  const favoritePageButton = document.querySelector('[data-action="toggle-page-favorite"]');
+
+  if (!favoritePageButton) {
+    throw new Error("Smoke topbar-drawers scenario could not find the page favorite button.");
+  }
+
+  favoritePageButton.click();
+  await waitForCondition(() => {
+    const treeFavorite = document.querySelector('.nodely-shell__tree-favorite-link[data-action="open-favorite"]');
+    return treeFavorite && actionAtElementCenter(treeFavorite) === "open-favorite";
+  }, "tree favorite chip clickable");
 
   const downloadsButton = document.querySelector('[data-action="toggle-drawer"][data-drawer="downloads"]');
 

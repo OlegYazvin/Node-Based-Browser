@@ -194,6 +194,40 @@ function dispatchPromptEvent(windowRef, name, detail) {
   windowRef.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
+function formatPermissionPromptBody(notification, browser) {
+  const siteName =
+    notification?.options?.name ??
+    browser?.contentPrincipal?.siteOriginNoSuffix ??
+    principalOrigin(browser?.contentPrincipal) ??
+    safeSpec(browser?.currentURI) ??
+    "this site";
+  const rawMessage = String(notification?.message ?? "").trim();
+
+  if (rawMessage) {
+    return rawMessage.replace("<>", siteName);
+  }
+
+  return `Allow ${siteName} to store data in persistent storage?`;
+}
+
+function snapshotPermissionPrompt(notification, browser, nodeId = null) {
+  if (!notification || notification.id !== "persistent-storage") {
+    return null;
+  }
+
+  return {
+    open: true,
+    kind: "persistent-storage",
+    notificationId: notification.id,
+    nodeId,
+    requestingUrl: safeSpec(browser?.currentURI) ?? null,
+    title: notification.options?.name ?? browser?.contentTitle ?? "Persistent Storage Request",
+    body: formatPermissionPromptBody(notification, browser),
+    allowLabel: notification.mainAction?.label ?? "Allow",
+    blockLabel: notification.secondaryActions?.[0]?.label ?? "Block"
+  };
+}
+
 function isAuthPromptArgs(args) {
   const promptType = String(args?.promptType ?? "").toLowerCase();
   return Boolean(
@@ -394,10 +428,12 @@ export class BrowserBasicsBridge {
     this.attached = false;
     this.downloadObservers = [];
     this.seenDownloadIds = new Set();
+    this.activePermissionPrompt = null;
     this.lastFindQuery = "";
     this.handleUploadObserved = this.handleUploadObserved.bind(this);
     this.handleSessionStoreChanged = this.handleSessionStoreChanged.bind(this);
     this.handleAuthPromptState = this.handleAuthPromptState.bind(this);
+    this.handlePermissionPromptPanelState = this.handlePermissionPromptPanelState.bind(this);
     this.handleExternalProtocolState = this.handleExternalProtocolState.bind(this);
     this.handleBrowserCrashed = this.handleBrowserCrashed.bind(this);
   }
@@ -414,13 +450,22 @@ export class BrowserBasicsBridge {
 
     this.window.addEventListener("nodely-upload-observed", this.handleUploadObserved);
     this.window.addEventListener(AUTH_PROMPT_EVENT, this.handleAuthPromptState);
-    this.window.addEventListener(
-      EXTERNAL_PROTOCOL_EVENT,
-      this.handleExternalProtocolState
-    );
+    this.window.addEventListener(EXTERNAL_PROTOCOL_EVENT, this.handleExternalProtocolState);
     this.window.gBrowser?.tabContainer?.addEventListener(
       "oop-browser-crashed",
       this.handleBrowserCrashed
+    );
+    this.window.gBrowser?.tabContainer?.addEventListener(
+      "TabSelect",
+      this.handlePermissionPromptPanelState
+    );
+    this.window.PopupNotifications?.panel?.addEventListener(
+      "popupshown",
+      this.handlePermissionPromptPanelState
+    );
+    this.window.PopupNotifications?.panel?.addEventListener(
+      "popuphidden",
+      this.handlePermissionPromptPanelState
     );
 
     if (typeof ServicesRef?.obs?.addObserver === "function") {
@@ -443,6 +488,43 @@ export class BrowserBasicsBridge {
       this.observeDownloadList(lazy.Downloads?.PRIVATE),
     ]);
     this.handleSessionStoreChanged();
+    this.syncPermissionPromptState();
+  }
+
+  getActivePermissionNotification() {
+    const browser = this.window.gBrowser?.selectedBrowser ?? null;
+
+    return (
+      this.window.PopupNotifications?.getNotification?.("persistent-storage", browser) ??
+      this.window.PopupNotifications?.getNotification?.("persistent-storage") ??
+      null
+    );
+  }
+
+  syncPermissionPromptState({ hideNative = false } = {}) {
+    const browser = this.window.gBrowser?.selectedBrowser ?? null;
+    const notification = this.getActivePermissionNotification();
+    const promptSnapshot = snapshotPermissionPrompt(
+      notification,
+      browser,
+      this.runtimeManager?.nodeIdForBrowser?.(browser) ?? null
+    );
+
+    if (!promptSnapshot) {
+      if (this.activePermissionPrompt) {
+        this.activePermissionPrompt = null;
+        this.callbacks.onPermissionPromptChanged?.({ open: false, kind: "persistent-storage" });
+      }
+
+      return;
+    }
+
+    this.activePermissionPrompt = notification;
+    this.callbacks.onPermissionPromptChanged?.(promptSnapshot);
+
+    if (hideNative && this.window.PopupNotifications?.panel?.state === "open") {
+      this.window.PopupNotifications.panel.hidePopup?.();
+    }
   }
 
   async observeDownloadList(type) {
@@ -514,6 +596,10 @@ export class BrowserBasicsBridge {
     });
   }
 
+  handlePermissionPromptPanelState() {
+    this.syncPermissionPromptState({ hideNative: true });
+  }
+
   handleExternalProtocolState(event) {
     const detail = event.detail ?? {};
     const browser = detail.browser ?? null;
@@ -545,6 +631,47 @@ export class BrowserBasicsBridge {
 
   handleSessionStoreChanged() {
     this.callbacks.onSessionRecoveryChanged?.(this.getSessionRecoveryState());
+  }
+
+  async resolvePermissionPrompt(action = "allow") {
+    const notification = this.activePermissionPrompt ?? this.getActivePermissionNotification();
+
+    if (!notification) {
+      return false;
+    }
+
+    const popupNotification = this.window.PopupNotifications?.panel?.firstElementChild ?? null;
+    const callback =
+      action === "block"
+        ? notification.secondaryActions?.[0]?.callback
+        : notification.mainAction?.callback;
+
+    if (typeof callback !== "function") {
+      return false;
+    }
+
+    await callback({
+      checkboxChecked: Boolean(popupNotification?.checkbox?.checked),
+      source: "nodely"
+    });
+    this.window.PopupNotifications?._remove?.(notification);
+    this.activePermissionPrompt = null;
+    this.callbacks.onPermissionPromptChanged?.({ open: false, kind: "persistent-storage" });
+    return true;
+  }
+
+  async dismissPermissionPrompt() {
+    const notification = this.activePermissionPrompt ?? this.getActivePermissionNotification();
+
+    if (!notification) {
+      return false;
+    }
+
+    this.window.PopupNotifications?.panel?.hidePopup?.();
+    this.window.PopupNotifications?._remove?.(notification);
+    this.activePermissionPrompt = null;
+    this.callbacks.onPermissionPromptChanged?.({ open: false, kind: "persistent-storage" });
+    return true;
   }
 
   pageCommand(command) {

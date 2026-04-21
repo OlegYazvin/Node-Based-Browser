@@ -309,4 +309,91 @@ describe("NodelyShell focus and context interactions", () => {
     expect(shell.splitWidthOverride).toBe(720);
     expect(shell.syncDocumentLayout).toHaveBeenCalledTimes(1);
   });
+
+  it("autosaves tree drawer renames when the input blurs out of the row", () => {
+    const shell = new NodelyShell();
+    const renameTree = vi.fn();
+    const form = {
+      dataset: { rootId: "root-1" },
+      contains: vi.fn(() => false),
+      querySelector: vi.fn(() => ({
+        value: "Renamed Tree",
+        dataset: { initialValue: "Original Tree" },
+        title: "Original Tree"
+      }))
+    };
+    const input = {
+      closest: vi.fn((selector) => (selector === "form[data-root-id]" ? form : null))
+    };
+    shell.controller = { renameTree };
+
+    shell.handleTreesFocusOut({
+      target: {
+        closest: vi.fn((selector) => (selector === "input[name='title']" ? input : null))
+      },
+      relatedTarget: null
+    });
+
+    expect(renameTree).toHaveBeenCalledWith("root-1", "Renamed Tree");
+  });
+
+  it("opens the tree preview picker instead of immediately switching trees from the drawer", () => {
+    const shell = new NodelyShell();
+    const form = { dataset: { rootId: "root-7" } };
+    const button = {
+      dataset: { action: "show-tree", rootId: "root-7" },
+      closest: vi.fn((selector) => (selector === "form[data-root-id]" ? form : null))
+    };
+    const commitDrawerTreeRename = vi
+      .spyOn(shell, "commitDrawerTreeRename")
+      .mockImplementation(() => {});
+    const openTreePreview = vi.spyOn(shell, "openTreePreview").mockImplementation(() => {});
+
+    shell.handleTreesClick({
+      target: {
+        closest: vi.fn((selector) => (selector === "[data-action]" ? button : null))
+      }
+    });
+
+    expect(commitDrawerTreeRename).toHaveBeenCalledWith(form);
+    expect(openTreePreview).toHaveBeenCalledWith("root-7");
+  });
+
+  it("lets the pagebar tree action reopen the root composer", () => {
+    const shell = new NodelyShell();
+    const openComposer = vi.spyOn(shell, "openComposer").mockImplementation(() => {});
+    const closeComposer = vi.spyOn(shell, "closeComposer").mockImplementation(() => {});
+    const render = vi.spyOn(shell, "render").mockImplementation(() => {});
+
+    shell.composerOpen = false;
+    shell.handlePagebarClick({
+      target: {
+        closest: vi.fn((selector) =>
+          selector === "[data-action]"
+            ? {
+                dataset: { action: "toggle-composer" }
+              }
+            : null
+        )
+      }
+    });
+
+    expect(openComposer).toHaveBeenCalledTimes(1);
+
+    shell.composerOpen = true;
+    shell.handlePagebarClick({
+      target: {
+        closest: vi.fn((selector) =>
+          selector === "[data-action]"
+            ? {
+                dataset: { action: "toggle-composer" }
+              }
+            : null
+        )
+      }
+    });
+
+    expect(closeComposer).toHaveBeenCalledTimes(1);
+    expect(render).toHaveBeenCalledTimes(1);
+  });
 });
