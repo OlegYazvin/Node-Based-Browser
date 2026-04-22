@@ -402,6 +402,7 @@ export class NodelyShell extends HTMLElement {
     this.layoutSyncFrame = null;
     this.tabStripTransitionFrame = null;
     this.tabStripTransitionResetTimer = null;
+    this.lastChildDescendTransitionAt = 0;
     this.splitResizeState = null;
     this.splitWidthOverride = null;
     this.layoutObserver =
@@ -1676,6 +1677,7 @@ export class NodelyShell extends HTMLElement {
         tabWrap.classList.add("nodely-shell__tab-strip-item");
         tabWrap.dataset.tabKey = `node:${node.id}`;
         tabWrap.dataset.tabRole = role;
+        tabWrap.dataset.nodeId = node.id;
         const tab = createActionButton(
           this.ownerDocument,
           "",
@@ -1725,6 +1727,20 @@ export class NodelyShell extends HTMLElement {
           tab.append(parentIcon);
         }
         tab.append(copy);
+        const trailing = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tab-trailing");
+        const closeTabButton = createHtmlElement(
+          this.ownerDocument,
+          "span",
+          "nodely-shell__tab-close"
+        );
+        closeTabButton.dataset.action = "kill-tab-node";
+        closeTabButton.dataset.nodeId = node.id;
+        closeTabButton.setAttribute("role", "button");
+        closeTabButton.setAttribute("tabindex", "-1");
+        closeTabButton.setAttribute("title", `Close tab: ${node.title || "Untitled"}`);
+        closeTabButton.setAttribute("aria-label", `Close tab: ${node.title || "Untitled"}`);
+        appendSvgIcon(this.ownerDocument, closeTabButton, iconClose());
+        trailing.append(closeTabButton);
         if (descendantPageCount > 0) {
           const badge = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tab-badge");
           appendSvgIcon(this.ownerDocument, badge, iconBranchDescendants());
@@ -1732,8 +1748,9 @@ export class NodelyShell extends HTMLElement {
           badgeCount.textContent = descendantPageCount > 99 ? "99+" : String(descendantPageCount);
           badge.append(badgeCount);
           badge.title = `${descendantPageCount} hidden descendant page${descendantPageCount === 1 ? "" : "s"}`;
-          tab.append(badge);
+          trailing.append(badge);
         }
+        tab.append(trailing);
         if (isActiveTab) {
           const pageBridge = createHtmlElement(
             this.ownerDocument,
@@ -1744,19 +1761,6 @@ export class NodelyShell extends HTMLElement {
           tab.append(pageBridge);
         }
         tabWrap.append(tab);
-        const closeTabButton = createActionButton(
-          this.ownerDocument,
-          "",
-          "nodely-shell__tab-close",
-          {
-            action: "kill-tab-node",
-            dataset: { nodeId: node.id },
-            title: `Close tab: ${node.title || "Untitled"}`,
-            icon: iconClose()
-          }
-        );
-        closeTabButton.setAttribute("aria-label", `Close tab: ${node.title || "Untitled"}`);
-        tabWrap.append(closeTabButton);
         tabs.append(tabWrap);
 
         if (role === "root" && ellipsisButton) {
@@ -1843,6 +1847,10 @@ export class NodelyShell extends HTMLElement {
       items: items.map((item) => ({
         key: item.dataset.tabKey ?? "",
         role: item.dataset.tabRole ?? "",
+        nodeId:
+          item.dataset.nodeId ??
+          item.querySelector(".nodely-shell__tab[data-node-id]")?.dataset?.nodeId ??
+          "",
         rect: item.getBoundingClientRect(),
         clone: item.cloneNode(true)
       }))
@@ -1864,6 +1872,7 @@ export class NodelyShell extends HTMLElement {
 
     if (!currentItems.length) {
       tabs.dataset.transitionMode = "static";
+      tabs.dataset.transitionProfile = "static";
       return;
     }
 
@@ -1875,7 +1884,35 @@ export class NodelyShell extends HTMLElement {
     tabs.dataset.transitionMode = shouldAnimate ? "animated" : "static";
 
     if (!shouldAnimate) {
+      tabs.dataset.transitionProfile = "static";
       return;
+    }
+
+    const currentItemMeta = currentItems.map((item) => ({
+      key: item.dataset.tabKey ?? "",
+      role: item.dataset.tabRole ?? "",
+      nodeId:
+        item.dataset.nodeId ??
+        item.querySelector(".nodely-shell__tab[data-node-id]")?.dataset?.nodeId ??
+        "",
+      item
+    }));
+    const previousCurrentNodeId =
+      previousSnapshot.items.find((item) => item.role === "current")?.nodeId ?? "";
+    const nextCurrentNodeId =
+      currentItemMeta.find((entry) => entry.role === "current")?.nodeId ?? "";
+    const nextParentNodeId =
+      currentItemMeta.find((entry) => entry.role === "parent")?.nodeId ?? "";
+    const descendingIntoChild = Boolean(
+      previousCurrentNodeId &&
+      nextCurrentNodeId &&
+      nextParentNodeId &&
+      previousCurrentNodeId === nextParentNodeId &&
+      nextCurrentNodeId !== previousCurrentNodeId
+    );
+    tabs.dataset.transitionProfile = descendingIntoChild ? "descend-child" : "default";
+    if (descendingIntoChild) {
+      this.lastChildDescendTransitionAt = Date.now();
     }
 
     const previousItems = new Map(previousSnapshot.items.map((item) => [item.key, item]));
@@ -1928,7 +1965,7 @@ export class NodelyShell extends HTMLElement {
       void tabs.getBoundingClientRect();
 
       const transition =
-        "transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease";
+        "transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease";
 
       currentItems.forEach((item) => {
         item.style.transition = transition;
@@ -1937,9 +1974,17 @@ export class NodelyShell extends HTMLElement {
       });
 
       ghosts.forEach(({ ghost, role }) => {
-        const exitShift = role === "child" ? 18 : role === "children-divider" ? 10 : -18;
+        const exitShiftX =
+          descendingIntoChild && role === "child"
+            ? 0
+            : role === "child"
+              ? 18
+              : role === "children-divider"
+                ? 10
+                : -18;
+        const exitShiftY = descendingIntoChild && role === "child" ? 18 : 0;
         ghost.style.transition = transition;
-        ghost.style.transform = `translate(${exitShift}px, 0)`;
+        ghost.style.transform = `translate(${exitShiftX}px, ${exitShiftY}px)`;
         ghost.style.opacity = "0";
       });
 
@@ -1951,7 +1996,7 @@ export class NodelyShell extends HTMLElement {
         });
         ghosts.forEach(({ ghost }) => ghost.remove());
         this.tabStripTransitionResetTimer = null;
-      }, 320);
+      }, 360);
     });
   }
 

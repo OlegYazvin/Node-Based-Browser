@@ -1360,6 +1360,80 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     );
   });
 
+  it("uses back and forward to move between a favorite jump and the previously selected page when browser history is empty", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/root",
+      input: "https://example.com/root",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = createChildNode(workspace, rootId, "manual");
+    const childId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, childId, {
+      kind: "url",
+      url: "https://example.com/child",
+      input: "https://example.com/child",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const favorites = [buildPageFavoriteEntry(workspace, findNode(workspace, rootId))];
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => favorites)
+    };
+    const basicsBridge = makeBasicsBridge();
+    const runtimeManager = makeRuntimeManager();
+    runtimeManager.tabForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? { id: "root-tab" } : nodeId === childId ? { id: "child-tab" } : null
+    );
+    runtimeManager.currentUrlForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId
+        ? "https://example.com/root"
+        : nodeId === childId
+          ? "https://example.com/child"
+          : null
+    );
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge
+    });
+
+    await controller.initialize();
+    basicsBridge.pageCommand.mockClear();
+    runtimeManager.selectNode.mockClear();
+
+    await controller.openFavorite(favorites[0].id);
+
+    expect(workspace.selectedNodeId).toBe(rootId);
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(rootId);
+
+    runtimeManager.selectNode.mockClear();
+    await controller.pageCommand("back");
+
+    expect(workspace.selectedNodeId).toBe(childId);
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(childId);
+    expect(basicsBridge.pageCommand).not.toHaveBeenCalledWith("back");
+
+    runtimeManager.selectNode.mockClear();
+    await controller.pageCommand("forward");
+
+    expect(workspace.selectedNodeId).toBe(rootId);
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(rootId);
+    expect(basicsBridge.pageCommand).not.toHaveBeenCalledWith("forward");
+  });
+
   it("duplicates a tab from an explicit parent node when requested", async () => {
     let workspace = createRootNode(createEmptyWorkspace());
     const rootId = workspace.selectedNodeId as string;

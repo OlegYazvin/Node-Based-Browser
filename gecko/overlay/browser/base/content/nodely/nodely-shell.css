@@ -934,7 +934,7 @@
   width: 100%;
   min-width: 0;
   max-width: none;
-  padding: 6px 30px 6px 8px;
+  padding: 6px 8px;
   border-radius: 10px;
   border: 1px solid var(--nodely-button-border);
   text-align: left;
@@ -1131,10 +1131,17 @@
   pointer-events: none;
 }
 
+.nodely-shell__tab-trailing {
+  margin-inline-start: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
 .nodely-shell__tab-close {
-  position: absolute;
-  top: 50%;
-  right: 6px;
+  flex: 0 0 auto;
   width: 22px;
   height: 22px;
   min-width: 22px;
@@ -1143,7 +1150,6 @@
   display: inline-grid;
   place-items: center;
   border-radius: 8px;
-  transform: translateY(-50%);
   opacity: 1;
   pointer-events: auto;
   color: var(--nodely-muted);
@@ -1191,7 +1197,6 @@
   .nodely-shell__tab {
     gap: 6px;
     padding-inline-start: 7px;
-    padding-inline-end: 28px;
   }
 
   .nodely-shell__tab strong {
@@ -1203,7 +1208,6 @@
   .nodely-shell__tab {
     gap: 0;
     padding-inline-start: 7px;
-    padding-inline-end: 26px;
   }
 
   .nodely-shell__tab-copy {
@@ -1214,7 +1218,6 @@
 @container (max-width: 64px) {
   .nodely-shell__tab {
     padding-inline-start: 6px;
-    padding-inline-end: 24px;
   }
 
   .nodely-shell__tab-favicon {
@@ -1222,9 +1225,10 @@
     height: 16px;
     border-radius: 5px;
   }
+}
 
+@container (max-width: 64px) {
   .nodely-shell__tab-close {
-    right: 4px;
     width: 20px;
     height: 20px;
     min-width: 20px;

@@ -63,6 +63,8 @@ export class ChromeStateController extends EventTarget {
     this.treeTitleRefreshTimer = null;
     this.treeTitleRefreshChain = Promise.resolve();
     this.favorites = [];
+    this.favoriteJumpBackNodeId = null;
+    this.favoriteJumpForwardNodeId = null;
     this.chrome = createChromeState();
     this.basicsBridge.callbacks = {
       ...(this.basicsBridge.callbacks ?? {}),
@@ -470,7 +472,8 @@ export class ChromeStateController extends EventTarget {
   async selectNode(nodeId, options = {}) {
     return this.revealNode(nodeId, {
       fromRuntime: options.fromRuntime === true,
-      ensureRuntime: options.ensureRuntime !== false
+      ensureRuntime: options.ensureRuntime !== false,
+      preserveFavoriteJumpHistory: options.preserveFavoriteJumpHistory === true
     });
   }
 
@@ -787,6 +790,24 @@ export class ChromeStateController extends EventTarget {
     this.emitStateChange();
   }
 
+  clearFavoriteJumpHistory() {
+    this.favoriteJumpBackNodeId = null;
+    this.favoriteJumpForwardNodeId = null;
+  }
+
+  stageFavoriteJumpHistory(targetNodeId) {
+    const currentSelection = findNode(this.workspace, this.workspace?.selectedNodeId);
+    const currentPageNode = resolveRuntimeTarget(this.workspace, currentSelection);
+
+    if (!currentPageNode || !targetNodeId || currentPageNode.id === targetNodeId) {
+      this.clearFavoriteJumpHistory();
+      return;
+    }
+
+    this.favoriteJumpBackNodeId = currentPageNode.id;
+    this.favoriteJumpForwardNodeId = null;
+  }
+
   async openFavorite(favoriteId) {
     const favorite = this.favorites.find((entry) => entry.id === favoriteId);
 
@@ -797,12 +818,14 @@ export class ChromeStateController extends EventTarget {
     const openPlan = resolveFavoriteOpenPlan(this.workspace, favorite);
 
     if (openPlan.action === "select-node") {
-      await this.selectNode(openPlan.nodeId);
+      this.stageFavoriteJumpHistory(openPlan.nodeId);
+      await this.selectNode(openPlan.nodeId, { preserveFavoriteJumpHistory: true });
       return;
     }
 
     if (openPlan.action === "select-root") {
-      await this.selectNode(openPlan.rootId);
+      this.stageFavoriteJumpHistory(openPlan.rootId);
+      await this.selectNode(openPlan.rootId, { preserveFavoriteJumpHistory: true });
       return;
     }
 
@@ -1005,7 +1028,10 @@ export class ChromeStateController extends EventTarget {
     });
   }
 
-  async revealNode(nodeId, { fromRuntime = false, ensureRuntime = true, surfaceMode = "page" } = {}) {
+  async revealNode(
+    nodeId,
+    { fromRuntime = false, ensureRuntime = true, surfaceMode = "page", preserveFavoriteJumpHistory = false } = {}
+  ) {
     if (!nodeId) {
       return this.workspace;
     }
@@ -1016,6 +1042,10 @@ export class ChromeStateController extends EventTarget {
       nextWorkspace.selectedNodeId !== nodeId ||
       nextWorkspace.prefs.surfaceMode !== surfaceMode
     ) {
+      if (!fromRuntime && !preserveFavoriteJumpHistory && nextWorkspace.selectedNodeId !== nodeId) {
+        this.clearFavoriteJumpHistory();
+      }
+
       nextWorkspace = await this.persistWorkspace((workspace) => {
         let updatedWorkspace = workspace;
 
@@ -1088,8 +1118,57 @@ export class ChromeStateController extends EventTarget {
     });
   }
 
-  pageCommand(command) {
+  async pageCommand(command) {
+    if (command === "back" || command === "forward") {
+      if (await this.handleFavoriteJumpPageCommand(command)) {
+        return;
+      }
+    }
+
     this.basicsBridge.pageCommand(command);
+  }
+
+  async handleFavoriteJumpPageCommand(command) {
+    const selectedNode = findNode(this.workspace, this.workspace?.selectedNodeId);
+    const selectedPageNode = resolveRuntimeTarget(this.workspace, selectedNode);
+
+    if (!selectedPageNode) {
+      return false;
+    }
+
+    if (command === "back") {
+      if (selectedPageNode.canGoBack) {
+        return false;
+      }
+
+      const targetNodeId = this.favoriteJumpBackNodeId;
+      const targetNode = targetNodeId ? findNode(this.workspace, targetNodeId) : null;
+
+      if (!targetNode || targetNode.id === selectedPageNode.id) {
+        return false;
+      }
+
+      this.favoriteJumpBackNodeId = null;
+      this.favoriteJumpForwardNodeId = selectedPageNode.id;
+      await this.selectNode(targetNode.id, { preserveFavoriteJumpHistory: true });
+      return true;
+    }
+
+    if (selectedPageNode.canGoForward) {
+      return false;
+    }
+
+    const targetNodeId = this.favoriteJumpForwardNodeId;
+    const targetNode = targetNodeId ? findNode(this.workspace, targetNodeId) : null;
+
+    if (!targetNode || targetNode.id === selectedPageNode.id) {
+      return false;
+    }
+
+    this.favoriteJumpForwardNodeId = null;
+    this.favoriteJumpBackNodeId = selectedPageNode.id;
+    await this.selectNode(targetNode.id, { preserveFavoriteJumpHistory: true });
+    return true;
   }
 
   findInPage(query) {

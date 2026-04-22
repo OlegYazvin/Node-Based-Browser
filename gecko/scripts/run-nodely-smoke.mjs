@@ -496,6 +496,8 @@ function snapshotLooksReady(snapshot, scenario = "") {
     (snapshot.ui?.treeStrip?.tabFaviconCount ?? 0) >= visibleTabCount &&
     (snapshot.ui?.treeStrip?.tabCloseCount ?? 0) >= visibleTabCount &&
     (snapshot.ui?.treeStrip?.tabClosePathCount ?? 0) >= visibleTabCount &&
+    snapshot.ui?.treeStrip?.activeTabClosePresent === true &&
+    snapshot.ui?.treeStrip?.activeTabCloseVisible === true &&
     snapshot.ui?.treeStrip?.tabsFitViewport === true &&
     snapshot.ui?.treeStrip?.newChildVisible === true &&
     (snapshot.ui?.treeStrip?.newChildSvgCount ?? 0) >= 1 &&
@@ -677,9 +679,13 @@ function snapshotMatchesScenario(snapshot, scenario) {
         JSON.stringify(["root", "current", "child"]) &&
       snapshot.ui?.treeStrip?.childrenDividerPresent === true &&
       snapshot.ui?.treeStrip?.activeTabBridgePresent === true &&
+      snapshot.ui?.treeStrip?.activeTabClosePresent === true &&
+      snapshot.ui?.treeStrip?.activeTabCloseVisible === true &&
+      snapshot.ui?.treeStrip?.activeTabCloseJoined === true &&
       snapshot.ui?.treeStrip?.rootTabIconPresent === true &&
       snapshot.ui?.treeStrip?.tabTransitionMode === "animated" &&
       (snapshot.ui?.treeStrip?.descendantBadgeIconCount ?? 0) >= 1 &&
+      snapshot.ui?.treeStrip?.childClosePrecedesBadge === true &&
       runtimeMatchesSelection &&
       runtimeMatchesNode
     );

@@ -407,12 +407,16 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const treeEditButton = document.querySelector('[data-action="start-tree-rename"]');
     const treeSeedButton = document.querySelector('.nodely-shell__tree-seed[data-action="toggle-composer"]');
     const aiChatTabs = document.querySelectorAll(".nodely-shell__tab--ai-chat");
+    const tabWraps = Array.from(document.querySelectorAll(".nodely-shell__tab-wrap[data-tab-key]"));
     const tabButtons = Array.from(
       document.querySelectorAll(".nodely-shell__tab[data-node-id]")
     );
     const tabFavicons = document.querySelectorAll(".nodely-shell__tab .nodely-shell__tab-favicon");
     const tabCloseButtons = document.querySelectorAll(".nodely-shell__tab-close");
     const tabClosePaths = document.querySelectorAll(".nodely-shell__tab-close svg path");
+    const activeTabButton = document.querySelector(".nodely-shell__tab.is-active[data-node-id]");
+    const activeTabWrap = activeTabButton?.closest?.(".nodely-shell__tab-wrap") ?? null;
+    const activeTabCloseButton = activeTabWrap?.querySelector?.(".nodely-shell__tab-close") ?? null;
     const ellipsisTabButton = document.querySelector('.nodely-shell__tab--ellipsis[data-action="open-ancestry-menu"]');
     const tabsContainer = document.querySelector(".nodely-shell__tabs");
     const treeFavoriteButton = document.querySelector('.nodely-shell__tree-strip [data-action="toggle-tree-favorite"]');
@@ -542,6 +546,8 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           treeSeedPresent: Boolean(treeSeedButton),
           aiChatTabCount: aiChatTabs?.length ?? 0,
           tabTransitionMode: tabsContainer?.dataset?.transitionMode ?? "",
+          tabTransitionProfile: tabsContainer?.dataset?.transitionProfile ?? "",
+          lastChildDescendTransitionAt: shell?.lastChildDescendTransitionAt ?? 0,
           tabNodeCount: tabButtons.length,
           tabNodeIds: tabButtons
             .map((button) => button.dataset.nodeId ?? null)
@@ -560,18 +566,34 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           ),
           descendantBadgeIconCount:
             document.querySelectorAll(".nodely-shell__tab-badge svg")?.length ?? 0,
-          badgeValues: tabButtons
-            .map((button) => ({
-              nodeId: button.dataset.nodeId ?? null,
+          badgeValues: tabWraps
+            .map((wrap) => ({
+              nodeId: wrap.querySelector(".nodely-shell__tab[data-node-id]")?.dataset?.nodeId ?? null,
               badge:
-                button
+                wrap
                   .querySelector(".nodely-shell__tab-badge")
                   ?.textContent?.trim() ?? ""
             }))
             .filter((entry) => entry.nodeId && entry.badge),
+          childClosePrecedesBadge: tabWraps
+            .filter((wrap) => wrap.dataset.tabRole === "child")
+            .every((wrap) => {
+              const closeButton = wrap.querySelector(".nodely-shell__tab-close");
+              const badge = wrap.querySelector(".nodely-shell__tab-badge");
+              if (!closeButton || !badge) {
+                return true;
+              }
+
+              return Boolean(
+                closeButton.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING
+              );
+            }),
           tabFaviconCount: tabFavicons?.length ?? 0,
           tabCloseCount: tabCloseButtons?.length ?? 0,
           tabClosePathCount: tabClosePaths?.length ?? 0,
+          activeTabClosePresent: Boolean(activeTabCloseButton),
+          activeTabCloseVisible: nodeFullyVisibleWithin(tabsContainer, activeTabCloseButton),
+          activeTabCloseJoined: Boolean(activeTabButton && activeTabCloseButton && activeTabButton.contains(activeTabCloseButton)),
           tabsFitViewport:
             (tabsContainer?.scrollWidth ?? 0) <= (tabsContainer?.clientWidth ?? 0) + 2,
           newChildVisible: nodeFullyVisibleWithin(tabsContainer, newChildButton),
@@ -1068,10 +1090,23 @@ async function runPagebarSubtreeTabsScenario() {
     Array.from(document.querySelectorAll(".nodely-shell__tab[data-node-id]")).map(
       (button) => button.dataset.nodeId
     );
-  const badgeTextForNode = (nodeId) =>
+  const shellElement = document.querySelector("nodely-shell");
+  const tabWrapForNode = (nodeId) =>
     document
-      .querySelector(`.nodely-shell__tab[data-node-id="${escapeAttributeValue(nodeId)}"] .nodely-shell__tab-badge`)
-      ?.textContent?.trim() ?? "";
+      .querySelector(`.nodely-shell__tab[data-node-id="${escapeAttributeValue(nodeId)}"]`)
+      ?.closest(".nodely-shell__tab-wrap") ?? null;
+  const badgeTextForNode = (nodeId) =>
+    tabWrapForNode(nodeId)?.querySelector(".nodely-shell__tab-badge")?.textContent?.trim() ?? "";
+  const childClosePrecedesBadge = (nodeId) => {
+    const wrap = tabWrapForNode(nodeId);
+    const closeButton = wrap?.querySelector(".nodely-shell__tab-close") ?? null;
+    const badge = wrap?.querySelector(".nodely-shell__tab-badge") ?? null;
+    if (!closeButton || !badge) {
+      return false;
+    }
+
+    return Boolean(closeButton.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING);
+  };
 
   await waitForCondition(() => {
     const {
@@ -1097,11 +1132,13 @@ async function runPagebarSubtreeTabsScenario() {
       Boolean(document.querySelector('.nodely-shell__tab[data-tab-role="parent"] .nodely-shell__tab-parent-icon svg')) &&
       (document.querySelectorAll(".nodely-shell__tab-badge svg")?.length ?? 0) >= 1 &&
       badgeTextForNode(branchChildId) === "1" &&
+      childClosePrecedesBadge(branchChildId) &&
       badgeTextForNode(leafChildId) === ""
     );
   }, "pagebar subtree initial state");
 
   const { branchChildId, grandchildId } = nodeIdsByTitle();
+  const previousChildDescendTransitionAt = shellElement?.lastChildDescendTransitionAt ?? 0;
   const branchChildButton = document.querySelector(
     `.nodely-shell__tab[data-node-id="${escapeAttributeValue(branchChildId)}"]`
   );
@@ -1121,6 +1158,7 @@ async function runPagebarSubtreeTabsScenario() {
       document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
       JSON.stringify(visibleIds) ===
         JSON.stringify([rootId, currentId, branchChildId, grandchildId]) &&
+      (shellElement?.lastChildDescendTransitionAt ?? 0) > previousChildDescendTransitionAt &&
       Boolean(document.querySelector('.nodely-shell__tab--ellipsis[data-action="open-ancestry-menu"]'))
     );
   }, "pagebar subtree child selection");
@@ -1598,6 +1636,21 @@ async function runTopbarDrawersScenario() {
       document.querySelector('.nodely-shell__address-input')?.value === CHILD_SMOKE_URL
     );
   }, "tree favorite chip opens the favorited page");
+
+  const backButton = document.querySelector('[data-action="page-command"][data-command="back"]');
+
+  if (!backButton) {
+    throw new Error("Smoke topbar-drawers scenario could not find the Back button.");
+  }
+
+  backButton.click();
+  await waitForCondition(() => {
+    const { state, rootId } = nodeIdsByTitle();
+    return (
+      state?.workspace?.selectedNodeId === rootId &&
+      document.querySelector('.nodely-shell__address-input')?.value === ROOT_SMOKE_URL
+    );
+  }, "favorite jump back returns to previous page");
 
   const downloadsButton = document.querySelector('[data-action="toggle-drawer"][data-drawer="downloads"]');
 
