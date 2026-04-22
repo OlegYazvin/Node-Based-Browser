@@ -252,10 +252,6 @@ jobs:
             --no-sync
           )
 
-          if [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
-            installer_args+=(--version "$FIREFOX_ESR_VERSION")
-          fi
-
           if [[ "${{ matrix.platform }}" != "linux" || "${{ matrix.arch }}" != "x64" ]]; then
             installer_args+=(--strict)
           fi
@@ -390,7 +386,8 @@ jobs:
                 --arch "$arch" \
                 --built-by github-actions \
                 --build-workflow .github/workflows/installers.yml \
-                --build-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+                --build-run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+                --gecko-version "$FIREFOX_ESR_VERSION"
             fi
           done
 
@@ -400,14 +397,22 @@ jobs:
           fi
 
       - name: Generate latest installer release notes
-        run: >
-          bash scripts/generate-release-notes.sh
-          --output Installer/RELEASE_NOTES.MD
-          --repo "$GITHUB_REPOSITORY"
-          --base "${{ github.event.before }}"
-          --head "$GITHUB_SHA"
-          --ref "$GITHUB_REF_NAME"
-          --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        run: |
+          NODELY_VERSION="$(node --input-type=module <<'NODE'
+          import { readNodelyVersionMetadata } from "./scripts/nodely-version.mjs";
+          process.stdout.write(readNodelyVersionMetadata().displayVersion);
+          NODE
+          )"
+
+          bash scripts/generate-release-notes.sh \
+            --output Installer/RELEASE_NOTES.MD \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "${{ github.event.before }}" \
+            --head "$GITHUB_SHA" \
+            --ref "$GITHUB_REF_NAME" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --nodely-version "$NODELY_VERSION" \
+            --gecko-version "$FIREFOX_ESR_VERSION"
 
       - name: Derive release metadata
         id: release_meta
@@ -417,6 +422,7 @@ jobs:
           import path from "node:path";
 
           import { extractInstallerVersion } from "./scripts/installers-lib.mjs";
+          import { readNodelyVersionMetadata } from "./scripts/nodely-version.mjs";
 
           const allowedExtensions = new Set([".deb", ".rpm", ".flatpak", ".run", ".exe", ".dmg", ".pkg"]);
           const makeRoot = path.join("out", "make");
@@ -477,9 +483,16 @@ jobs:
           }
 
           const version = versions[0];
+          const { displayVersion } = readNodelyVersionMetadata();
+
+          if (version !== displayVersion) {
+            throw new Error(`Built installer version ${version} does not match package.json Nodely version ${displayVersion}.`);
+          }
+
           const outputPath = process.env.GITHUB_OUTPUT;
 
           appendFileSync(outputPath, `version=${version}\n`);
+          appendFileSync(outputPath, `gecko_version=${process.env.FIREFOX_ESR_VERSION ?? ""}\n`);
           appendFileSync(outputPath, `tag=nodely-${version}\n`);
           appendFileSync(outputPath, `title=Nodely ${version}\n`);
           appendFileSync(outputPath, "assets<<EOF\n");

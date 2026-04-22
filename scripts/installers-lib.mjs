@@ -3,6 +3,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { readNodelyVersionMetadata } from "./nodely-version.mjs";
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export const repositoryRoot = path.resolve(scriptDirectory, "..");
@@ -10,6 +12,7 @@ export const geckoReleaseDirectory = path.join(repositoryRoot, "gecko", "release
 export const installerDirectory = path.join(repositoryRoot, "Installer");
 export const outMakeDirectory = path.join(repositoryRoot, "out", "make");
 export const installerReadmeName = "README.MD";
+const repoFileSizeLimitBytes = 100_000_000;
 
 const platformAliases = {
   linux: "linux",
@@ -129,6 +132,7 @@ export async function readGeckoReleaseManifest(stageDirectory = geckoReleaseDire
   } catch {
     return {
       generatedAt: null,
+      nodelyVersion: null,
       artifacts: []
     };
   }
@@ -180,6 +184,7 @@ export async function readInstallerManifest(targetDirectory = installerDirectory
   } catch {
     return {
       generatedAt: null,
+      nodelyVersion: null,
       installers: []
     };
   }
@@ -395,6 +400,20 @@ function installerBuildSourceText(entry) {
 }
 
 export function renderInstallerReadme(manifest) {
+  const versionSummary = [];
+  const manifestNodelyVersion = String(manifest.nodelyVersion ?? "").trim();
+  const geckoVersions = [...new Set((manifest.installers ?? []).map((entry) => String(entry.geckoVersion ?? "").trim()).filter(Boolean))].sort();
+
+  if (manifestNodelyVersion) {
+    versionSummary.push(`- Current Nodely version: \`${manifestNodelyVersion}\``);
+  }
+
+  if (geckoVersions.length === 1) {
+    versionSummary.push(`- Gecko base version: \`${geckoVersions[0]}\``);
+  } else if (geckoVersions.length > 1) {
+    versionSummary.push(`- Gecko base versions present: \`${geckoVersions.join("`, `")}\``);
+  }
+
   const installers = [...(manifest.installers ?? [])].sort((left, right) => {
     const platformOrder = ["win32", "darwin", "linux"];
     const archOrder = ["x64", "arm64"];
@@ -458,8 +477,9 @@ This directory contains the installers that actually exist in this repo right no
 - The cross-platform installer workflow also publishes GitHub Release assets for the current Nodely version after a full successful matrix run.
 - Each staged installer records whether it came from a local build or GitHub Actions promotion.
 - \`Installer/RELEASE_NOTES.MD\` captures the latest push-triggered installer/release summary for this repo.
-- If a section below says no installers are staged, check the GitHub Releases page for the latest published assets for that target.
+- If a section below says no installers are staged, check the [GitHub Releases](https://github.com/OlegYazvin/Node-Based-Browser/releases/latest) page for the latest published assets for that target.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
+${versionSummary.length ? versionSummary.join("\n") : ""}
 
 Generated from \`Installer/manifest.json\` at ${generatedAt}.
 
@@ -472,8 +492,11 @@ async function writeInstallerReadme(targetDirectory, manifest) {
 }
 
 async function writeInstallerState(targetDirectory, installers) {
+  const { displayVersion: defaultNodelyVersion } = readNodelyVersionMetadata();
+  const nodelyVersions = [...new Set(installers.map((entry) => String(entry.version ?? "").trim()).filter(Boolean))];
   const nextManifest = {
     generatedAt: new Date().toISOString(),
+    nodelyVersion: nodelyVersions.length === 1 ? nodelyVersions[0] : defaultNodelyVersion,
     installers: installers.sort((left, right) => left.path.localeCompare(right.path))
   };
 
@@ -516,8 +539,11 @@ export async function syncInstallers({
   targetDirectory = installerDirectory,
   builtBy = "local",
   buildWorkflow = null,
-  buildRunUrl = null
+  buildRunUrl = null,
+  nodelyVersion = null,
+  geckoVersion = null
 }) {
+  const { displayVersion: defaultNodelyVersion } = readNodelyVersionMetadata();
   const normalizedPlatform = normalizePlatform(platform);
   const normalizedArch = normalizeArch(arch);
   const normalizedBuildSource = normalizeInstallerBuildSource(builtBy);
@@ -551,7 +577,13 @@ export async function syncInstallers({
     );
   }
 
-  const version = [...outputVersions][0];
+  const version = nodelyVersion?.trim() || [...outputVersions][0] || defaultNodelyVersion;
+
+  if (nodelyVersion?.trim() && outputVersions.size === 1 && !outputVersions.has(version)) {
+    throw new Error(
+      `Installer outputs for ${normalizedPlatform}/${normalizedArch} use version ${[...outputVersions][0]}, not the requested Nodely version ${version}.`
+    );
+  }
   const stagedVersions = new Set();
 
   for (const entry of manifest.installers) {
@@ -591,6 +623,12 @@ export async function syncInstallers({
       continue;
     }
 
+    const sourceStats = await stat(outputPath);
+
+    if (sourceStats.size > repoFileSizeLimitBytes) {
+      continue;
+    }
+
     const relativeDestination = stagedInstallerRelativePath(normalizedPlatform, fileName);
     const destinationPath = path.join(targetDirectory, relativeDestination);
     await ensureDirectory(path.dirname(destinationPath));
@@ -600,6 +638,7 @@ export async function syncInstallers({
     const outputStats = await stat(destinationPath);
     nextInstallers.push({
       version,
+      ...(geckoVersion ? { geckoVersion } : {}),
       platform: normalizedPlatform,
       arch: normalizedArch,
       variant: classification.variant,

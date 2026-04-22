@@ -14,6 +14,10 @@ Options:
   --head <sha>      Head commit SHA for the push range (default: HEAD)
   --ref <name>      Branch or ref name for display
   --run-url <url>   Optional GitHub Actions run URL
+  --nodely-version <ver>
+                    Optional visible Nodely version for this release note set
+  --gecko-version <ver>
+                    Optional Gecko base version for this release note set
   --help            Show this help text
 EOF
 }
@@ -24,6 +28,8 @@ base_sha=""
 head_ref="HEAD"
 ref_name=""
 run_url=""
+nodely_version=""
+gecko_version=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -49,6 +55,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --run-url)
       run_url="$2"
+      shift 2
+      ;;
+    --nodely-version)
+      nodely_version="$2"
+      shift 2
+      ;;
+    --gecko-version)
+      gecko_version="$2"
       shift 2
       ;;
     --help)
@@ -169,6 +183,12 @@ mkdir -p "$(dirname "$output_path")"
   fi
   if [[ -n "$run_url" ]]; then
     echo "- Workflow run: ${run_url}"
+  fi
+  if [[ -n "$nodely_version" ]]; then
+    echo "- Nodely version: \`${nodely_version}\`"
+  fi
+  if [[ -n "$gecko_version" ]]; then
+    echo "- Gecko base version: \`${gecko_version}\`"
   fi
   if [[ -n "$compare_url" ]]; then
     echo "- Compare: ${compare_url}"

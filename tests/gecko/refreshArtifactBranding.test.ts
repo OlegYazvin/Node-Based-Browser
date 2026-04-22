@@ -38,6 +38,8 @@ describe("refresh-artifact-branding", () => {
     );
     expect(patched).toContain("Vendor=Nodely");
     expect(patched).toContain("Name=Nodely");
+    expect(patched).toContain("NodelyVersion=0.1");
+    expect(patched).toContain("GeckoVersion=140.9.1esr");
     expect(patched).toContain("URL=");
   });
 

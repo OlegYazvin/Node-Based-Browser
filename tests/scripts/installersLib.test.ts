@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { readNodelyVersionMetadata } from "../../scripts/nodely-version.mjs";
 import {
   extractGeckoArtifactVersion,
   extractInstallerVersion,
@@ -12,41 +13,46 @@ import {
   syncInstallers
 } from "../../scripts/installers-lib.mjs";
 
+const { displayVersion: currentNodelyVersion } = readNodelyVersionMetadata();
+
 describe("installers-lib", () => {
   it("parses the visible Nodely version from installer and packaged artifact file names", () => {
-    expect(extractInstallerVersion("Nodely-Browser-140.10.0-linux-arm64.run")).toBe("140.10.0");
-    expect(extractInstallerVersion("nodely-browser-140.10.0.en-US.win64.installer.exe")).toBe("140.10.0");
+    expect(extractInstallerVersion(`Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`)).toBe(currentNodelyVersion);
+    expect(extractInstallerVersion(`nodely-browser-${currentNodelyVersion}.en-US.win64.installer.exe`)).toBe(currentNodelyVersion);
     expect(extractGeckoArtifactVersion("nodely-browser-140.10.0.en-US.linux-aarch64.tar.xz")).toBe("140.10.0");
   });
 
   it("renders a support matrix from the installer manifest", () => {
     const readme = renderInstallerReadme({
       generatedAt: "2026-04-05T00:00:00.000Z",
+      nodelyVersion: currentNodelyVersion,
       installers: [
         {
-          version: "0.1.0",
+          version: currentNodelyVersion,
+          geckoVersion: "140.10.0esr",
           platform: "linux",
           arch: "arm64",
           variant: "generic",
           distribution: "generic",
           compatibility: ["Ubuntu", "Debian"],
-          path: "linux/Nodely-Browser-0.1.0-linux-arm64.run",
-          fileName: "Nodely-Browser-0.1.0-linux-arm64.run",
-          source: "out/make/linux/arm64/Nodely-Browser-0.1.0-linux-arm64.run",
+          path: `linux/Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`,
+          fileName: `Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`,
+          source: `out/make/linux/arm64/Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`,
           size: 7,
           builtBy: "local",
           syncedAt: "2026-04-05T00:00:00.000Z"
         },
         {
-          version: "0.1.0",
+          version: currentNodelyVersion,
+          geckoVersion: "140.10.0esr",
           platform: "darwin",
           arch: "arm64",
           variant: "dmg",
           distribution: "macos",
           compatibility: ["macOS Apple Silicon"],
-          path: "macos/Nodely-Browser-0.1.0-macos-arm64.dmg",
-          fileName: "Nodely-Browser-0.1.0-macos-arm64.dmg",
-          source: "out/make/darwin/arm64/Nodely-Browser-0.1.0-macos-arm64.dmg",
+          path: `macos/Nodely-Browser-${currentNodelyVersion}-macos-arm64.dmg`,
+          fileName: `Nodely-Browser-${currentNodelyVersion}-macos-arm64.dmg`,
+          source: `out/make/darwin/arm64/Nodely-Browser-${currentNodelyVersion}-macos-arm64.dmg`,
           size: 9,
           builtBy: "github-actions",
           buildWorkflow: ".github/workflows/installers.yml",
@@ -58,7 +64,9 @@ describe("installers-lib", () => {
 
     expect(readme).toContain("## Windows 10 and 11");
     expect(readme).toContain("No installers are currently staged in this repo for this target.");
-    expect(readme).toContain("[Nodely-Browser-0.1.0-linux-arm64.run](./linux/Nodely-Browser-0.1.0-linux-arm64.run)");
+    expect(readme).toContain(`Current Nodely version: \`${currentNodelyVersion}\``);
+    expect(readme).toContain("Gecko base version: `140.10.0esr`");
+    expect(readme).toContain(`[Nodely-Browser-${currentNodelyVersion}-linux-arm64.run](./linux/Nodely-Browser-${currentNodelyVersion}-linux-arm64.run)`);
     expect(readme).toContain("Ubuntu, Debian; arm64 only");
     expect(readme).toContain("macOS Apple Silicon");
     expect(readme).toContain("Built by");
@@ -74,14 +82,14 @@ describe("installers-lib", () => {
     try {
       await mkdir(path.join(makeDirectory, "linux", "arm64"), { recursive: true });
       await writeFile(
-        path.join(makeDirectory, "linux", "arm64", "Nodely-Browser-140.10.0-linux-arm64.run"),
+        path.join(makeDirectory, "linux", "arm64", `Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`),
         "payload",
         "utf8"
       );
 
       await mkdir(path.join(targetDirectory, "linux"), { recursive: true });
       await writeFile(
-        path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-debian-arm64.deb"),
+        path.join(targetDirectory, "linux", `Nodely-Browser-${currentNodelyVersion}-debian-arm64.deb`),
         "stale",
         "utf8"
       );
@@ -90,17 +98,19 @@ describe("installers-lib", () => {
         `${JSON.stringify(
           {
             generatedAt: "2026-04-04T00:00:00.000Z",
+            nodelyVersion: currentNodelyVersion,
             installers: [
               {
-                version: "140.10.0",
+                version: currentNodelyVersion,
+                geckoVersion: "140.9.1esr",
                 platform: "linux",
                 arch: "arm64",
                 variant: "deb",
                 distribution: "debian",
                 compatibility: ["Debian"],
-                path: "linux/Nodely-Browser-0.1.0-debian-arm64.deb",
-                fileName: "Nodely-Browser-0.1.0-debian-arm64.deb",
-                source: "out/make/linux/arm64/Nodely-Browser-0.1.0-debian-arm64.deb",
+                path: `linux/Nodely-Browser-${currentNodelyVersion}-debian-arm64.deb`,
+                fileName: `Nodely-Browser-${currentNodelyVersion}-debian-arm64.deb`,
+                source: `out/make/linux/arm64/Nodely-Browser-${currentNodelyVersion}-debian-arm64.deb`,
                 size: 5,
                 syncedAt: "2026-04-04T00:00:00.000Z"
               }
@@ -119,21 +129,24 @@ describe("installers-lib", () => {
         targetDirectory,
         builtBy: "github-actions",
         buildWorkflow: ".github/workflows/installers.yml",
-        buildRunUrl: "https://github.com/example/repo/actions/runs/456"
+        buildRunUrl: "https://github.com/example/repo/actions/runs/456",
+        geckoVersion: "140.10.0esr"
       });
 
       expect(manifest.installers).toHaveLength(1);
-      expect(manifest.installers[0].version).toBe("140.10.0");
-      expect(manifest.installers[0].fileName).toBe("Nodely-Browser-140.10.0-linux-arm64.run");
+      expect(manifest.nodelyVersion).toBe(currentNodelyVersion);
+      expect(manifest.installers[0].version).toBe(currentNodelyVersion);
+      expect(manifest.installers[0].geckoVersion).toBe("140.10.0esr");
+      expect(manifest.installers[0].fileName).toBe(`Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`);
       expect(manifest.installers[0].builtBy).toBe("github-actions");
       expect(manifest.installers[0].buildWorkflow).toBe(".github/workflows/installers.yml");
       expect(manifest.installers[0].buildRunUrl).toBe("https://github.com/example/repo/actions/runs/456");
       await expect(
-        access(path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-debian-arm64.deb"))
+        access(path.join(targetDirectory, "linux", `Nodely-Browser-${currentNodelyVersion}-debian-arm64.deb`))
       ).rejects.toThrow();
 
       const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
-      expect(readme).toContain("Nodely-Browser-140.10.0-linux-arm64.run");
+      expect(readme).toContain(`Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`);
       expect(readme).toContain("[GitHub Actions](https://github.com/example/repo/actions/runs/456) (`installers.yml`)");
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
@@ -148,7 +161,7 @@ describe("installers-lib", () => {
     try {
       await mkdir(path.join(makeDirectory, "linux", "arm64"), { recursive: true });
       await writeFile(
-        path.join(makeDirectory, "linux", "arm64", "Nodely-Browser-140.10.0-linux-arm64.run"),
+        path.join(makeDirectory, "linux", "arm64", `Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`),
         "payload",
         "utf8"
       );
@@ -159,17 +172,18 @@ describe("installers-lib", () => {
         `${JSON.stringify(
           {
             generatedAt: "2026-04-04T00:00:00.000Z",
+            nodelyVersion: "0.2",
             installers: [
               {
-                version: "0.1.0",
+                version: "0.2",
                 platform: "win32",
                 arch: "x64",
                 variant: "installer",
                 distribution: "windows",
                 compatibility: ["Windows 10", "Windows 11"],
-                path: "windows/nodely-browser-0.1.0.en-US.win64.installer.exe",
-                fileName: "nodely-browser-0.1.0.en-US.win64.installer.exe",
-                source: "out/make/win32/x64/nodely-browser-0.1.0.en-US.win64.installer.exe",
+                path: "windows/nodely-browser-0.2.en-US.win64.installer.exe",
+                fileName: "nodely-browser-0.2.en-US.win64.installer.exe",
+                source: "out/make/win32/x64/nodely-browser-0.2.en-US.win64.installer.exe",
                 size: 3,
                 syncedAt: "2026-04-04T00:00:00.000Z"
               }
@@ -202,7 +216,7 @@ describe("installers-lib", () => {
     try {
       await mkdir(path.join(makeDirectory, "linux", "x64"), { recursive: true });
       await writeFile(
-        path.join(makeDirectory, "linux", "x64", "Nodely-Browser-140.10.0-ubuntu-x64.deb"),
+        path.join(makeDirectory, "linux", "x64", `Nodely-Browser-${currentNodelyVersion}-ubuntu-x64.deb`),
         "payload",
         "utf8"
       );
@@ -211,11 +225,13 @@ describe("installers-lib", () => {
         platform: "linux",
         arch: "x64",
         makeDirectory,
-        targetDirectory
+        targetDirectory,
+        geckoVersion: "140.10.0esr"
       });
 
       expect(manifest.installers).toHaveLength(1);
-      expect(manifest.installers[0].fileName).toBe("Nodely-Browser-140.10.0-ubuntu-x64.deb");
+      expect(manifest.installers[0].fileName).toBe(`Nodely-Browser-${currentNodelyVersion}-ubuntu-x64.deb`);
+      expect(manifest.installers[0].geckoVersion).toBe("140.10.0esr");
       expect(manifest.installers[0].compatibility).toContain("Linux Mint");
 
       const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
@@ -232,7 +248,7 @@ describe("installers-lib", () => {
     const targetDirectory = path.join(tempDirectory, "Installer");
 
     try {
-      const outputPath = path.join(makeDirectory, "darwin", "x64", "Nodely-Browser-140.10.0-macos-x64.dmg");
+      const outputPath = path.join(makeDirectory, "darwin", "x64", `Nodely-Browser-${currentNodelyVersion}-macos-x64.dmg`);
       await mkdir(path.dirname(outputPath), { recursive: true });
       await writeFile(outputPath, "", "utf8");
       await truncate(outputPath, 100_000_001);
@@ -250,7 +266,7 @@ describe("installers-lib", () => {
       expect(manifest.installers).toHaveLength(0);
 
       await expect(
-        access(path.join(targetDirectory, "macos", "Nodely-Browser-140.10.0-macos-x64.dmg"))
+        access(path.join(targetDirectory, "macos", `Nodely-Browser-${currentNodelyVersion}-macos-x64.dmg`))
       ).rejects.toThrow();
 
       const readme = await readFile(path.join(targetDirectory, "README.MD"), "utf8");
@@ -269,37 +285,38 @@ describe("installers-lib", () => {
     try {
       await mkdir(path.join(targetDirectory, "linux"), { recursive: true });
       await mkdir(path.join(targetDirectory, "windows"), { recursive: true });
-      await writeFile(path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-linux-arm64.run"), "arm", "utf8");
-      await writeFile(path.join(targetDirectory, "windows", "Nodely-Browser-0.1.0-win32-x64.exe"), "win", "utf8");
+      await writeFile(path.join(targetDirectory, "linux", `Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`), "arm", "utf8");
+      await writeFile(path.join(targetDirectory, "windows", `Nodely-Browser-${currentNodelyVersion}-win32-x64.exe`), "win", "utf8");
       await writeFile(
         path.join(targetDirectory, "manifest.json"),
         `${JSON.stringify(
           {
             generatedAt: "2026-04-05T00:00:00.000Z",
+            nodelyVersion: currentNodelyVersion,
             installers: [
               {
-                version: "0.1.0",
+                version: currentNodelyVersion,
                 platform: "linux",
                 arch: "arm64",
                 variant: "generic",
                 distribution: "generic",
                 compatibility: ["Ubuntu"],
-                path: "linux/Nodely-Browser-0.1.0-linux-arm64.run",
-                fileName: "Nodely-Browser-0.1.0-linux-arm64.run",
-                source: "out/make/linux/arm64/Nodely-Browser-0.1.0-linux-arm64.run",
+                path: `linux/Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`,
+                fileName: `Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`,
+                source: `out/make/linux/arm64/Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`,
                 size: 3,
                 syncedAt: "2026-04-05T00:00:00.000Z"
               },
               {
-                version: "0.1.0",
+                version: currentNodelyVersion,
                 platform: "win32",
                 arch: "x64",
                 variant: "installer",
                 distribution: "windows",
                 compatibility: ["Windows 10", "Windows 11"],
-                path: "windows/Nodely-Browser-0.1.0-win32-x64.exe",
-                fileName: "Nodely-Browser-0.1.0-win32-x64.exe",
-                source: "out/make/win32/x64/Nodely-Browser-0.1.0-win32-x64.exe",
+                path: `windows/Nodely-Browser-${currentNodelyVersion}-win32-x64.exe`,
+                fileName: `Nodely-Browser-${currentNodelyVersion}-win32-x64.exe`,
+                source: `out/make/win32/x64/Nodely-Browser-${currentNodelyVersion}-win32-x64.exe`,
                 size: 3,
                 syncedAt: "2026-04-05T00:00:00.000Z"
               }
@@ -318,8 +335,8 @@ describe("installers-lib", () => {
 
       expect(manifest.installers).toHaveLength(1);
       expect(manifest.installers[0].platform).toBe("linux");
-      await access(path.join(targetDirectory, "linux", "Nodely-Browser-0.1.0-linux-arm64.run"));
-      await expect(access(path.join(targetDirectory, "windows", "Nodely-Browser-0.1.0-win32-x64.exe"))).rejects.toThrow();
+      await access(path.join(targetDirectory, "linux", `Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`));
+      await expect(access(path.join(targetDirectory, "windows", `Nodely-Browser-${currentNodelyVersion}-win32-x64.exe`))).rejects.toThrow();
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }

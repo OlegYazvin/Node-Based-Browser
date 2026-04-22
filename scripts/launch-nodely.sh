@@ -4,6 +4,11 @@ set -euo pipefail
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd -- "$script_dir/.." && pwd)
+nodely_package_version="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*$/\1/p' "$repo_root/package.json" | head -n 1)"
+nodely_display_version="$nodely_package_version"
+if [[ "$nodely_display_version" =~ ^([0-9]+\.[0-9]+)\.0$ ]]; then
+  nodely_display_version="${BASH_REMATCH[1]}"
+fi
 checkout_dir_default="$repo_root/../Nodely-Gecko/firefox-esr"
 checkout_dir="${NODELY_BROWSER_CHECKOUT:-${NODELY_FIREFOX_DIR:-$checkout_dir_default}}"
 packaged_binary_default="$checkout_dir/obj-nodely/dist/nodely/nodely"
@@ -105,6 +110,34 @@ if [[ ! -x "$binary" ]]; then
 fi
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
+  metadata_path="$(dirname "$binary")/application.ini"
+
+  if [[ -f "$metadata_path" ]]; then
+    nodely_version="$(sed -n 's/^NodelyVersion=//p' "$metadata_path" | head -n 1)"
+    gecko_version="$(sed -n 's/^GeckoVersion=//p' "$metadata_path" | head -n 1)"
+
+    if [[ -z "$gecko_version" ]]; then
+      gecko_version="$(sed -n 's/^Version=//p' "$metadata_path" | head -n 1)"
+    fi
+
+    if [[ -n "$nodely_version" ]]; then
+      if [[ -n "$gecko_version" ]]; then
+        printf 'Nodely %s (Gecko %s)\n' "$nodely_version" "$gecko_version"
+      else
+        printf 'Nodely %s\n' "$nodely_version"
+      fi
+      exit 0
+    fi
+  fi
+
+  version="$("$binary" "$1" 2>/dev/null || true)"
+  gecko_version="$(printf '%s\n' "$version" | sed -n 's/^Mozilla Firefox //p' | head -n 1)"
+
+  if [[ -n "$gecko_version" ]]; then
+    printf 'Nodely %s (Gecko %s)\n' "$nodely_display_version" "$gecko_version"
+    exit 0
+  fi
+
   exec "$binary" "$1"
 fi
 

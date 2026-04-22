@@ -21,10 +21,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { formatNodelyVersionString, readNodelyVersionMetadata } from "../../scripts/nodely-version.mjs";
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(geckoRoot, "..");
 const nodelyIconSvgPath = path.join(repositoryRoot, "desktop", "nodely-icon.svg");
+const { displayVersion: currentNodelyVersion } = readNodelyVersionMetadata();
 
 const NODELY_APP_ID = "{a75f9f03-78b1-4c8a-a2c7-f12d45088b29}";
 const NODELY_CRASH_REPORT_EMAIL = "olegyazvin@gmail.com";
@@ -438,6 +441,7 @@ export async function ensureMacArtifactCompatibility(checkoutDir) {
 }
 
 function nodelyVersionWrapper(targetName, { desktopFileName = "" } = {}) {
+  const fallbackVersionString = formatNodelyVersionString(currentNodelyVersion);
   const desktopIntegrationBlock = desktopFileName
     ? `
 desktop_file_name="${desktopFileName}"
@@ -511,10 +515,36 @@ script_dir=$(cd -- "$(dirname -- "\${BASH_SOURCE[0]}")" && pwd)
 target="$script_dir/${targetName}"
 
 if [[ "\${1:-}" == "--version" || "\${1:-}" == "-v" ]]; then
+  metadata_path="$script_dir/application.ini"
+
+  if [[ -f "$metadata_path" ]]; then
+    nodely_version="$(sed -n 's/^NodelyVersion=//p' "$metadata_path" | head -n 1)"
+    gecko_version="$(sed -n 's/^GeckoVersion=//p' "$metadata_path" | head -n 1)"
+
+    if [[ -z "$gecko_version" ]]; then
+      gecko_version="$(sed -n 's/^Version=//p' "$metadata_path" | head -n 1)"
+    fi
+
+    if [[ -n "$nodely_version" ]]; then
+      if [[ -n "$gecko_version" ]]; then
+        printf 'Nodely %s (Gecko %s)\\n' "$nodely_version" "$gecko_version"
+      else
+        printf 'Nodely %s\\n' "$nodely_version"
+      fi
+      exit 0
+    fi
+  fi
+
   version="$("$target" --version 2>/dev/null || true)"
+  gecko_version="$(printf '%s\\n' "$version" | sed -n 's/^Mozilla Firefox //p' | head -n 1)"
+
+  if [[ -n "$gecko_version" ]]; then
+    printf 'Nodely %s (Gecko %s)\\n' "${currentNodelyVersion}" "$gecko_version"
+    exit 0
+  fi
 
   if [[ -n "$version" ]]; then
-    printf '%s\\n' "$version" | sed 's/^Mozilla Firefox /Nodely /'
+    printf '%s\\n' "${fallbackVersionString}"
     exit 0
   fi
 fi
@@ -557,8 +587,7 @@ async function ensureVersionWrapper(directory, wrapperName, targetName, options 
 function patchApplicationIni(contents) {
   const version = contents.match(/^Version=(.+)$/mu)?.[1]?.trim() ?? "%VERSION%";
   const buildId = contents.match(/^BuildID=(.+)$/mu)?.[1]?.trim() ?? "%BUILDID%";
-
-  return contents
+  let patched = contents
     .replace(/^Vendor=.*$/mu, "Vendor=Nodely")
     .replace(/^Name=.*$/mu, "Name=Nodely")
     .replace(/^RemotingName=.*$/mu, "RemotingName=nodely")
@@ -569,6 +598,20 @@ function patchApplicationIni(contents) {
       `ServerURL=https://crashes.nodely.invalid/submit?to=${NODELY_CRASH_REPORT_EMAIL_PARAM}&id=${NODELY_APP_ID}&version=${version}&buildid=${buildId}`
     )
     .replace(/^URL=.*$/mu, "URL=");
+
+  if (/^NodelyVersion=.*$/mu.test(patched)) {
+    patched = patched.replace(/^NodelyVersion=.*$/mu, `NodelyVersion=${currentNodelyVersion}`);
+  } else {
+    patched = patched.replace(/^Version=.*$/mu, (match) => `${match}\nNodelyVersion=${currentNodelyVersion}`);
+  }
+
+  if (/^GeckoVersion=.*$/mu.test(patched)) {
+    patched = patched.replace(/^GeckoVersion=.*$/mu, `GeckoVersion=${version}`);
+  } else {
+    patched = patched.replace(/^NodelyVersion=.*$/mu, (match) => `${match}\nGeckoVersion=${version}`);
+  }
+
+  return patched;
 }
 
 async function patchIfPresent(filePath) {

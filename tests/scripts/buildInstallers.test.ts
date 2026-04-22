@@ -5,6 +5,7 @@ import { access, lstat, mkdtemp, mkdir, readFile, readdir, readlink, rm, symlink
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { readNodelyVersionMetadata } from "../../scripts/nodely-version.mjs";
 import {
   buildDesktopEntry,
   buildFlatpakWrapper,
@@ -19,6 +20,7 @@ import {
   resolveExtractedLinuxAppDirectory
 } from "../../scripts/build-installers.mjs";
 
+const { displayVersion: currentNodelyVersion } = readNodelyVersionMetadata();
 const tempDirectories = [];
 
 afterEach(async () => {
@@ -69,7 +71,9 @@ describe("build-installers wrappers", () => {
     expect(wrapper).toContain('"$app_executable"');
     expect(wrapper).toContain('status=$?');
     expect(wrapper).toContain("printf '%s");
-    expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
+    expect(wrapper).toContain("sed -n 's/^NodelyVersion=//p'");
+    expect(wrapper).toContain("sed -n 's/^GeckoVersion=//p'");
+    expect(wrapper).toContain("printf 'Nodely %s (Gecko %s)");
     expect(wrapper).toContain("/nodely-browser/gecko-profile");
     expect(wrapper).toContain('profile_recovery_enabled="${NODELY_PROFILE_RECOVERY:-1}"');
     expect(wrapper).toContain('NODELY_PROFILE_RECOVERY_THRESHOLD_SECONDS');
@@ -117,7 +121,7 @@ describe("build-installers wrappers", () => {
       encoding: "utf8"
     });
 
-    expect(version.trim()).toBe("Nodely 140.10.0esr");
+    expect(version.trim()).toBe(`Nodely ${currentNodelyVersion} (Gecko 140.10.0esr)`);
   });
 
   it("backs up an existing profile and retries after an early startup crash", async () => {
@@ -208,7 +212,9 @@ describe("build-installers wrappers", () => {
     expect(wrapper).toContain('"$app_executable"');
     expect(wrapper).toContain('status=$?');
     expect(wrapper).toContain("printf '%s");
-    expect(wrapper).toContain("sed 's/^Mozilla Firefox /Nodely /'");
+    expect(wrapper).toContain("sed -n 's/^NodelyVersion=//p'");
+    expect(wrapper).toContain("sed -n 's/^GeckoVersion=//p'");
+    expect(wrapper).toContain("printf 'Nodely %s (Gecko %s)");
     expect(wrapper).toContain("/nodely-browser/gecko-profile");
     expect(wrapper).toContain('profile_recovery_enabled="${NODELY_PROFILE_RECOVERY:-1}"');
     expect(wrapper).toContain('NODELY_PROFILE_RECOVERY_THRESHOLD_SECONDS');
@@ -229,12 +235,12 @@ describe("build-installers wrappers", () => {
 
   it("declares the Gecko runtime libraries needed by Ubuntu and Mint", () => {
     const control = debControl({
-      version: "140.10.0",
+      version: currentNodelyVersion,
       arch: "x64",
       distribution: "ubuntu"
     });
 
-    expect(control).toContain("Version: 140.10.0-9");
+    expect(control).toContain(`Version: ${currentNodelyVersion}-9`);
     expect(control).toContain("Depends:");
     expect(control).toContain("libatk1.0-0");
     expect(control).toContain("libdbus-1-3");
@@ -274,7 +280,7 @@ describe("build-installers wrappers", () => {
 
   it("declares the Debian jpeg runtime package", () => {
     const control = debControl({
-      version: "140.10.0",
+      version: currentNodelyVersion,
       arch: "x64",
       distribution: "debian"
     });
@@ -285,7 +291,7 @@ describe("build-installers wrappers", () => {
 
   it("declares the Gecko runtime libraries needed by Fedora", () => {
     const spec = rpmSpec({
-      version: "140.9.1esr",
+      version: currentNodelyVersion,
       arch: "x64"
     });
 
@@ -328,7 +334,7 @@ describe("build-installers wrappers", () => {
         sourceArtifactPath: windowsSource,
         outDirectory
       })
-    ).resolves.toEqual([path.join(outDirectory, "win32", "x64", "Nodely-Browser-140.9.1esr-windows-x64.installer.exe")]);
+    ).resolves.toEqual([path.join(outDirectory, "win32", "x64", `Nodely-Browser-${currentNodelyVersion}-windows-x64.installer.exe`)]);
 
     await expect(
       copyNativeInstaller({
@@ -337,10 +343,10 @@ describe("build-installers wrappers", () => {
         sourceArtifactPath: macSource,
         outDirectory
       })
-    ).resolves.toEqual([path.join(outDirectory, "darwin", "arm64", "Nodely-Browser-140.9.1esr-macos-arm64.pkg")]);
+    ).resolves.toEqual([path.join(outDirectory, "darwin", "arm64", `Nodely-Browser-${currentNodelyVersion}-macos-arm64.pkg`)]);
   });
 
-  it("uses an explicit ESR version for native installers that omit the suffix", async () => {
+  it("uses an explicit visible Nodely version override for native installers", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-native-esr-"));
     tempDirectories.push(tempDirectory);
 
@@ -357,15 +363,14 @@ describe("build-installers wrappers", () => {
         arch: "x64",
         sourceArtifactPath: windowsSource,
         outDirectory,
-        versionOverride: "140.9.1esr"
+        versionOverride: "0.2"
       })
-    ).resolves.toEqual([path.join(outDirectory, "win32", "x64", "Nodely-Browser-140.9.1esr-windows-x64.installer.exe")]);
+    ).resolves.toEqual([path.join(outDirectory, "win32", "x64", "Nodely-Browser-0.2-windows-x64.installer.exe")]);
   });
 
-  it("rejects installer version overrides that do not match the packaged artifact", () => {
-    expect(() => resolveInstallerVersion("140.10.0", "140.9.1esr", "native installer test.exe")).toThrow(
-      "Installer version override 140.9.1esr does not match packaged artifact version 140.10.0"
-    );
+  it("defaults installer outputs to the current Nodely version instead of the Gecko version", () => {
+    expect(resolveInstallerVersion("140.10.0", null, "native installer test.exe")).toBe(currentNodelyVersion);
+    expect(resolveInstallerVersion("140.10.0", "0.2", "native installer test.exe")).toBe("0.2");
   });
 
   it("preserves relative app-bundle symlinks instead of making build-temp links", async () => {

@@ -76,6 +76,8 @@ The public download page for installers is GitHub Releases:
 
 The [Installer](./Installer) directory is the repo-staged installer snapshot and maintainer metadata, not the primary user download destination.
 
+- Visible release numbering follows Nodely’s own app version from `package.json`, starting at `0.1`.
+- Gecko ESR remains tracked separately in staged artifact and installer metadata so the engine base is always visible.
 - `npm run installers` builds the installer for the current platform from the staged Gecko package in `gecko/release-artifacts`.
 - `npm run installers:sync -- --platform <platform> --arch <arch>` copies a finished installer from `out/make/<platform>/<arch>` into `Installer/` and refreshes both `Installer/manifest.json` and [Installer/README.MD](./Installer/README.MD).
 - `npm run installers:prune -- --target <platform:arch>` removes stale installer slices before a CI promotion refresh.

@@ -13,6 +13,8 @@ Options:
   --built-by <source>        local | github-actions (default: local)
   --build-workflow <path>    Optional workflow path or label for promoted builds
   --build-run-url <url>      Optional workflow run URL for promoted builds
+  --nodely-version <ver>     Optional visible Nodely version override for synced outputs
+  --gecko-version <ver>      Optional Gecko base version to record in installer metadata
   --help                     Show this help text
 `);
 }
@@ -23,7 +25,9 @@ function parseArguments(argv) {
     arch: currentArch(),
     builtBy: "local",
     buildWorkflow: null,
-    buildRunUrl: null
+    buildRunUrl: null,
+    nodelyVersion: null,
+    geckoVersion: null
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -44,6 +48,12 @@ function parseArguments(argv) {
         break;
       case "--build-run-url":
         options.buildRunUrl = argv[++index];
+        break;
+      case "--nodely-version":
+        options.nodelyVersion = argv[++index];
+        break;
+      case "--gecko-version":
+        options.geckoVersion = argv[++index];
         break;
       case "--help":
         usage();

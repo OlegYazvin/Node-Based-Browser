@@ -20,6 +20,7 @@ import {
   resolveGeckoReleaseArtifact,
   syncInstallers
 } from "./installers-lib.mjs";
+import { formatNodelyVersionString, readNodelyVersionMetadata } from "./nodely-version.mjs";
 
 const systemDesktopFileName = "nodely-browser.desktop";
 const systemIconName = "nodely-browser";
@@ -32,6 +33,7 @@ const flatpakSdk = "org.freedesktop.Sdk";
 const flatpakRuntimeBranch = "24.08";
 const flatpakAppBranch = "stable";
 const flatpakRuntimeRepo = "https://dl.flathub.org/repo/flathub.flatpakrepo";
+const { displayVersion: currentNodelyVersion } = readNodelyVersionMetadata();
 
 const nativeInstallerExtensions = {
   win32: [".exe"],
@@ -66,7 +68,7 @@ Options:
   --arch <arch>           x64 | arm64
   --channel <name>        Release channel in gecko/release-artifacts (default: local)
   --artifact <path>       Override the staged Gecko release artifact path
-  --version <version>     Override the visible installer version after checking it matches the artifact
+  --version <version>     Override the visible Nodely installer version (default: ${currentNodelyVersion})
   --out-dir <path>        Installer build output directory (default: out/make)
   --strict                Fail if any expected installer builder fails
   --no-sync               Skip syncing finished installers into Installer/
@@ -126,28 +128,14 @@ function parseArguments(argv) {
   return options;
 }
 
-function comparableInstallerVersion(version) {
-  return version.trim().toLowerCase().replace(/esr$/u, "");
-}
-
 export function resolveInstallerVersion(sourceVersion, versionOverride, sourceDescription = "packaged artifact") {
-  if (!sourceVersion) {
-    throw new Error(`Could not determine the Nodely version from ${sourceDescription}.`);
-  }
-
   const normalizedOverride = versionOverride?.trim() || null;
 
-  if (!normalizedOverride) {
-    return sourceVersion;
+  if (normalizedOverride) {
+    return normalizedOverride;
   }
 
-  if (comparableInstallerVersion(sourceVersion) !== comparableInstallerVersion(normalizedOverride)) {
-    throw new Error(
-      `Installer version override ${normalizedOverride} does not match packaged artifact version ${sourceVersion} from ${sourceDescription}.`
-    );
-  }
-
-  return normalizedOverride;
+  return currentNodelyVersion;
 }
 
 function linuxRunFileName(version, arch) {
@@ -384,6 +372,50 @@ if [[ -z "$moz_enable_wayland" ]]; then
 fi`;
 }
 
+function shellVersionProbe({ metadataPathExpression, versionCommandExpression }) {
+  const fallbackVersionString = formatNodelyVersionString(currentNodelyVersion);
+  return `metadata_path=${metadataPathExpression}
+
+if [[ -f "$metadata_path" ]]; then
+  nodely_version="$(sed -n 's/^NodelyVersion=//p' "$metadata_path" | head -n 1)"
+  gecko_version="$(sed -n 's/^GeckoVersion=//p' "$metadata_path" | head -n 1)"
+
+  if [[ -z "$gecko_version" ]]; then
+    gecko_version="$(sed -n 's/^Version=//p' "$metadata_path" | head -n 1)"
+  fi
+
+  if [[ -n "$nodely_version" ]]; then
+    if [[ -n "$gecko_version" ]]; then
+      printf 'Nodely %s (Gecko %s)\\n' "$nodely_version" "$gecko_version"
+    else
+      printf 'Nodely %s\\n' "$nodely_version"
+    fi
+    exit 0
+  fi
+fi
+
+set +e
+version="$(
+${versionCommandExpression}
+)"
+status=$?
+set -e
+
+if [[ "$status" -ne 0 ]]; then
+  printf '%s\\n' "$version" >&2
+  exit "$status"
+fi
+
+gecko_version="$(printf '%s\\n' "$version" | sed -n 's/^Mozilla Firefox //p' | head -n 1)"
+
+if [[ -n "$gecko_version" ]]; then
+  printf 'Nodely %s (Gecko %s)\\n' "${currentNodelyVersion}" "$gecko_version"
+else
+  printf '%s\\n' "${fallbackVersionString}"
+fi
+exit 0`;
+}
+
 function shellProfileLaunch({ desktopFileName, profileDir }) {
   return `profile_dir="${profileDir}"
 profile_preexisted=0
@@ -505,25 +537,17 @@ if [[ -z "$app_executable" ]]; then
 fi
 
 if [[ "$version_only" -eq 1 ]]; then
-  set +e
-  version="$(
-    env \
-      MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
-      MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
-      MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \
-      "$app_executable" \
-      "$@" 2>&1
-  )"
-  status=$?
-  set -e
-
-  if [[ "$status" -ne 0 ]]; then
-    printf '%s\n' "$version" >&2
-    exit "$status"
-  fi
-
-  printf '%s\n' "$version" | sed 's/^Mozilla Firefox /Nodely /'
-  exit 0
+${shellVersionProbe({
+    metadataPathExpression: JSON.stringify(`${installRoot}/application.ini`),
+    versionCommandExpression: [
+      "    env \\",
+      '      MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \\',
+      '      MOZ_APP_REMOTINGNAME="${MOZ_APP_REMOTINGNAME:-nodely}" \\',
+      `      MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${desktopFileName}}" \\`,
+      '      "$app_executable" \\',
+      '      "$@" 2>&1'
+    ].join("\n")
+  })}
 fi
 
 ${shellProfileLaunch({
@@ -565,25 +589,17 @@ if [[ -z "$app_executable" ]]; then
 fi
 
 if [[ "$version_only" -eq 1 ]]; then
-  set +e
-  version="$(
-    env \
-      MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \
-      MOZ_APP_REMOTINGNAME="\${MOZ_APP_REMOTINGNAME:-nodely}" \
-      MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \
-      "$app_executable" \
-      "$@" 2>&1
-  )"
-  status=$?
-  set -e
-
-  if [[ "$status" -ne 0 ]]; then
-    printf '%s\n' "$version" >&2
-    exit "$status"
-  fi
-
-  printf '%s\n' "$version" | sed 's/^Mozilla Firefox /Nodely /'
-  exit 0
+${shellVersionProbe({
+    metadataPathExpression: '"/app/lib/nodely/application.ini"',
+    versionCommandExpression: [
+      "    env \\",
+      '      MOZ_ENABLE_WAYLAND="$moz_enable_wayland" \\',
+      '      MOZ_APP_REMOTINGNAME="${MOZ_APP_REMOTINGNAME:-nodely}" \\',
+      `      MOZ_DESKTOP_FILE_NAME="\${MOZ_DESKTOP_FILE_NAME:-${flatpakAppId}.desktop}" \\`,
+      '      "$app_executable" \\',
+      '      "$@" 2>&1'
+    ].join("\n")
+  })}
 fi
 
 ${shellProfileLaunch({
@@ -1404,8 +1420,8 @@ async function main() {
     artifactPath: options.artifactPath
   });
   const sourceArtifactName = path.basename(sourceArtifactPath);
-  const sourceVersion = extractGeckoArtifactVersion(sourceArtifactName);
-  const version = resolveInstallerVersion(sourceVersion, options.versionOverride, `packaged artifact ${sourceArtifactName}`);
+  const geckoVersion = extractGeckoArtifactVersion(sourceArtifactName);
+  const version = resolveInstallerVersion(geckoVersion, options.versionOverride, `packaged artifact ${sourceArtifactName}`);
 
   let outputs = [];
 
@@ -1437,7 +1453,9 @@ async function main() {
     await syncInstallers({
       platform: options.platform,
       arch: options.arch,
-      makeDirectory: options.outDirectory
+      makeDirectory: options.outDirectory,
+      nodelyVersion: version,
+      geckoVersion
     });
   }
 }

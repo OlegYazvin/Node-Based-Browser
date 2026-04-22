@@ -6,6 +6,9 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { extractGeckoArtifactVersion } from "../../scripts/installers-lib.mjs";
+import { readNodelyVersionMetadata } from "../../scripts/nodely-version.mjs";
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(geckoRoot, "..");
@@ -209,6 +212,7 @@ async function readManifest(stageDir) {
   } catch {
     return {
       generatedAt: null,
+      nodelyVersion: null,
       artifacts: []
     };
   }
@@ -221,6 +225,7 @@ function normalizeArtifactBaseName(fileName) {
 }
 
 async function stageArtifacts(options) {
+  const { displayVersion: nodelyVersion } = readNodelyVersionMetadata();
   const artifacts = await findPackagedArtifacts(options.checkoutDir, options.platform);
 
   if (!artifacts.length) {
@@ -274,6 +279,8 @@ async function stageArtifacts(options) {
 
   nextArtifacts.push({
     path: relativeDestination,
+    nodelyVersion,
+    geckoVersion: extractGeckoArtifactVersion(path.basename(selectedArtifact)),
     platform: options.platform,
     arch: options.arch,
     channel: options.channel,
@@ -284,6 +291,7 @@ async function stageArtifacts(options) {
 
   const nextManifest = {
     generatedAt: new Date().toISOString(),
+    nodelyVersion,
     artifacts: nextArtifacts.sort((left, right) => left.path.localeCompare(right.path))
   };
 
