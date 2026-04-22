@@ -17,8 +17,10 @@ import {
   createRootNode,
   relayoutWorkspace,
   resolveOmniboxInput,
+  selectNode,
   setSurfaceMode,
-  setViewMode
+  setViewMode,
+  updateNodeMetadata
 } from "../overlay/browser/base/content/nodely/domain.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +33,20 @@ const CHILD_SMOKE_URL =
   "data:text/html,%3Ctitle%3ENodely%20Smoke%20Child%3C%2Ftitle%3E%3Ch1%3EChild%3C%2Fh1%3E";
 const FOREIGN_TAB_SMOKE_URL =
   "data:text/html,%3Ctitle%3ENodely%20Smoke%20Foreign%20Tab%3C%2Ftitle%3E%3Ch1%3EForeign%20Tab%3C%2Fh1%3E";
+const SUBTREE_ROOT_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Root%3C%2Ftitle%3E%3Ch1%3ERoot%3C%2Fh1%3E";
+const SUBTREE_HIDDEN_ANCESTOR_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Hidden%20Ancestor%3C%2Ftitle%3E%3Ch1%3EHidden%20Ancestor%3C%2Fh1%3E";
+const SUBTREE_PARENT_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Parent%3C%2Ftitle%3E%3Ch1%3EParent%3C%2Fh1%3E";
+const SUBTREE_CURRENT_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Current%3C%2Ftitle%3E%3Ch1%3ECurrent%3C%2Fh1%3E";
+const SUBTREE_BRANCH_CHILD_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Branch%20Child%3C%2Ftitle%3E%3Ch1%3EBranch%20Child%3C%2Fh1%3E";
+const SUBTREE_LEAF_CHILD_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Leaf%20Child%3C%2Ftitle%3E%3Ch1%3ELeaf%20Child%3C%2Fh1%3E";
+const SUBTREE_GRANDCHILD_SMOKE_URL =
+  "data:text/html,%3Ctitle%3ENodely%20Smoke%20Grandchild%3C%2Ftitle%3E%3Ch1%3EGrandchild%3C%2Fh1%3E";
 
 function usage() {
   console.log(`Usage: node gecko/scripts/run-nodely-smoke.mjs [options]
@@ -143,22 +159,113 @@ async function refreshArtifactBranding(checkoutDir) {
   });
 }
 
-function buildSeedWorkspace({ viewMode = "split", surfaceMode = "page" } = {}) {
+function populateSmokeNode(workspace, nodeId, url, title) {
+  const navigatedWorkspace = applyNodeNavigation(
+    workspace,
+    nodeId,
+    resolveOmniboxInput(url, workspace.prefs.searchProvider)
+  );
+
+  return updateNodeMetadata(navigatedWorkspace, nodeId, { title });
+}
+
+function buildPagebarSubtreeSmokeWorkspace({ viewMode = "split", surfaceMode = "page" } = {}) {
   let workspace = createEmptyWorkspace("default", "Nodely Smoke Workspace");
   workspace = createRootNode(workspace);
   const rootId = workspace.selectedNodeId;
-  workspace = applyNodeNavigation(
+  workspace = populateSmokeNode(
     workspace,
     rootId,
-    resolveOmniboxInput(ROOT_SMOKE_URL, workspace.prefs.searchProvider)
+    SUBTREE_ROOT_SMOKE_URL,
+    "Nodely Smoke Root"
   );
+
+  workspace = createChildNode(workspace, rootId, "manual");
+  const hiddenAncestorId = workspace.selectedNodeId;
+  workspace = populateSmokeNode(
+    workspace,
+    hiddenAncestorId,
+    SUBTREE_HIDDEN_ANCESTOR_SMOKE_URL,
+    "Nodely Smoke Hidden Ancestor"
+  );
+
+  workspace = createChildNode(workspace, hiddenAncestorId, "manual");
+  const parentId = workspace.selectedNodeId;
+  workspace = populateSmokeNode(
+    workspace,
+    parentId,
+    SUBTREE_PARENT_SMOKE_URL,
+    "Nodely Smoke Parent"
+  );
+
+  workspace = createChildNode(workspace, parentId, "manual");
+  const currentId = workspace.selectedNodeId;
+  workspace = populateSmokeNode(
+    workspace,
+    currentId,
+    SUBTREE_CURRENT_SMOKE_URL,
+    "Nodely Smoke Current"
+  );
+
+  workspace = createChildNode(workspace, currentId, "manual", { selectChild: false });
+  const branchChildId = workspace.nodes.at(-1)?.id ?? null;
+  if (!branchChildId) {
+    throw new Error("Failed to create subtree smoke branch child.");
+  }
+  workspace = populateSmokeNode(
+    workspace,
+    branchChildId,
+    SUBTREE_BRANCH_CHILD_SMOKE_URL,
+    "Nodely Smoke Branch Child"
+  );
+
+  workspace = createChildNode(workspace, branchChildId, "manual", { selectChild: false });
+  const grandchildId = workspace.nodes.at(-1)?.id ?? null;
+  if (!grandchildId) {
+    throw new Error("Failed to create subtree smoke grandchild.");
+  }
+  workspace = populateSmokeNode(
+    workspace,
+    grandchildId,
+    SUBTREE_GRANDCHILD_SMOKE_URL,
+    "Nodely Smoke Grandchild"
+  );
+
+  workspace = createChildNode(workspace, currentId, "manual", { selectChild: false });
+  const leafChildId = workspace.nodes.at(-1)?.id ?? null;
+  if (!leafChildId) {
+    throw new Error("Failed to create subtree smoke leaf child.");
+  }
+  workspace = populateSmokeNode(
+    workspace,
+    leafChildId,
+    SUBTREE_LEAF_CHILD_SMOKE_URL,
+    "Nodely Smoke Leaf Child"
+  );
+
+  workspace = selectNode(workspace, currentId);
+  workspace = relayoutWorkspace(workspace);
+  workspace = setViewMode(workspace, viewMode);
+  workspace = setSurfaceMode(workspace, surfaceMode);
+  return workspace;
+}
+
+function buildSeedWorkspace({ scenario = "", viewMode = "split", surfaceMode = "page" } = {}) {
+  if (
+    scenario === "pagebar-subtree-tabs" ||
+    scenario === "graph-contextmenu-kill-subtree" ||
+    scenario === "pagebar-contextmenu-kill-subtree"
+  ) {
+    return buildPagebarSubtreeSmokeWorkspace({ viewMode, surfaceMode });
+  }
+
+  let workspace = createEmptyWorkspace("default", "Nodely Smoke Workspace");
+  workspace = createRootNode(workspace);
+  const rootId = workspace.selectedNodeId;
+  workspace = populateSmokeNode(workspace, rootId, ROOT_SMOKE_URL, "Nodely Smoke Root");
   workspace = createChildNode(workspace, rootId, "manual");
   const childId = workspace.selectedNodeId;
-  workspace = applyNodeNavigation(
-    workspace,
-    childId,
-    resolveOmniboxInput(CHILD_SMOKE_URL, workspace.prefs.searchProvider)
-  );
+  workspace = populateSmokeNode(workspace, childId, CHILD_SMOKE_URL, "Nodely Smoke Child");
   workspace = relayoutWorkspace(workspace);
   workspace = setViewMode(workspace, viewMode);
   workspace = setSurfaceMode(workspace, surfaceMode);
@@ -176,7 +283,10 @@ async function writeSmokeProfile({
 }) {
   const workspaceDirectory = path.join(profileDir, namespace);
   const workspacePath = path.join(workspaceDirectory, "default.json");
-  const workspace = buildSeedWorkspace(seedWorkspaceOptionsForScenario(scenario));
+  const workspace = buildSeedWorkspace({
+    scenario,
+    ...seedWorkspaceOptionsForScenario(scenario)
+  });
 
   await mkdir(workspaceDirectory, { recursive: true });
   await writeFile(workspacePath, `${JSON.stringify(workspace, null, 2)}\n`, "utf8");
@@ -376,10 +486,16 @@ function snapshotLooksReady(snapshot, scenario = "") {
   const topbarOrganizeMoved = snapshot.ui?.topbar?.organizePresent === false;
   const topbarFullscreenPresent = snapshot.ui?.topbar?.fullscreenPresent === true;
   const topbarViewToggleNearBrand = snapshot.ui?.topbar?.viewSegmentedNearBrand === true;
+  const topbarThemeIconsReady =
+    (snapshot.ui?.topbar?.themeButtonCount ?? 0) === 2 &&
+    (snapshot.ui?.topbar?.themeIconCount ?? 0) === 2 &&
+    (snapshot.ui?.topbar?.themePathCount ?? 0) >= 3;
+  const visibleTabCount = snapshot.ui?.treeStrip?.tabNodeCount ?? 0;
   const treeStripIconsReady =
-    (snapshot.ui?.treeStrip?.tabFaviconCount ?? 0) >= minimumTreeNodeCount &&
-    (snapshot.ui?.treeStrip?.tabCloseCount ?? 0) >= minimumTreeNodeCount &&
-    (snapshot.ui?.treeStrip?.tabClosePathCount ?? 0) >= minimumTreeNodeCount &&
+    visibleTabCount >= 1 &&
+    (snapshot.ui?.treeStrip?.tabFaviconCount ?? 0) >= visibleTabCount &&
+    (snapshot.ui?.treeStrip?.tabCloseCount ?? 0) >= visibleTabCount &&
+    (snapshot.ui?.treeStrip?.tabClosePathCount ?? 0) >= visibleTabCount &&
     snapshot.ui?.treeStrip?.tabsFitViewport === true &&
     snapshot.ui?.treeStrip?.newChildVisible === true &&
     (snapshot.ui?.treeStrip?.newChildSvgCount ?? 0) >= 1 &&
@@ -411,6 +527,7 @@ function snapshotLooksReady(snapshot, scenario = "") {
     topbarOrganizeMoved &&
     topbarFullscreenPresent &&
     topbarViewToggleNearBrand &&
+    topbarThemeIconsReady &&
     treeStripIconsReady &&
     canvasTreeLabelsReady &&
     graphPointerReady &&
@@ -480,6 +597,8 @@ function snapshotMatchesScenario(snapshot, scenario) {
       snapshot.workspace?.selectedNode?.parentId === null &&
       snapshot.workspace?.selectedNode?.url === ROOT_SMOKE_URL &&
       snapshot.workspace?.selectedNode?.runtimeState === "live" &&
+      snapshot.ui?.treeStrip?.childrenDividerPresent === true &&
+      snapshot.ui?.treeStrip?.activeTabBridgePresent === true &&
       runtimeMatchesSelection &&
       runtimeMatchesNode
     );
@@ -525,6 +644,18 @@ function snapshotMatchesScenario(snapshot, scenario) {
     );
   }
 
+  if (scenario === "pagebar-contextmenu-kill-subtree") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.nodeCount === 3 &&
+      snapshot.workspace?.rootCount === 1 &&
+      snapshot.workspace?.selectedNode?.title === "Nodely Smoke Parent" &&
+      snapshot.workspace?.selectedNode?.parentId != null &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
   if (scenario === "pagebar-foreign-tab") {
     return (
       snapshot.browserSurface === "page" &&
@@ -533,6 +664,22 @@ function snapshotMatchesScenario(snapshot, scenario) {
       snapshot.workspace?.selectedNode?.parentId != null &&
       snapshot.workspace?.selectedNode?.url === FOREIGN_TAB_SMOKE_URL &&
       snapshot.ui?.pageToolbar?.addressValue === FOREIGN_TAB_SMOKE_URL &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "pagebar-subtree-tabs") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.selectedNode?.title === "Nodely Smoke Hidden Ancestor" &&
+      JSON.stringify(snapshot.ui?.treeStrip?.tabRoles ?? []) ===
+        JSON.stringify(["root", "current", "child"]) &&
+      snapshot.ui?.treeStrip?.childrenDividerPresent === true &&
+      snapshot.ui?.treeStrip?.activeTabBridgePresent === true &&
+      snapshot.ui?.treeStrip?.rootTabIconPresent === true &&
+      snapshot.ui?.treeStrip?.tabTransitionMode === "animated" &&
+      (snapshot.ui?.treeStrip?.descendantBadgeIconCount ?? 0) >= 1 &&
       runtimeMatchesSelection &&
       runtimeMatchesNode
     );
@@ -604,6 +751,18 @@ function snapshotMatchesScenario(snapshot, scenario) {
       snapshot.workspace?.rootCount === 1 &&
       snapshot.workspace?.selectedNode?.parentId === null &&
       snapshot.workspace?.selectedNode?.url === CHILD_SMOKE_URL &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
+  if (scenario === "graph-contextmenu-kill-subtree") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.nodeCount === 3 &&
+      snapshot.workspace?.rootCount === 1 &&
+      snapshot.workspace?.selectedNode?.title === "Nodely Smoke Parent" &&
+      snapshot.workspace?.selectedNode?.parentId != null &&
       runtimeMatchesSelection &&
       runtimeMatchesNode
     );

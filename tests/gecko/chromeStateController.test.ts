@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ChromeStateController } from "../../gecko/overlay/browser/base/content/nodely/chrome-state-controller.mjs";
 import {
   applyNodeNavigation,
+  buildPageFavoriteEntry,
   createChildNode,
   createEmptyWorkspace,
   createRootNode,
@@ -1125,6 +1126,93 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     );
   });
 
+  it("kills an entire subtree and returns selection to the removed branch parent", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/root",
+      input: "https://example.com/root",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = createChildNode(workspace, rootId, "manual");
+    const branchId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, branchId, {
+      kind: "url",
+      url: "https://example.com/branch",
+      input: "https://example.com/branch",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = createChildNode(workspace, branchId, "manual");
+    const leafId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, leafId, {
+      kind: "url",
+      url: "https://example.com/leaf",
+      input: "https://example.com/leaf",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = upsertArtifactNode(workspace, leafId, "download", {
+      transferId: "download-subtree",
+      fileName: "leaf.pdf"
+    });
+    const artifactId = workspace.nodes.find((node) => node.kind === "download")?.id as string;
+    workspace = {
+      ...workspace,
+      selectedNodeId: branchId
+    };
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => []),
+      removeNodeFavorites: vi.fn(async () => []),
+      removeFavorite: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    runtimeManager.tabForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId ? { id: "root-tab" } : nodeId === branchId ? { id: "branch-tab" } : null
+    );
+    runtimeManager.currentUrlForNode.mockImplementation((nodeId?: string) =>
+      nodeId === rootId
+        ? "https://example.com/root"
+        : nodeId === branchId
+          ? "https://example.com/branch"
+          : null
+    );
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.selectNode.mockClear();
+    runtimeManager.closeNodeRuntime.mockClear();
+
+    await controller.killSubtree(branchId);
+
+    expect(findNode(workspace, branchId)).toBeNull();
+    expect(findNode(workspace, leafId)).toBeNull();
+    expect(findNode(workspace, artifactId)).toBeNull();
+    expect(workspace.selectedNodeId).toBe(rootId);
+    expect(favoritesStore.removeNodeFavorites).toHaveBeenCalledWith(
+      workspace.id,
+      expect.arrayContaining([branchId, leafId, artifactId])
+    );
+    expect(runtimeManager.selectNode).toHaveBeenCalledWith(rootId);
+    expect(runtimeManager.closeNodeRuntime).toHaveBeenCalledWith(branchId);
+    expect(runtimeManager.closeNodeRuntime).toHaveBeenCalledWith(leafId);
+  });
+
   it("keeps the current page selected when creating a background child node", async () => {
     let workspace = createRootNode(createEmptyWorkspace());
     const rootId = workspace.selectedNodeId as string;
@@ -1217,6 +1305,59 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
       expect.objectContaining({ background: false })
     );
     expect(runtimeManager.selectNode).toHaveBeenCalledWith(childNode?.id);
+  });
+
+  it("opens an existing page favorite by selecting its node runtime", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/root",
+      input: "https://example.com/root",
+      query: null,
+      origin: "omnibox-url"
+    });
+    workspace = createChildNode(workspace, rootId, "manual");
+    const childId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, childId, {
+      kind: "url",
+      url: "https://example.com/child",
+      input: "https://example.com/child",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const favorites = [buildPageFavoriteEntry(workspace, findNode(workspace, rootId))];
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => favorites)
+    };
+    const runtimeManager = makeRuntimeManager();
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    runtimeManager.loadNode.mockClear();
+    runtimeManager.selectNode.mockClear();
+
+    await controller.openFavorite(favorites[0].id);
+
+    expect(workspace.selectedNodeId).toBe(rootId);
+    expect(workspace.prefs.surfaceMode).toBe("page");
+    expect(runtimeManager.loadNode).toHaveBeenCalledWith(
+      expect.objectContaining({ id: rootId }),
+      "https://example.com/root"
+    );
   });
 
   it("duplicates a tab from an explicit parent node when requested", async () => {

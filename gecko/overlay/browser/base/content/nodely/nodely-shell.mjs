@@ -2,6 +2,7 @@ import {
   buildPageFavoriteId,
   buildTreeFavoriteId,
   classifySiteCategory,
+  deriveSubtreeTabBarModel,
   findNode,
   findOwningPageNode,
   findRoots,
@@ -276,6 +277,104 @@ function iconSeedling() {
   ]);
 }
 
+function iconRootNode() {
+  return createIcon([
+    {
+      d: "M6.5 7.2c.5-1.9 1.9-3.3 3.5-3.3s3 1.4 3.5 3.3",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.45",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    },
+    {
+      d: "M10 7.2v3.1M5.4 10.3h9.2",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.3",
+      "stroke-linecap": "round"
+    },
+    {
+      d: "M10 10.3 7.2 14.7M10 10.3 8.6 15.8M10 10.3V16.5M10 10.3 11.4 15.8M10 10.3 12.8 14.7",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.25",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    }
+  ]);
+}
+
+function iconParentNode() {
+  return createIcon([
+    {
+      d: "M5.1 5.2h4.4m0 0v9.6m0-9.6h5.4",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.3",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    },
+    {
+      d: "M5.1 5.2h.01M9.5 14.8h.01M14.9 5.2h.01",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "2.2",
+      "stroke-linecap": "round"
+    }
+  ]);
+}
+
+function iconBranchDescendants() {
+  return createIcon([
+    {
+      d: "M5.1 5.1v9.8m0-4.9h4.2m0 0V6.3m0 3.7V13.7m0-3.7h5.6",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.3",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round"
+    },
+    {
+      d: "M5.1 3.8h.01M9.3 5h.01M9.3 15h.01M14.9 10h.01",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "2.2",
+      "stroke-linecap": "round"
+    }
+  ]);
+}
+
+function iconSun() {
+  return createIcon([
+    {
+      d: "M10 5.6a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8Z",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.35"
+    },
+    {
+      d: "M10 2.5v1.7M10 15.8v1.7M17.5 10h-1.7M4.2 10H2.5M15.3 4.7l-1.2 1.2M5.9 14.1l-1.2 1.2M15.3 15.3l-1.2-1.2M5.9 5.9 4.7 4.7",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.35",
+      "stroke-linecap": "round"
+    }
+  ]);
+}
+
+function iconMoon() {
+  return createIcon([
+    {
+      d: "M12.7 2.9a6.9 6.9 0 1 0 4.4 10.7A7.5 7.5 0 0 1 12.7 2.9Z",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.4",
+      "stroke-linejoin": "round"
+    }
+  ]);
+}
+
 export class NodelyShell extends HTMLElement {
   constructor() {
     super();
@@ -301,6 +400,8 @@ export class NodelyShell extends HTMLElement {
     this.composerSuggestions = [];
     this.addressSuggestions = [];
     this.layoutSyncFrame = null;
+    this.tabStripTransitionFrame = null;
+    this.tabStripTransitionResetTimer = null;
     this.splitResizeState = null;
     this.splitWidthOverride = null;
     this.layoutObserver =
@@ -805,7 +906,7 @@ export class NodelyShell extends HTMLElement {
     return false;
   }
 
-  openContextMenu({ kind, nodeId = null, anchor = null } = {}) {
+  openContextMenu({ kind, nodeId = null, nodeIds = [], anchor = null } = {}) {
     const normalizedAnchor = normalizeFloatingAnchor(anchor);
 
     if (!kind || !normalizedAnchor) {
@@ -820,6 +921,7 @@ export class NodelyShell extends HTMLElement {
     this.contextMenuState = {
       kind,
       nodeId,
+      nodeIds: Array.isArray(nodeIds) ? nodeIds.filter(Boolean) : [],
       anchor: normalizedAnchor
     };
     this.contextMenuOpenedAt = Date.now();
@@ -1043,15 +1145,17 @@ export class NodelyShell extends HTMLElement {
       "nodely-shell__segmented nodely-shell__segmented--theme"
     );
     themeSegmented.append(
-      createActionButton(this.ownerDocument, "Light", workspace?.prefs.themeMode !== "dark" ? "is-active" : "", {
+      createActionButton(this.ownerDocument, "", `nodely-shell__theme-toggle${workspace?.prefs.themeMode !== "dark" ? " is-active" : ""}`, {
         action: "set-theme",
         dataset: { theme: "light" },
-        title: "Use light mode"
+        title: "Use light mode",
+        icon: iconSun()
       }),
-      createActionButton(this.ownerDocument, "Dark", workspace?.prefs.themeMode === "dark" ? "is-active" : "", {
+      createActionButton(this.ownerDocument, "", `nodely-shell__theme-toggle${workspace?.prefs.themeMode === "dark" ? " is-active" : ""}`, {
         action: "set-theme",
         dataset: { theme: "dark" },
-        title: "Use dark mode"
+        title: "Use dark mode",
+        icon: iconMoon()
       })
     );
     const utilities = createHtmlElement(this.ownerDocument, "div", "nodely-shell__topbar-utilities");
@@ -1149,6 +1253,7 @@ export class NodelyShell extends HTMLElement {
     activeFavoriteIds,
     activePageFavoriteId
   ) {
+    const previousTabStripSnapshot = this.captureTabStripSnapshot();
     this.pagebar.hidden = !selectedNode || workspace?.prefs.surfaceMode === "canvas";
     this.pagebar.replaceChildren();
     this.addressInput = null;
@@ -1521,26 +1626,123 @@ export class NodelyShell extends HTMLElement {
     }
 
     const tabs = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tabs");
+    tabs.dataset.rootId = selectedRoot?.id ?? "";
     if (selectedRoot) {
-      for (const node of orderTreeNodesForTabs(workspace, selectedRoot.id)) {
+      const subtreeModel = deriveSubtreeTabBarModel(workspace, activeTabNodeId);
+      const visibleTabs = [];
+      const seenNodeIds = new Set();
+      const ellipsisButton = subtreeModel.hiddenAncestors.length
+        ? createActionButton(
+            this.ownerDocument,
+            "...",
+            "nodely-shell__tab nodely-shell__tab--ellipsis",
+            {
+              action: "open-ancestry-menu",
+              title: "Show hidden ancestors"
+            }
+          )
+        : null;
+
+      if (ellipsisButton) {
+        ellipsisButton.classList.add("nodely-shell__tab-strip-item");
+        ellipsisButton.dataset.tabKey = "ellipsis";
+        ellipsisButton.dataset.tabRole = "ellipsis";
+      }
+
+      const appendVisibleTab = (node, role) => {
+        if (!node || seenNodeIds.has(node.id)) {
+          return;
+        }
+
+        visibleTabs.push({
+          node,
+          role,
+          descendantPageCount: role === "child" ? subtreeModel.descendantPageCounts[node.id] ?? 0 : 0
+        });
+        seenNodeIds.add(node.id);
+      };
+
+      appendVisibleTab(subtreeModel.root, "root");
+      if (subtreeModel.parent && subtreeModel.parent.id !== subtreeModel.root?.id) {
+        appendVisibleTab(subtreeModel.parent, "parent");
+      }
+      appendVisibleTab(subtreeModel.current, "current");
+      subtreeModel.children.forEach((node) => appendVisibleTab(node, "child"));
+
+      for (const { node, role, descendantPageCount } of visibleTabs) {
+        const isActiveTab = node.id === activeTabNodeId;
         const category = classifySiteCategory(node.url, node.title);
         const tabWrap = createHtmlElement(this.ownerDocument, "div", "nodely-shell__tab-wrap");
+        tabWrap.classList.add("nodely-shell__tab-strip-item");
+        tabWrap.dataset.tabKey = `node:${node.id}`;
+        tabWrap.dataset.tabRole = role;
         const tab = createActionButton(
           this.ownerDocument,
           "",
-          `nodely-shell__tab${node.id === activeTabNodeId ? " is-active" : ""} nodely-shell__tab--${category}`,
+          `nodely-shell__tab${isActiveTab ? " is-active nodely-shell__tab--current-page" : ""}${role === "root" ? " nodely-shell__tab--root-node" : ""}${role === "parent" ? " nodely-shell__tab--parent-node" : ""} nodely-shell__tab--${category}`,
           {
             action: "select-node",
-            dataset: { nodeId: node.id },
-            title: node.title || "Untitled"
+            dataset: { nodeId: node.id, tabRole: role },
+            title: role === "parent" ? `Parent node: ${node.title || "Untitled"}` : node.title || "Untitled"
           }
         );
         const favicon = createFaviconChip(this.ownerDocument, node, "nodely-shell__tab-favicon");
+        const rootIcon =
+          role === "root"
+            ? (() => {
+                const accent = createHtmlElement(
+                  this.ownerDocument,
+                  "span",
+                  "nodely-shell__tab-role-icon nodely-shell__tab-root-icon"
+                );
+                accent.title = "Root node";
+                appendSvgIcon(this.ownerDocument, accent, iconRootNode());
+                return accent;
+              })()
+            : null;
+        const parentIcon =
+          role === "parent"
+            ? (() => {
+                const accent = createHtmlElement(
+                  this.ownerDocument,
+                  "span",
+                  "nodely-shell__tab-role-icon nodely-shell__tab-parent-icon"
+                );
+                accent.title = "Parent node";
+                appendSvgIcon(this.ownerDocument, accent, iconParentNode());
+                return accent;
+              })()
+            : null;
         const copy = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tab-copy");
         const label = createHtmlElement(this.ownerDocument, "strong");
         label.textContent = node.title || "Untitled";
         copy.append(label);
-        tab.append(favicon, copy);
+        tab.append(favicon);
+        if (rootIcon) {
+          tab.append(rootIcon);
+        }
+        if (parentIcon) {
+          tab.append(parentIcon);
+        }
+        tab.append(copy);
+        if (descendantPageCount > 0) {
+          const badge = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tab-badge");
+          appendSvgIcon(this.ownerDocument, badge, iconBranchDescendants());
+          const badgeCount = createHtmlElement(this.ownerDocument, "span");
+          badgeCount.textContent = descendantPageCount > 99 ? "99+" : String(descendantPageCount);
+          badge.append(badgeCount);
+          badge.title = `${descendantPageCount} hidden descendant page${descendantPageCount === 1 ? "" : "s"}`;
+          tab.append(badge);
+        }
+        if (isActiveTab) {
+          const pageBridge = createHtmlElement(
+            this.ownerDocument,
+            "span",
+            "nodely-shell__tab-page-bridge"
+          );
+          pageBridge.setAttribute("aria-hidden", "true");
+          tab.append(pageBridge);
+        }
         tabWrap.append(tab);
         const closeTabButton = createActionButton(
           this.ownerDocument,
@@ -1556,6 +1758,33 @@ export class NodelyShell extends HTMLElement {
         closeTabButton.setAttribute("aria-label", `Close tab: ${node.title || "Untitled"}`);
         tabWrap.append(closeTabButton);
         tabs.append(tabWrap);
+
+        if (role === "root" && ellipsisButton) {
+          tabs.append(ellipsisButton);
+        }
+
+        const currentIsRoot = subtreeModel.current?.id === subtreeModel.root?.id;
+
+        if (
+          subtreeModel.children.length > 0 &&
+          (role === "current" || (role === "root" && currentIsRoot))
+        ) {
+          const childDivider = createHtmlElement(
+            this.ownerDocument,
+            "div",
+            "nodely-shell__tab-divider nodely-shell__tab-strip-item"
+          );
+          childDivider.dataset.tabKey = "children-divider";
+          childDivider.dataset.tabRole = "children-divider";
+          childDivider.setAttribute("aria-hidden", "true");
+          childDivider.setAttribute("title", "Child nodes");
+          const dividerGlyph = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tab-divider-icon");
+          appendSvgIcon(this.ownerDocument, dividerGlyph, iconBranchDescendants());
+          const dividerLabel = createHtmlElement(this.ownerDocument, "span", "nodely-shell__tab-divider-label");
+          dividerLabel.textContent = "Children";
+          childDivider.append(dividerGlyph, dividerLabel);
+          tabs.append(childDivider);
+        }
       }
     }
 
@@ -1575,6 +1804,7 @@ export class NodelyShell extends HTMLElement {
 
     treeStrip.append(treeHeader, tabs);
     this.pagebar.append(pageActions, treeStrip);
+    this.animateTabStripTransition(previousTabStripSnapshot, tabs);
 
     if (workspace.prefs.viewMode === "focus" && workspace.prefs.showFocusHint !== false) {
       const focusHint = createHtmlElement(this.ownerDocument, "div", "nodely-shell__focus-hint");
@@ -1593,6 +1823,136 @@ export class NodelyShell extends HTMLElement {
       );
       this.pagebar.append(focusHint);
     }
+  }
+
+  captureTabStripSnapshot() {
+    const tabs = this.pagebar?.querySelector?.(".nodely-shell__tabs");
+
+    if (!tabs) {
+      return null;
+    }
+
+    const items = Array.from(tabs.querySelectorAll(".nodely-shell__tab-strip-item[data-tab-key]"));
+
+    if (!items.length) {
+      return null;
+    }
+
+    return {
+      rootId: tabs.dataset.rootId ?? "",
+      items: items.map((item) => ({
+        key: item.dataset.tabKey ?? "",
+        role: item.dataset.tabRole ?? "",
+        rect: item.getBoundingClientRect(),
+        clone: item.cloneNode(true)
+      }))
+    };
+  }
+
+  animateTabStripTransition(previousSnapshot, tabs) {
+    if (this.tabStripTransitionFrame != null) {
+      window.cancelAnimationFrame(this.tabStripTransitionFrame);
+      this.tabStripTransitionFrame = null;
+    }
+
+    if (this.tabStripTransitionResetTimer != null) {
+      clearTimeout(this.tabStripTransitionResetTimer);
+      this.tabStripTransitionResetTimer = null;
+    }
+
+    const currentItems = Array.from(tabs.querySelectorAll(".nodely-shell__tab-strip-item[data-tab-key]"));
+
+    if (!currentItems.length) {
+      tabs.dataset.transitionMode = "static";
+      return;
+    }
+
+    const shouldAnimate =
+      previousSnapshot &&
+      previousSnapshot.rootId &&
+      previousSnapshot.rootId === (tabs.dataset.rootId ?? "");
+
+    tabs.dataset.transitionMode = shouldAnimate ? "animated" : "static";
+
+    if (!shouldAnimate) {
+      return;
+    }
+
+    const previousItems = new Map(previousSnapshot.items.map((item) => [item.key, item]));
+    const nextItems = new Map(currentItems.map((item) => [item.dataset.tabKey ?? "", item]));
+
+    this.tabStripTransitionFrame = window.requestAnimationFrame(() => {
+      this.tabStripTransitionFrame = null;
+      const tabsRect = tabs.getBoundingClientRect();
+      const ghosts = [];
+
+      currentItems.forEach((item) => {
+        const key = item.dataset.tabKey ?? "";
+        const role = item.dataset.tabRole ?? "";
+        const previous = previousItems.get(key);
+        item.style.transition = "none";
+
+        if (previous) {
+          const nextRect = item.getBoundingClientRect();
+          const deltaX = previous.rect.left - nextRect.left;
+          const deltaY = previous.rect.top - nextRect.top;
+          item.style.transform =
+            Math.abs(deltaX) > 0.5 || Math.abs(deltaY) > 0.5
+              ? `translate(${deltaX}px, ${deltaY}px)`
+              : "";
+          item.style.opacity = "";
+        } else {
+          const enterShift = role === "child" ? 18 : role === "children-divider" ? 10 : -12;
+          item.style.transform = `translate(${enterShift}px, 0)`;
+          item.style.opacity = "0";
+        }
+      });
+
+      previousSnapshot.items.forEach((previous) => {
+        if (nextItems.has(previous.key)) {
+          return;
+        }
+
+        const ghost = previous.clone;
+        ghost.classList.add("nodely-shell__tab-strip-ghost");
+        ghost.style.left = `${previous.rect.left - tabsRect.left}px`;
+        ghost.style.top = `${previous.rect.top - tabsRect.top}px`;
+        ghost.style.width = `${previous.rect.width}px`;
+        ghost.style.height = `${previous.rect.height}px`;
+        ghost.style.opacity = "1";
+        ghost.style.transform = "translate(0, 0)";
+        tabs.append(ghost);
+        ghosts.push({ ghost, role: previous.role });
+      });
+
+      void tabs.getBoundingClientRect();
+
+      const transition =
+        "transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease";
+
+      currentItems.forEach((item) => {
+        item.style.transition = transition;
+        item.style.transform = "";
+        item.style.opacity = "";
+      });
+
+      ghosts.forEach(({ ghost, role }) => {
+        const exitShift = role === "child" ? 18 : role === "children-divider" ? 10 : -18;
+        ghost.style.transition = transition;
+        ghost.style.transform = `translate(${exitShift}px, 0)`;
+        ghost.style.opacity = "0";
+      });
+
+      this.tabStripTransitionResetTimer = setTimeout(() => {
+        currentItems.forEach((item) => {
+          item.style.transition = "";
+          item.style.transform = "";
+          item.style.opacity = "";
+        });
+        ghosts.forEach(({ ghost }) => ghost.remove());
+        this.tabStripTransitionResetTimer = null;
+      }, 320);
+    });
   }
 
   renderArtifactSurface(workspace, selectedNode) {
@@ -2358,29 +2718,62 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
-    const node = findNode(workspace, this.contextMenuState.nodeId);
-
-    if (!node) {
-      this.contextMenu.hidden = true;
-      return;
-    }
+    const node = this.contextMenuState.nodeId
+      ? findNode(workspace, this.contextMenuState.nodeId)
+      : null;
+    const killSubtreeLabel =
+      node == null ? "Kill Sub-Tree" : node.parentId === null ? "Kill Tree" : "Kill Sub-Tree";
 
     const body = createHtmlElement(this.ownerDocument, "div", "nodely-shell__menu-body");
 
-    if (this.contextMenuState.kind === "tab" && !isArtifactNode(node) && node.url) {
+    if (this.contextMenuState.kind === "ancestry") {
+      for (const ancestorId of this.contextMenuState.nodeIds ?? []) {
+        const ancestorNode = findNode(workspace, ancestorId);
+
+        if (!ancestorNode || isArtifactNode(ancestorNode)) {
+          continue;
+        }
+
+        body.append(
+          createActionButton(
+            this.ownerDocument,
+            ancestorNode.title || ancestorNode.url || "Untitled page",
+            "nodely-shell__menu-item",
+            {
+              action: "select-ancestor-node",
+              dataset: { nodeId: ancestorNode.id },
+              title: ancestorNode.title || ancestorNode.url || "Untitled page"
+            }
+          )
+        );
+      }
+    }
+
+    if (this.contextMenuState.kind === "tab" && node && !isArtifactNode(node) && node.url) {
       body.append(
         createActionButton(this.ownerDocument, "Duplicate As Child", "nodely-shell__menu-item", {
           action: "duplicate-tab",
           dataset: { nodeId: node.id }
         })
       );
-    }
-
-    if (this.contextMenuState.kind === "node") {
       body.append(
         createActionButton(
           this.ownerDocument,
-          node.parentId === null ? "Kill Root" : "Kill Node",
+          killSubtreeLabel,
+          "nodely-shell__menu-item nodely-shell__menu-item--danger",
+          {
+            action: "kill-subtree-context",
+            dataset: { nodeId: node.id }
+          }
+        )
+      );
+    }
+
+    if (this.contextMenuState.kind === "node" && node) {
+      body.append(
+        createActionButton(
+          this.ownerDocument,
+          killSubtreeLabel,
           "nodely-shell__menu-item nodely-shell__menu-item--danger",
           {
             action: "kill-node-context",
@@ -2933,6 +3326,42 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
+    if (action === "open-ancestry-menu") {
+      const selectedNode =
+        findNode(this.state.workspace, this.state.workspace?.selectedNodeId) ?? null;
+      const activePageNode =
+        selectedNode && isArtifactNode(selectedNode)
+          ? findOwningPageNode(this.state.workspace, selectedNode)
+          : selectedNode;
+      const subtreeModel = deriveSubtreeTabBarModel(
+        this.state.workspace,
+        activePageNode?.id ?? null
+      );
+      const hiddenAncestorIds = subtreeModel.hiddenAncestors.map((node) => node.id);
+
+      if (!hiddenAncestorIds.length) {
+        return;
+      }
+
+      const anchorRect = button.getBoundingClientRect?.() ?? null;
+      const anchor = anchorRect
+        ? {
+            clientX: Math.round(anchorRect.left),
+            clientY: Math.round(anchorRect.bottom)
+          }
+        : {
+            clientX: event.clientX ?? 0,
+            clientY: event.clientY ?? 0
+          };
+
+      this.openContextMenu({
+        kind: "ancestry",
+        nodeIds: hiddenAncestorIds,
+        anchor
+      });
+      return;
+    }
+
     if (action === "toggle-permissions-panel") {
       const nextOpen = !this.permissionsPanelOpen;
       this.closeInlinePanels();
@@ -3398,8 +3827,15 @@ export class NodelyShell extends HTMLElement {
       return;
     }
 
-    if (button.dataset.action === "kill-node-context") {
-      this.controller?.killNode(button.dataset.nodeId);
+    if (button.dataset.action === "select-ancestor-node") {
+      this.closeContextMenu();
+      this.render();
+      void this.controller?.selectNode?.(button.dataset.nodeId);
+      return;
+    }
+
+    if (button.dataset.action === "kill-node-context" || button.dataset.action === "kill-subtree-context") {
+      this.controller?.killSubtree(button.dataset.nodeId);
       this.closeContextMenu();
       this.render();
     }

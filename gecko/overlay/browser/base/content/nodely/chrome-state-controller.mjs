@@ -12,6 +12,7 @@ import {
   isFreshRootNode,
   isArtifactNode,
   killNode as removeNodeFromWorkspace,
+  killSubtree as removeNodeSubtreeFromWorkspace,
   relayoutWorkspace,
   refreshAutoTreeTitles,
   refreshTreeFavoriteEntries,
@@ -701,6 +702,53 @@ export class ChromeStateController extends EventTarget {
     await this.refreshSelectedPermissions(persistedWorkspace, selectedNode);
     this.runtimeManager.closeNodeRuntime(node.id);
     this.trace("kill-node", {
+      nodeId: node.id,
+      removedNodeIds,
+      invalidatedNodeIds,
+      selectedNodeId: persistedWorkspace.selectedNodeId
+    });
+  }
+
+  async killSubtree(nodeId = this.workspace?.selectedNodeId) {
+    const node = findNode(this.workspace, nodeId);
+
+    if (!node) {
+      return;
+    }
+
+    const {
+      workspace: nextWorkspace,
+      removedNodeIds,
+      invalidatedNodeIds = removedNodeIds
+    } = removeNodeSubtreeFromWorkspace(this.workspace, node.id);
+
+    if (!removedNodeIds.length && !invalidatedNodeIds.length) {
+      return;
+    }
+
+    if (invalidatedNodeIds.length) {
+      this.favorites = await this.favoritesStore.removeNodeFavorites(
+        this.workspace.id,
+        invalidatedNodeIds
+      );
+    }
+
+    if (node.parentId === null) {
+      this.favorites = await this.favoritesStore.removeFavorite?.(
+        buildTreeFavoriteId(this.workspace.id, node.id)
+      ) ?? this.favorites;
+    }
+
+    const persistedWorkspace = await this.persistWorkspace(relayoutWorkspace(nextWorkspace));
+    const selectedNode = findNode(persistedWorkspace, persistedWorkspace.selectedNodeId);
+
+    if (persistedWorkspace.prefs.surfaceMode === "page" && selectedNode && !isArtifactNode(selectedNode)) {
+      await this.ensureNodeRuntime(selectedNode);
+    }
+
+    await this.refreshSelectedPermissions(persistedWorkspace, selectedNode);
+    removedNodeIds.forEach((removedNodeId) => this.runtimeManager.closeNodeRuntime(removedNodeId));
+    this.trace("kill-subtree", {
       nodeId: node.id,
       removedNodeIds,
       invalidatedNodeIds,

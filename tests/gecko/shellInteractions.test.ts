@@ -10,6 +10,7 @@ let findNodeJumpSuggestions;
 let createEmptyWorkspace;
 let createRootNode;
 let createChildNode;
+let selectNode;
 let updateNodeMetadata;
 
 beforeAll(async () => {
@@ -52,7 +53,7 @@ beforeAll(async () => {
   ({ NodelyShell, findNodeJumpSuggestions } = await import(
     "../../gecko/overlay/browser/base/content/nodely/nodely-shell.mjs"
   ));
-  ({ createEmptyWorkspace, createRootNode, createChildNode, updateNodeMetadata } = await import(
+  ({ createEmptyWorkspace, createRootNode, createChildNode, selectNode, updateNodeMetadata } = await import(
     "../../gecko/overlay/browser/base/content/nodely/domain.mjs"
   ));
 });
@@ -445,6 +446,152 @@ describe("NodelyShell focus and context interactions", () => {
     });
 
     expect(closeComposer).toHaveBeenCalledTimes(1);
+    expect(render).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens an ancestry menu from the pagebar ellipsis using the hidden ancestors of the selected node", () => {
+    const shell = new NodelyShell();
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId;
+    workspace = updateNodeMetadata(workspace, rootId, { title: "Root" });
+    workspace = createChildNode(workspace, rootId, "manual");
+    const hiddenAncestorId = workspace.selectedNodeId;
+    workspace = updateNodeMetadata(workspace, hiddenAncestorId, { title: "Hidden" });
+    workspace = createChildNode(workspace, hiddenAncestorId, "manual");
+    const parentId = workspace.selectedNodeId;
+    workspace = updateNodeMetadata(workspace, parentId, { title: "Parent" });
+    workspace = createChildNode(workspace, parentId, "manual");
+    const currentId = workspace.selectedNodeId;
+    workspace = updateNodeMetadata(workspace, currentId, { title: "Current" });
+    workspace = selectNode(workspace, currentId);
+    shell.state = { workspace };
+
+    const openContextMenu = vi.spyOn(shell, "openContextMenu").mockImplementation(() => {});
+
+    shell.handlePagebarClick({
+      clientX: 0,
+      clientY: 0,
+      target: {
+        closest: vi.fn((selector) =>
+          selector === "[data-action]"
+            ? {
+                dataset: { action: "open-ancestry-menu" },
+                getBoundingClientRect: () => ({ left: 12, bottom: 44 })
+              }
+            : null
+        )
+      }
+    });
+
+    expect(openContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "ancestry",
+        nodeIds: [hiddenAncestorId],
+        anchor: { clientX: 12, clientY: 44 }
+      })
+    );
+  });
+
+  it("opens a tab context menu when right-clicking a page tab", () => {
+    const shell = new NodelyShell();
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = updateNodeMetadata(workspace, rootId, {
+      title: "Root",
+      url: "https://example.com/root"
+    });
+    shell.state = { workspace };
+
+    const openContextMenu = vi.spyOn(shell, "openContextMenu").mockImplementation(() => {});
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+
+    shell.handlePagebarContextMenu({
+      clientX: 18,
+      clientY: 42,
+      preventDefault,
+      stopPropagation,
+      target: {
+        closest: vi.fn((selector) =>
+          selector === ".nodely-shell__tab[data-node-id]"
+            ? {
+                dataset: { nodeId: rootId }
+              }
+            : null
+        )
+      }
+    });
+
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    expect(openContextMenu).toHaveBeenCalledWith({
+      kind: "tab",
+      nodeId: rootId,
+      anchor: { clientX: 18, clientY: 42 }
+    });
+  });
+
+  it("selects a hidden ancestor from the ancestry menu and closes the menu", () => {
+    const shell = new NodelyShell();
+    const selectNodeController = vi.fn();
+    const render = vi.spyOn(shell, "render").mockImplementation(() => {});
+    shell.controller = {
+      selectNode: selectNodeController
+    };
+    shell.contextMenuState = {
+      kind: "ancestry",
+      nodeIds: ["node-hidden"],
+      anchor: { clientX: 1, clientY: 1 }
+    };
+
+    shell.handleContextMenuClick({
+      target: {
+        closest: vi.fn((selector) =>
+          selector === "[data-action]"
+            ? {
+                dataset: {
+                  action: "select-ancestor-node",
+                  nodeId: "node-hidden"
+                }
+              }
+            : null
+        )
+      }
+    });
+
+    expect(selectNodeController).toHaveBeenCalledWith("node-hidden");
+    expect(shell.contextMenuState).toBeNull();
+    expect(render).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatches subtree deletion from the context menu and closes it", () => {
+    const shell = new NodelyShell();
+    const killSubtree = vi.fn();
+    const render = vi.spyOn(shell, "render").mockImplementation(() => {});
+    shell.controller = { killSubtree };
+    shell.contextMenuState = {
+      kind: "node",
+      nodeId: "node-branch",
+      anchor: { clientX: 1, clientY: 1 }
+    };
+
+    shell.handleContextMenuClick({
+      target: {
+        closest: vi.fn((selector) =>
+          selector === "[data-action]"
+            ? {
+                dataset: {
+                  action: "kill-subtree-context",
+                  nodeId: "node-branch"
+                }
+              }
+            : null
+        )
+      }
+    });
+
+    expect(killSubtree).toHaveBeenCalledWith("node-branch");
+    expect(shell.contextMenuState).toBeNull();
     expect(render).toHaveBeenCalledTimes(1);
   });
 });

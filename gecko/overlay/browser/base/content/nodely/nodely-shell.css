@@ -498,6 +498,20 @@
   font-weight: 600;
 }
 
+.nodely-shell__theme-toggle {
+  min-width: 34px;
+  width: 34px;
+  height: 30px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.nodely-shell__theme-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
 .nodely-shell__search {
   display: inline-flex;
   align-items: center;
@@ -883,12 +897,24 @@
 }
 
 .nodely-shell__tabs {
+  position: relative;
   display: flex;
   align-items: stretch;
   gap: 4px;
   min-width: 0;
   overflow: hidden;
-  padding-bottom: 2px;
+  padding-bottom: 10px;
+}
+
+.nodely-shell__tab-strip-item {
+  will-change: transform, opacity;
+}
+
+.nodely-shell__tab-strip-ghost {
+  position: absolute;
+  margin: 0;
+  z-index: 3;
+  pointer-events: none;
 }
 
 .nodely-shell__tab-wrap {
@@ -899,10 +925,12 @@
   display: flex;
   align-items: stretch;
   container-type: inline-size;
+  overflow: visible;
 }
 
 .nodely-shell__tab {
   appearance: none;
+  position: relative;
   width: 100%;
   min-width: 0;
   max-width: none;
@@ -916,9 +944,127 @@
   background: var(--nodely-tab-bg);
 }
 
+.nodely-shell__tab--root-node {
+  border-color: rgba(70, 102, 151, 0.34);
+  box-shadow:
+    inset 0 0 0 1px rgba(70, 102, 151, 0.14),
+    0 0 0 1px rgba(70, 102, 151, 0.08);
+}
+
+.nodely-shell__tab--parent-node {
+  border-color: rgba(92, 114, 148, 0.28);
+  box-shadow:
+    inset 0 0 0 1px rgba(92, 114, 148, 0.1),
+    inset 3px 0 0 rgba(92, 114, 148, 0.22);
+}
+
+.nodely-shell__tab--ellipsis {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  padding: 6px 8px;
+  justify-content: center;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--nodely-muted);
+}
+
+.nodely-shell__tab-divider {
+  flex: 0 0 auto;
+  min-width: 78px;
+  padding: 0 4px 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: color-mix(in srgb, var(--nodely-muted) 86%, var(--nodely-accent) 14%);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.nodely-shell__tab-divider::after {
+  content: "";
+  width: 20px;
+  height: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--nodely-button-border) 82%, transparent);
+}
+
+.nodely-shell__tab-divider-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-grid;
+  place-items: center;
+  color: #5c7294;
+  opacity: 0.88;
+}
+
+.nodely-shell__tab-divider-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
 .nodely-shell__tab-copy {
   min-width: 0;
   flex: 1 1 auto;
+}
+
+.nodely-shell__tab-role-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  place-items: center;
+}
+
+.nodely-shell__tab-role-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nodely-shell__tab-root-icon {
+  color: #355e95;
+  opacity: 0.98;
+}
+
+.nodely-shell__tab-root-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.nodely-shell__tab-parent-icon {
+  color: #5c7294;
+  opacity: 0.92;
+}
+
+.nodely-shell__tab-badge {
+  flex: 0 0 auto;
+  min-width: 24px;
+  height: 18px;
+  padding: 0 6px 0 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffffff;
+  background: #0b5cad;
+  box-shadow: 0 0 0 1px rgba(248, 251, 255, 0.72);
+}
+
+.nodely-shell__tab-badge svg {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
 }
 
 .nodely-shell__tab strong {
@@ -953,7 +1099,36 @@
 
 .nodely-shell__tab.is-active {
   border-color: var(--nodely-button-active-border);
-  box-shadow: 0 0 0 1px rgba(29, 115, 201, 0.12) inset;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08)),
+    var(--nodely-tab-bg);
+  box-shadow:
+    0 0 0 1px rgba(29, 115, 201, 0.14) inset,
+    0 8px 18px rgba(35, 62, 93, 0.09);
+}
+
+.nodely-shell__tab--current-page {
+  z-index: 2;
+}
+
+.nodely-shell__tab--current-page strong {
+  color: color-mix(in srgb, var(--nodely-tab-text) 84%, var(--nodely-button-active-border) 16%);
+}
+
+.nodely-shell__tab-page-bridge {
+  position: absolute;
+  inset: auto 16px -8px 16px;
+  height: 8px;
+  border: 1px solid var(--nodely-button-active-border);
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
+    var(--nodely-pagebar-bg);
+  box-shadow:
+    0 6px 12px rgba(35, 62, 93, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.24) inset;
+  pointer-events: none;
 }
 
 .nodely-shell__tab-close {

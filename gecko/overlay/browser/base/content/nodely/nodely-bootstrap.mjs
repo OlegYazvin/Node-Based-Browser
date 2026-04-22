@@ -407,14 +407,21 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
     const treeEditButton = document.querySelector('[data-action="start-tree-rename"]');
     const treeSeedButton = document.querySelector('.nodely-shell__tree-seed[data-action="toggle-composer"]');
     const aiChatTabs = document.querySelectorAll(".nodely-shell__tab--ai-chat");
+    const tabButtons = Array.from(
+      document.querySelectorAll(".nodely-shell__tab[data-node-id]")
+    );
     const tabFavicons = document.querySelectorAll(".nodely-shell__tab .nodely-shell__tab-favicon");
     const tabCloseButtons = document.querySelectorAll(".nodely-shell__tab-close");
     const tabClosePaths = document.querySelectorAll(".nodely-shell__tab-close svg path");
+    const ellipsisTabButton = document.querySelector('.nodely-shell__tab--ellipsis[data-action="open-ancestry-menu"]');
     const tabsContainer = document.querySelector(".nodely-shell__tabs");
     const treeFavoriteButton = document.querySelector('.nodely-shell__tree-strip [data-action="toggle-tree-favorite"]');
     const topbarOrganizeButton = document.querySelector(".nodely-shell__topbar [data-action='auto-organize']");
     const topbarFullscreenButton = document.querySelector(".nodely-shell__topbar [data-action='toggle-fullscreen']");
     const topbarViewSegmented = document.querySelector(".nodely-shell__brand .nodely-shell__segmented");
+    const topbarThemeButtons = document.querySelectorAll('.nodely-shell__topbar [data-action="set-theme"]');
+    const topbarThemeButtonIcons = document.querySelectorAll('.nodely-shell__topbar [data-action="set-theme"] svg');
+    const topbarThemeButtonPaths = document.querySelectorAll('.nodely-shell__topbar [data-action="set-theme"] svg path');
     const graphOrganizeButton = minimapToolbar?.querySelector('[data-action="auto-organize"]');
     const activeDrawerName = shell.drawer ?? null;
     const activeDrawerElement = activeDrawerName
@@ -534,6 +541,34 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
           treeEditPresent: Boolean(treeEditButton),
           treeSeedPresent: Boolean(treeSeedButton),
           aiChatTabCount: aiChatTabs?.length ?? 0,
+          tabTransitionMode: tabsContainer?.dataset?.transitionMode ?? "",
+          tabNodeCount: tabButtons.length,
+          tabNodeIds: tabButtons
+            .map((button) => button.dataset.nodeId ?? null)
+            .filter(Boolean),
+          tabRoles: tabButtons.map((button) => button.dataset.tabRole ?? ""),
+          ellipsisPresent: Boolean(ellipsisTabButton),
+          childrenDividerPresent: Boolean(document.querySelector(".nodely-shell__tab-divider")),
+          activeTabBridgePresent: Boolean(
+            document.querySelector(".nodely-shell__tab.is-active .nodely-shell__tab-page-bridge")
+          ),
+          rootTabIconPresent: Boolean(
+            document.querySelector('.nodely-shell__tab[data-tab-role="root"] .nodely-shell__tab-root-icon svg')
+          ),
+          parentTabIconPresent: Boolean(
+            document.querySelector('.nodely-shell__tab[data-tab-role="parent"] .nodely-shell__tab-parent-icon svg')
+          ),
+          descendantBadgeIconCount:
+            document.querySelectorAll(".nodely-shell__tab-badge svg")?.length ?? 0,
+          badgeValues: tabButtons
+            .map((button) => ({
+              nodeId: button.dataset.nodeId ?? null,
+              badge:
+                button
+                  .querySelector(".nodely-shell__tab-badge")
+                  ?.textContent?.trim() ?? ""
+            }))
+            .filter((entry) => entry.nodeId && entry.badge),
           tabFaviconCount: tabFavicons?.length ?? 0,
           tabCloseCount: tabCloseButtons?.length ?? 0,
           tabClosePathCount: tabClosePaths?.length ?? 0,
@@ -582,7 +617,10 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         topbar: {
           organizePresent: Boolean(topbarOrganizeButton),
           fullscreenPresent: Boolean(topbarFullscreenButton),
-          viewSegmentedNearBrand: Boolean(topbarViewSegmented)
+          viewSegmentedNearBrand: Boolean(topbarViewSegmented),
+          themeButtonCount: topbarThemeButtons?.length ?? 0,
+          themeIconCount: topbarThemeButtonIcons?.length ?? 0,
+          themePathCount: topbarThemeButtonPaths?.length ?? 0
         },
         treesDrawer: {
           favoriteButtonCount:
@@ -692,8 +730,16 @@ async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenari
         await runPagebarDuplicateTabScenario();
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
+      case "pagebar-contextmenu-kill-subtree":
+        await runPagebarContextMenuKillSubtreeScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
       case "pagebar-foreign-tab":
         await runPagebarForeignTabScenario({ controller });
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "pagebar-subtree-tabs":
+        await runPagebarSubtreeTabsScenario();
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       case "pagebar-foreign-window":
@@ -706,6 +752,10 @@ async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenari
         return;
       case "graph-contextmenu-kill-root":
         await runGraphContextMenuKillRootScenario({ shell });
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
+      case "graph-contextmenu-kill-subtree":
+        await runGraphContextMenuKillSubtreeScenario({ shell });
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
       case "toggle-fullscreen":
@@ -880,6 +930,68 @@ async function runPagebarDuplicateTabScenario() {
   await nextAnimationFrame();
 }
 
+async function runPagebarContextMenuKillSubtreeScenario() {
+  const nodeIdsByTitle = () => {
+    const state = window.__nodelyTest?.getState?.();
+    const nodes = state?.workspace?.nodes ?? [];
+
+    return {
+      state,
+      currentId: nodes.find((node) => node.title === "Nodely Smoke Current")?.id ?? null,
+      parentId: nodes.find((node) => node.title === "Nodely Smoke Parent")?.id ?? null
+    };
+  };
+
+  await waitForCondition(() => {
+    const { state, currentId } = nodeIdsByTitle();
+
+    return (
+      state?.workspace?.nodes?.length === 7 &&
+      state?.workspace?.selectedNodeId === currentId &&
+      Boolean(
+        currentId &&
+        document.querySelector(`.nodely-shell__tab[data-node-id="${escapeAttributeValue(currentId)}"]`)
+      ) &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "pagebar contextmenu kill subtree ready");
+
+  const { currentId } = nodeIdsByTitle();
+  const currentTab = document.querySelector(
+    `.nodely-shell__tab[data-node-id="${escapeAttributeValue(currentId)}"]`
+  );
+
+  if (!currentTab) {
+    throw new Error("Smoke pagebar-contextmenu-kill-subtree scenario could not find the current tab.");
+  }
+
+  dispatchSyntheticContextMenu(currentTab);
+  await waitForCondition(
+    () =>
+      !document.querySelector(".nodely-shell__menu")?.hidden &&
+      Boolean(document.querySelector('[data-action="kill-subtree-context"]')),
+    "pagebar kill subtree menu"
+  );
+  document.querySelector('[data-action="kill-subtree-context"]')?.click();
+
+  await waitForCondition(() => {
+    const { state, parentId } = nodeIdsByTitle();
+    const selectedNode =
+      state?.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      state?.workspace?.nodes?.length === 3 &&
+      state?.workspace?.nodes?.filter?.((node) => node.parentId === null)?.length === 1 &&
+      selectedNode?.id === parentId &&
+      selectedNode?.title === "Nodely Smoke Parent" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === selectedNode?.url
+    );
+  }, "pagebar contextmenu kill subtree");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
 async function runPagebarForeignTabScenario({ controller }) {
   const readyState = await waitForSmokeState((state) => {
     const selectedNode = state.workspace?.nodes?.find?.(
@@ -931,6 +1043,139 @@ async function runPagebarForeignTabScenario({ controller }) {
       document.documentElement?.getAttribute("nodely-browser-surface") === "page"
     );
   }, "pagebar foreign tab");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+async function runPagebarSubtreeTabsScenario() {
+  const nodeIdsByTitle = () => {
+    const state = window.__nodelyTest?.getState?.();
+    const nodes = state?.workspace?.nodes ?? [];
+
+    return {
+      state,
+      rootId: nodes.find((node) => node.title === "Nodely Smoke Root")?.id ?? null,
+      hiddenAncestorId:
+        nodes.find((node) => node.title === "Nodely Smoke Hidden Ancestor")?.id ?? null,
+      parentId: nodes.find((node) => node.title === "Nodely Smoke Parent")?.id ?? null,
+      currentId: nodes.find((node) => node.title === "Nodely Smoke Current")?.id ?? null,
+      branchChildId: nodes.find((node) => node.title === "Nodely Smoke Branch Child")?.id ?? null,
+      leafChildId: nodes.find((node) => node.title === "Nodely Smoke Leaf Child")?.id ?? null,
+      grandchildId: nodes.find((node) => node.title === "Nodely Smoke Grandchild")?.id ?? null
+    };
+  };
+  const visibleTabNodeIds = () =>
+    Array.from(document.querySelectorAll(".nodely-shell__tab[data-node-id]")).map(
+      (button) => button.dataset.nodeId
+    );
+  const badgeTextForNode = (nodeId) =>
+    document
+      .querySelector(`.nodely-shell__tab[data-node-id="${escapeAttributeValue(nodeId)}"] .nodely-shell__tab-badge`)
+      ?.textContent?.trim() ?? "";
+
+  await waitForCondition(() => {
+    const {
+      state,
+      rootId,
+      hiddenAncestorId,
+      parentId,
+      currentId,
+      branchChildId,
+      leafChildId
+    } = nodeIdsByTitle();
+    const visibleIds = visibleTabNodeIds();
+
+    return (
+      Boolean(rootId && hiddenAncestorId && parentId && currentId && branchChildId && leafChildId) &&
+      state?.workspace?.selectedNodeId === currentId &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      JSON.stringify(visibleIds) ===
+        JSON.stringify([rootId, parentId, currentId, branchChildId, leafChildId]) &&
+      Boolean(document.querySelector('.nodely-shell__tab--ellipsis[data-action="open-ancestry-menu"]')) &&
+      Boolean(document.querySelector(".nodely-shell__tab-divider")) &&
+      Boolean(document.querySelector('.nodely-shell__tab[data-tab-role="root"] .nodely-shell__tab-root-icon svg')) &&
+      Boolean(document.querySelector('.nodely-shell__tab[data-tab-role="parent"] .nodely-shell__tab-parent-icon svg')) &&
+      (document.querySelectorAll(".nodely-shell__tab-badge svg")?.length ?? 0) >= 1 &&
+      badgeTextForNode(branchChildId) === "1" &&
+      badgeTextForNode(leafChildId) === ""
+    );
+  }, "pagebar subtree initial state");
+
+  const { branchChildId, grandchildId } = nodeIdsByTitle();
+  const branchChildButton = document.querySelector(
+    `.nodely-shell__tab[data-node-id="${escapeAttributeValue(branchChildId)}"]`
+  );
+
+  if (!branchChildButton) {
+    throw new Error("Smoke pagebar-subtree-tabs scenario could not find the badged child tab.");
+  }
+
+  branchChildButton.click();
+
+  await waitForCondition(() => {
+    const { state, rootId, currentId, branchChildId, grandchildId } = nodeIdsByTitle();
+    const visibleIds = visibleTabNodeIds();
+
+    return (
+      state?.workspace?.selectedNodeId === branchChildId &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      JSON.stringify(visibleIds) ===
+        JSON.stringify([rootId, currentId, branchChildId, grandchildId]) &&
+      Boolean(document.querySelector('.nodely-shell__tab--ellipsis[data-action="open-ancestry-menu"]'))
+    );
+  }, "pagebar subtree child selection");
+
+  const ellipsisButton = document.querySelector('.nodely-shell__tab--ellipsis[data-action="open-ancestry-menu"]');
+
+  if (!ellipsisButton) {
+    throw new Error("Smoke pagebar-subtree-tabs scenario could not find the ancestry ellipsis button.");
+  }
+
+  const ellipsisRect = ellipsisButton.getBoundingClientRect();
+  ellipsisButton.click();
+
+  await waitForCondition(() => {
+    const { hiddenAncestorId } = nodeIdsByTitle();
+    const menu = document.querySelector(".nodely-shell__menu");
+    const menuItem = hiddenAncestorId
+      ? menu?.querySelector?.(
+          `[data-action="select-ancestor-node"][data-node-id="${escapeAttributeValue(hiddenAncestorId)}"]`
+        )
+      : null;
+
+    if (!menu || menu.hidden || !menuItem) {
+      return false;
+    }
+
+    const menuRect = menu.getBoundingClientRect();
+
+    return (
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      Math.abs(menuRect.top - (ellipsisRect.bottom + 8)) <= 20 &&
+      menuRect.left >= ellipsisRect.left - 12 &&
+      menuRect.left <= ellipsisRect.left + 80
+    );
+  }, "pagebar subtree ancestry menu");
+
+  const { hiddenAncestorId, rootId, parentId } = nodeIdsByTitle();
+  document
+    .querySelector(
+      `.nodely-shell__menu [data-action="select-ancestor-node"][data-node-id="${escapeAttributeValue(hiddenAncestorId)}"]`
+    )
+    ?.click();
+
+  await waitForCondition(() => {
+    const { state, rootId, hiddenAncestorId, parentId } = nodeIdsByTitle();
+    const visibleIds = visibleTabNodeIds();
+
+    return (
+      state?.workspace?.selectedNodeId === hiddenAncestorId &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      JSON.stringify(visibleIds) === JSON.stringify([rootId, hiddenAncestorId, parentId]) &&
+      !document.querySelector('.nodely-shell__tab--ellipsis[data-action="open-ancestry-menu"]')
+    );
+  }, "pagebar subtree hidden ancestor selection");
+
   await nextAnimationFrame();
   await nextAnimationFrame();
 }
@@ -1112,6 +1357,75 @@ async function runGraphContextMenuKillRootScenario({ shell }) {
   await nextAnimationFrame();
 }
 
+async function runGraphContextMenuKillSubtreeScenario({ shell }) {
+  const nodeIdsByTitle = () => {
+    const state = window.__nodelyTest?.getState?.();
+    const nodes = state?.workspace?.nodes ?? [];
+
+    return {
+      state,
+      currentId: nodes.find((node) => node.title === "Nodely Smoke Current")?.id ?? null,
+      parentId: nodes.find((node) => node.title === "Nodely Smoke Parent")?.id ?? null
+    };
+  };
+
+  const readyState = await waitForSmokeState((state) => {
+    const selectedNode = state.workspace?.nodes?.find?.(
+      (node) => node.id === state.workspace?.selectedNodeId
+    );
+
+    return (
+      state.workspace?.nodes?.length === 7 &&
+      selectedNode?.title === "Nodely Smoke Current" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke graph kill subtree ready");
+
+  const currentNode =
+    readyState.workspace?.nodes?.find?.((node) => node.title === "Nodely Smoke Current") ?? null;
+
+  if (!currentNode?.id) {
+    throw new Error("Smoke graph-contextmenu-kill-subtree scenario could not find the current node.");
+  }
+
+  shell.graph.centerOnNode(currentNode.id);
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+
+  const selector = `.nodely-graph-node[data-node-id="${escapeAttributeValue(currentNode.id)}"]`;
+  const nodeElement = document.querySelector(selector);
+
+  if (!nodeElement) {
+    throw new Error(`Smoke graph-contextmenu-kill-subtree scenario could not find ${selector}.`);
+  }
+
+  dispatchSyntheticContextMenu(nodeElement);
+  await waitForCondition(
+    () =>
+      !document.querySelector(".nodely-shell__menu")?.hidden &&
+      Boolean(document.querySelector('[data-action="kill-node-context"]')),
+    "graph kill subtree menu"
+  );
+  document.querySelector('[data-action="kill-node-context"]')?.click();
+
+  await waitForCondition(() => {
+    const { state, parentId } = nodeIdsByTitle();
+    const selectedNode =
+      state?.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      state?.workspace?.nodes?.length === 3 &&
+      state?.workspace?.nodes?.filter?.((node) => node.parentId === null)?.length === 1 &&
+      selectedNode?.id === parentId &&
+      selectedNode?.title === "Nodely Smoke Parent" &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page" &&
+      window.gBrowser?.selectedTab?.linkedBrowser?.currentURI?.spec === selectedNode?.url
+    );
+  }, "graph contextmenu kill subtree");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
 async function runToggleFullscreenScenario() {
   await waitForSmokeState((state) => {
     const selectedNode = state.workspace?.nodes?.find?.(
@@ -1150,6 +1464,17 @@ async function runTopbarDrawersScenario() {
       document.documentElement?.getAttribute("nodely-browser-surface") === "page"
     );
   }, "smoke topbar drawers ready");
+
+  const nodeIdsByTitle = () => {
+    const state = window.__nodelyTest?.getState?.();
+    const nodes = state?.workspace?.nodes ?? [];
+
+    return {
+      state,
+      rootId: nodes.find((node) => node.title === "Nodely Smoke Root")?.id ?? null,
+      childId: nodes.find((node) => node.title === "Nodely Smoke Child")?.id ?? null
+    };
+  };
 
   const treesButton = document.querySelector('[data-action="toggle-drawer"][data-drawer="trees"]');
   if (!treesButton) {
@@ -1227,6 +1552,52 @@ async function runTopbarDrawersScenario() {
     const treeFavorite = document.querySelector('.nodely-shell__tree-favorite-link[data-action="open-favorite"]');
     return treeFavorite && actionAtElementCenter(treeFavorite) === "open-favorite";
   }, "tree favorite chip clickable");
+
+  const { rootId, childId } = nodeIdsByTitle();
+  const rootTab = rootId
+    ? document.querySelector(`.nodely-shell__tab[data-node-id="${escapeAttributeValue(rootId)}"]`)
+    : null;
+
+  if (!rootTab || !childId) {
+    throw new Error("Smoke topbar-drawers scenario could not find root/child tabs for favorites navigation.");
+  }
+
+  rootTab.click();
+  await waitForCondition(() => {
+    const { state, rootId } = nodeIdsByTitle();
+    return (
+      state?.workspace?.selectedNodeId === rootId &&
+      document.querySelector('.nodely-shell__address-input')?.value === ROOT_SMOKE_URL
+    );
+  }, "root selected for favorites navigation");
+
+  const rootFavoriteButton = document.querySelector('[data-action="toggle-page-favorite"]');
+
+  if (!rootFavoriteButton) {
+    throw new Error("Smoke topbar-drawers scenario could not find the root page favorite button.");
+  }
+
+  rootFavoriteButton.click();
+  await waitForCondition(() => {
+    const rootFavorite = document.querySelector('.nodely-shell__tree-favorite-link[title="Nodely Smoke Root"]');
+    const childFavorite = document.querySelector('.nodely-shell__tree-favorite-link[title="Nodely Smoke Child"]');
+    return (
+      rootFavorite &&
+      childFavorite &&
+      actionAtElementCenter(rootFavorite) === "open-favorite" &&
+      actionAtElementCenter(childFavorite) === "open-favorite"
+    );
+  }, "multiple tree favorite chips clickable");
+
+  const childFavoriteChip = document.querySelector('.nodely-shell__tree-favorite-link[title="Nodely Smoke Child"]');
+  childFavoriteChip?.click();
+  await waitForCondition(() => {
+    const { state, childId } = nodeIdsByTitle();
+    return (
+      state?.workspace?.selectedNodeId === childId &&
+      document.querySelector('.nodely-shell__address-input')?.value === CHILD_SMOKE_URL
+    );
+  }, "tree favorite chip opens the favorited page");
 
   const downloadsButton = document.querySelector('[data-action="toggle-drawer"][data-drawer="downloads"]');
 

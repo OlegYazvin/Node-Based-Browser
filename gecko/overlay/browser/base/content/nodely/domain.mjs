@@ -554,6 +554,69 @@ export function orderTreeNodesForTabs(workspace, rootId) {
   return orderedNodes;
 }
 
+function countDescendantPageNodes(workspace, nodeId, memo = new Map()) {
+  if (memo.has(nodeId)) {
+    return memo.get(nodeId);
+  }
+
+  let count = 0;
+
+  for (const childNode of findPageChildren(workspace, nodeId)) {
+    count += 1 + countDescendantPageNodes(workspace, childNode.id, memo);
+  }
+
+  memo.set(nodeId, count);
+  return count;
+}
+
+function ancestorPathForNode(workspace, node) {
+  const path = [];
+  let currentNode = node;
+
+  while (currentNode) {
+    path.unshift(currentNode);
+    currentNode = currentNode.parentId ? findNode(workspace, currentNode.parentId) : null;
+  }
+
+  return path;
+}
+
+export function deriveSubtreeTabBarModel(workspace, nodeOrId) {
+  const current =
+    typeof nodeOrId === "string" ? findNode(workspace, nodeOrId) : nodeOrId ?? null;
+
+  if (!workspace || !current || !isPageNode(current)) {
+    return {
+      root: null,
+      hiddenAncestors: [],
+      parent: null,
+      current: null,
+      children: [],
+      descendantPageCounts: {}
+    };
+  }
+
+  const root = findNode(workspace, current.rootId) ?? current;
+  const parent = current.parentId ? findNode(workspace, current.parentId) : null;
+  const ancestorPath = ancestorPathForNode(workspace, current);
+  const hiddenAncestors =
+    ancestorPath.length > 2 ? ancestorPath.slice(1, Math.max(ancestorPath.length - 2, 1)) : [];
+  const children = findPageChildren(workspace, current.id);
+  const descendantMemo = new Map();
+  const descendantPageCounts = Object.fromEntries(
+    children.map((childNode) => [childNode.id, countDescendantPageNodes(workspace, childNode.id, descendantMemo)])
+  );
+
+  return {
+    root,
+    hiddenAncestors,
+    parent,
+    current,
+    children,
+    descendantPageCounts
+  };
+}
+
 export function isFreshRootNode(node) {
   return Boolean(node && node.parentId === null && !node.url);
 }
@@ -874,6 +937,71 @@ export function removeTree(workspace, rootId) {
       : workspace.selectedNodeId;
 
   return applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId);
+}
+
+function collectSubtreeNodeIds(workspace, nodeId) {
+  const childrenByParentId = new Map();
+
+  for (const candidate of workspace.nodes) {
+    if (candidate.parentId == null) {
+      continue;
+    }
+
+    if (!childrenByParentId.has(candidate.parentId)) {
+      childrenByParentId.set(candidate.parentId, []);
+    }
+
+    childrenByParentId.get(candidate.parentId).push(candidate);
+  }
+
+  const orderedIds = [];
+  const stack = [nodeId];
+  const visited = new Set();
+
+  while (stack.length) {
+    const currentId = stack.pop();
+
+    if (!currentId || visited.has(currentId)) {
+      continue;
+    }
+
+    visited.add(currentId);
+    orderedIds.push(currentId);
+
+    const childNodes = sortNodesForSlots(childrenByParentId.get(currentId) ?? []);
+
+    for (let index = childNodes.length - 1; index >= 0; index -= 1) {
+      stack.push(childNodes[index].id);
+    }
+  }
+
+  return orderedIds;
+}
+
+export function killSubtree(workspace, nodeId) {
+  const node = findNode(workspace, nodeId);
+
+  if (!node) {
+    return {
+      workspace,
+      removedNodeIds: [],
+      invalidatedNodeIds: []
+    };
+  }
+
+  const removedNodeIds = collectSubtreeNodeIds(workspace, node.id);
+  const removedNodeIdSet = new Set(removedNodeIds);
+  const nextNodes = workspace.nodes.filter((candidate) => !removedNodeIdSet.has(candidate.id));
+  const nextSelectedNodeId =
+    workspace.selectedNodeId && removedNodeIdSet.has(workspace.selectedNodeId)
+      ? node.parentId ?? sortNodesForSlots(nextNodes.filter((candidate) => candidate.parentId === null))[0]?.id ?? null
+      : workspace.selectedNodeId;
+
+  return {
+    workspace: applyStructuralWorkspaceUpdate(workspace, nextNodes, nextSelectedNodeId),
+    removedNodeIds,
+    invalidatedNodeIds: removedNodeIds
+  };
 }
 
 export function killNode(workspace, nodeId) {
