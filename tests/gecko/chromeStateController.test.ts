@@ -208,6 +208,59 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     );
   });
 
+  it("seeds an empty workspace from a live startup tab in a new browser window", async () => {
+    let workspace = createEmptyWorkspace();
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    runtimeManager.adoptOpenedTab.mockImplementation((nodeId?: string) => {
+      runtimeManager.tabForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? ({ id: "startup-tab" } as { id: string }) : null
+      );
+      runtimeManager.currentUrlForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? "https://example.com/opened-in-new-window" : null
+      );
+    });
+    runtimeManager.window.gBrowser.selectedTab = {
+      label: "Opened In New Window",
+      linkedBrowser: {
+        currentURI: { spec: "https://example.com/opened-in-new-window" },
+        contentTitle: "Opened In New Window",
+        canGoBack: false,
+        canGoForward: false,
+        isLoadingDocument: false
+      }
+    };
+    runtimeManager.window.gBrowser.getIcon.mockReturnValue("https://example.com/favicon.ico");
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      compatExtensionsStore: null,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+
+    expect(workspace.nodes).toHaveLength(1);
+    expect(findNode(workspace, workspace.selectedNodeId)?.url).toBe(
+      "https://example.com/opened-in-new-window"
+    );
+    expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(
+      workspace.selectedNodeId,
+      runtimeManager.window.gBrowser.selectedTab
+    );
+    expect(runtimeManager.loadNode).not.toHaveBeenCalled();
+  });
+
   it("creates the first root from the inline composer input and loads it", async () => {
     let workspace = createEmptyWorkspace();
     const workspaceStore = {

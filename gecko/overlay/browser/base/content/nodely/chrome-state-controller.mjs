@@ -40,6 +40,7 @@ import {
   replaceCompatExtensionRecord,
   resolveCompatExtensionRecord
 } from "./chrome-extension-compat.mjs";
+import { isTransientStartupUrl } from "./node-runtime-manager.mjs";
 
 export class ChromeStateController extends EventTarget {
   constructor({
@@ -125,6 +126,7 @@ export class ChromeStateController extends EventTarget {
     this.runtimeManager.attach();
     await this.basicsBridge.attach?.();
     this.workspace = relayoutWorkspace(await this.workspaceStore.loadWorkspace());
+    await this.seedWorkspaceFromLiveStartupTab();
     this.favorites = await this.favoritesStore.listFavorites();
     this.chrome.sessionRecovery = this.basicsBridge.getSessionRecoveryState?.() ?? createChromeState().sessionRecovery;
     let compatExtensionsState =
@@ -148,6 +150,53 @@ export class ChromeStateController extends EventTarget {
     this.trace("initialize:complete", {
       selectedNodeId: this.workspace.selectedNodeId
     });
+  }
+
+  async seedWorkspaceFromLiveStartupTab() {
+    if (this.workspace?.nodes?.length) {
+      return false;
+    }
+
+    const gBrowser = this.runtimeManager.window?.gBrowser ?? null;
+    const tab = gBrowser?.selectedTab ?? null;
+    const browser = tab?.linkedBrowser ?? null;
+    const url = browser?.currentURI?.spec ?? null;
+
+    if (
+      !tab ||
+      !browser ||
+      !url ||
+      isTransientStartupUrl(url) ||
+      this.runtimeManager.nodeIdForTab?.(tab)
+    ) {
+      return false;
+    }
+
+    let nextWorkspace = createRootNode(this.workspace);
+    const rootId = nextWorkspace.selectedNodeId;
+
+    nextWorkspace = relayoutWorkspace(
+      setSurfaceMode(
+        updateNodeMetadata(nextWorkspace, rootId, {
+          title: tab.label || browser.contentTitle || "Untitled page",
+          url,
+          faviconUrl: gBrowser.getIcon?.(tab) ?? null,
+          canGoBack: browser.canGoBack ?? false,
+          canGoForward: browser.canGoForward ?? false,
+          runtimeState: browser.isLoadingDocument ? "loading" : "live",
+          errorMessage: null
+        }),
+        "page"
+      )
+    );
+
+    this.workspace = await this.workspaceStore.saveWorkspace(nextWorkspace);
+    this.runtimeManager.adoptOpenedTab(rootId, tab);
+    this.trace("initialize:seeded-live-startup-tab", {
+      nodeId: rootId,
+      url
+    });
+    return true;
   }
 
   async persistWorkspace(nextWorkspaceOrUpdater, { scheduleTreeTitleRefresh = true } = {}) {

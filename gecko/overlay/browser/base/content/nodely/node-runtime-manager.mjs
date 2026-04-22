@@ -289,10 +289,10 @@ export class NodeRuntimeManager {
 
     gBrowser.selectedTab = primaryTab;
     this.seedTab = primaryTab;
-    this.prepareTabForManagedNavigation(primaryTab, "about:blank");
     trace("reset-tabs", {
       keptPrimaryTab: Boolean(primaryTab),
-      removedTabs: extraTabs.length
+      removedTabs: extraTabs.length,
+      seedTabUrl: primaryTab?.linkedBrowser?.currentURI?.spec ?? null
     });
   }
 

@@ -73,6 +73,18 @@ describe("NodeRuntimeManager Gecko tab ownership", () => {
     expect(manager.tabForNode("node-1")).toBe(windowRef.primaryTab);
   });
 
+  it("preserves a real startup navigation already loading in the primary tab", () => {
+    const windowRef = makeWindow();
+    windowRef.primaryTab.linkedBrowser.currentURI.spec = "https://example.com/new-window-target";
+    const manager = new NodeRuntimeManager(windowRef);
+
+    manager.attach();
+
+    expect(windowRef.primaryTab.linkedBrowser.stop).not.toHaveBeenCalled();
+    expect(windowRef.gBrowser.removeTab).toHaveBeenCalledTimes(1);
+    expect(manager.ensureRuntime({ id: "node-1" })).toBe(windowRef.primaryTab);
+  });
+
   it("suppresses foreign-tab callbacks for owned tab opens and reports real foreign tabs", () => {
     const windowRef = makeWindow();
     const onForeignTabOpen = vi.fn();

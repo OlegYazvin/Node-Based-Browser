@@ -198,21 +198,32 @@ function registerUploadActor() {
     return;
   }
 
-  ChromeUtils.registerWindowActor("NodelyUpload", {
-    parent: {
-      esModuleURI: "chrome://browser/content/nodely/nodely-upload-parent.mjs",
-    },
-    child: {
-      esModuleURI: "chrome://browser/content/nodely/nodely-upload-child.mjs",
-      events: {
-        change: {
-          capture: true,
+  try {
+    ChromeUtils.registerWindowActor("NodelyUpload", {
+      parent: {
+        esModuleURI: "chrome://browser/content/nodely/nodely-upload-parent.mjs",
+      },
+      child: {
+        esModuleURI: "chrome://browser/content/nodely/nodely-upload-child.mjs",
+        events: {
+          change: {
+            capture: true,
+          },
         },
       },
-    },
-    allFrames: true,
-  });
-  uploadActorRegistered = true;
+      allFrames: true,
+    });
+    uploadActorRegistered = true;
+  } catch (error) {
+    const message = String(error?.message ?? error ?? "");
+
+    if (error?.name === "NotSupportedError" || /already registered/iu.test(message)) {
+      uploadActorRegistered = true;
+      return;
+    }
+
+    console.error?.("[nodely] registerUploadActor", error);
+  }
 }
 
 function dispatchPromptEvent(windowRef, name, detail) {

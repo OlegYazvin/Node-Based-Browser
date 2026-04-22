@@ -231,3 +231,70 @@ describe("BrowserBasicsBridge compat extension management", () => {
     );
   });
 });
+
+describe("BrowserBasicsBridge window attach", () => {
+  it("treats duplicate upload actor registration as a harmless already-registered case", async () => {
+    const duplicateRegistrationError = Object.assign(
+      new Error("ChromeUtils.registerWindowActor: 'NodelyUpload' actor is already registered."),
+      { name: "NotSupportedError" }
+    );
+    const registerWindowActor = vi.fn(() => {
+      throw duplicateRegistrationError;
+    });
+    const importESModule = vi.fn((specifier: string) => {
+      if (specifier === "resource:///actors/PromptParent.sys.mjs") {
+        return {
+          PromptParent: class PromptParent {
+            async openPromptWithTabDialogBox() {}
+          }
+        };
+      }
+
+      if (specifier === "resource://gre/modules/ContentDispatchChooser.sys.mjs") {
+        return {
+          nsContentDispatchChooser: class nsContentDispatchChooser {
+            async _prompt() {}
+          }
+        };
+      }
+
+      return {};
+    });
+    Object.defineProperty(globalThis, "ChromeUtils", {
+      configurable: true,
+      value: {
+        registerWindowActor,
+        importESModule
+      }
+    });
+
+    const windowRef = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      gBrowser: {
+        selectedBrowser: null,
+        tabContainer: {
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn()
+        }
+      },
+      PopupNotifications: {
+        getNotification: vi.fn(() => null),
+        panel: {
+          state: "closed",
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn()
+        }
+      }
+    };
+
+    const bridge = new BrowserBasicsBridge(windowRef as any);
+
+    await expect(bridge.attach()).resolves.toBeUndefined();
+    expect(registerWindowActor).toHaveBeenCalledTimes(1);
+    expect(windowRef.addEventListener).toHaveBeenCalledWith(
+      "nodely-upload-observed",
+      expect.any(Function)
+    );
+  });
+});

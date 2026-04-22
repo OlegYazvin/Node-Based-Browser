@@ -696,6 +696,10 @@ async function runSmokeScenario({ shell, controller, writeSmokeSnapshot, scenari
         await runPagebarForeignTabScenario({ controller });
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
         return;
+      case "pagebar-foreign-window":
+        await runPagebarForeignWindowScenario();
+        writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
+        return;
       case "graph-contextmenu-root-composer":
         await runGraphContextMenuRootComposerScenario();
         writeSmokeSnapshot(`scenario:${scenarioName}:complete`);
@@ -927,6 +931,95 @@ async function runPagebarForeignTabScenario({ controller }) {
       document.documentElement?.getAttribute("nodely-browser-surface") === "page"
     );
   }, "pagebar foreign tab");
+  await nextAnimationFrame();
+  await nextAnimationFrame();
+}
+
+function mostRecentOpenedBrowserWindow() {
+  const enumerator = ServicesRef?.wm?.getEnumerator?.("navigator:browser") ?? null;
+  const candidates = [];
+
+  while (enumerator?.hasMoreElements?.()) {
+    const candidate = enumerator.getNext();
+
+    if (!candidate || candidate === window || candidate.closed || candidate.opener !== window) {
+      continue;
+    }
+
+    candidates.push(candidate);
+  }
+
+  return candidates.at(-1) ?? null;
+}
+
+async function closeBrowserWindow(windowRef) {
+  if (!windowRef || windowRef.closed) {
+    return;
+  }
+
+  try {
+    windowRef.BrowserCommands?.tryToCloseWindow?.();
+  } catch {}
+
+  try {
+    windowRef.close?.();
+  } catch {}
+
+  await waitForCondition(() => windowRef.closed === true, "new browser window close");
+}
+
+async function runPagebarForeignWindowScenario() {
+  await waitForSmokeState((state) => {
+    const selectedNode =
+      state.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ?? null;
+
+    return (
+      state.workspace?.nodes?.length >= 2 &&
+      selectedNode?.url === CHILD_SMOKE_URL &&
+      document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+    );
+  }, "smoke pagebar foreign-window ready");
+
+  const targetUrl = `${FOREIGN_TAB_SMOKE_URL}#new-window`;
+
+  window.openTrustedLinkIn(targetUrl, "window", {
+    triggeringPrincipal: smokeTriggeringPrincipal()
+  });
+
+  await waitForCondition(
+    () => Boolean(mostRecentOpenedBrowserWindow()?.gBrowser?.selectedBrowser),
+    "new browser window open"
+  );
+
+  const newWindow = mostRecentOpenedBrowserWindow();
+
+  if (!newWindow?.gBrowser?.selectedBrowser) {
+    throw new Error("Smoke pagebar-foreign-window scenario could not resolve the new browser window.");
+  }
+
+  try {
+    await waitForCondition(
+      () => {
+        const state = newWindow.__nodelyTest?.getState?.();
+        const selectedNode =
+          state?.workspace?.nodes?.find?.((node) => node.id === state.workspace?.selectedNodeId) ??
+          null;
+
+        return (
+          newWindow.gBrowser?.selectedBrowser?.currentURI?.spec === targetUrl ||
+          (
+            selectedNode?.url === targetUrl &&
+            state?.runtime?.selectedTabUrl === targetUrl &&
+            newWindow.document.documentElement?.getAttribute("nodely-browser-surface") === "page"
+          )
+        );
+      },
+      "new browser window target navigation"
+    );
+  } finally {
+    await closeBrowserWindow(newWindow).catch(() => {});
+  }
+
   await nextAnimationFrame();
   await nextAnimationFrame();
 }
