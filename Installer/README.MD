@@ -11,10 +11,11 @@ This directory contains the installers that actually exist in this repo right no
 - The cross-platform installer workflow also publishes GitHub Release assets for the current Nodely version after a full successful matrix run.
 - Each staged installer records whether it came from a local build or GitHub Actions promotion.
 - `Installer/RELEASE_NOTES.MD` captures the latest push-triggered installer/release summary for this repo.
-- If a section below says no installers are staged, check the GitHub Releases page for the latest published assets for that target.
+- If a section below says no installers are staged, check the [GitHub Releases](https://github.com/OlegYazvin/Node-Based-Browser/releases/latest) page for the latest published assets for that target.
 - First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
+- Current Nodely version: `0.1`
 
-Generated from `Installer/manifest.json` at 2026-04-11T03:12:20.186Z.
+Generated from `Installer/manifest.json` at 2026-04-22T04:19:11.220Z.
 
 ## Windows 10 and 11
 
@@ -22,7 +23,7 @@ Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |
-| [Nodely-Browser-140.10.0-windows-x64.installer.exe](./windows/Nodely-Browser-140.10.0-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24272453838) (`installers.yml`) |
+| [Nodely-Browser-0.1-windows-x64.installer.exe](./windows/Nodely-Browser-0.1-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24759268225) (`installers.yml`) |
 
 ## macOS Intel
 
@@ -40,7 +41,13 @@ No installers are currently staged in this repo for this target.
 
 Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/AMD processors. On Linux Mint, prefer the Ubuntu DEB for easy install and uninstall through Software Manager.
 
-No installers are currently staged in this repo for this target.
+| File | Type | Supported systems | Built by |
+| --- | --- | --- | --- |
+| [Nodely-Browser-0.1-debian-x64.deb](./linux/Nodely-Browser-0.1-debian-x64.deb) | Debian DEB package | Debian; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24759268225) (`installers.yml`) |
+| [Nodely-Browser-0.1-fedora-x64.rpm](./linux/Nodely-Browser-0.1-fedora-x64.rpm) | Fedora RPM package | Fedora; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24759268225) (`installers.yml`) |
+| [Nodely-Browser-0.1-linux-x64.flatpak](./linux/Nodely-Browser-0.1-linux-x64.flatpak) | Flatpak bundle | Linux Mint, Fedora, Ubuntu, Debian, other Flatpak-enabled Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24759268225) (`installers.yml`) |
+| [Nodely-Browser-0.1-linux-x64.run](./linux/Nodely-Browser-0.1-linux-x64.run) | Self-extracting installer (`.run`) | Ubuntu, Debian, Fedora, Linux Mint, other common desktop Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24759268225) (`installers.yml`) |
+| [Nodely-Browser-0.1-ubuntu-x64.deb](./linux/Nodely-Browser-0.1-ubuntu-x64.deb) | Ubuntu DEB package | Ubuntu, Linux Mint; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24759268225) (`installers.yml`) |
 
 ## Linux arm64
 
