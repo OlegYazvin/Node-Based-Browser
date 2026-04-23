@@ -190,7 +190,7 @@ describe("BrowserBasicsBridge permission prompt handling", () => {
         blockLabel: notification.secondaryActions[0].label
       })
     );
-    expect(panel.hidePopup).toHaveBeenCalledTimes(1);
+    expect(panel.hidePopup).not.toHaveBeenCalled();
   });
 
   it("allows the mirrored persistent storage prompt through the original Gecko callback", async () => {

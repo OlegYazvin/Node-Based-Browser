@@ -337,6 +337,16 @@ export class NodeRuntimeManager {
     return tab?.linkedBrowser?.currentURI?.spec ?? null;
   }
 
+  hasPendingNavigation(nodeId, url = null) {
+    const pendingNavigation = this.pendingNavigationByNodeId.get(nodeId) ?? null;
+
+    if (!pendingNavigation) {
+      return false;
+    }
+
+    return url == null ? true : pendingNavigation.url === url;
+  }
+
   nodeIdForBrowser(browser) {
     const tab = tabForBrowser(this.window.gBrowser, browser);
     return tab ? this.nodeIdForTab(tab) : null;
@@ -378,9 +388,35 @@ export class NodeRuntimeManager {
     return this.createRuntimeForNode(node, options);
   }
 
-  adoptOpenedTab(nodeId, tab) {
+  adoptOpenedTab(nodeId, tab, { pendingUrl = null } = {}) {
     this.registerNodeTab(nodeId, tab);
+
+    if (pendingUrl && !isTransientStartupUrl(pendingUrl)) {
+      this.pendingNavigationByNodeId.set(nodeId, {
+        url: pendingUrl,
+        startedAt: Date.now()
+      });
+    }
+
     this.syncNodeMetadataFromTab(tab);
+  }
+
+  consumeStartupWindowContext() {
+    const windowRef = this.window ?? null;
+
+    if (!windowRef || !Object.prototype.hasOwnProperty.call(windowRef, "__nodelyStartupContext")) {
+      return null;
+    }
+
+    const context = windowRef.__nodelyStartupContext ?? null;
+
+    try {
+      delete windowRef.__nodelyStartupContext;
+    } catch {
+      windowRef.__nodelyStartupContext = null;
+    }
+
+    return context;
   }
 
   loadNode(node, url, { background = false } = {}) {
@@ -687,8 +723,25 @@ export class NodeRuntimeManager {
       return;
     }
 
+    try {
+      windowRef.__nodelyStartupContext = {
+        parentNodeId,
+        origin: "window-open"
+      };
+    } catch {}
+
     const finalizeTracking = () => {
       if (windowRef.closed || !windowRef.gBrowser || windowRef.opener !== this.window) {
+        return;
+      }
+
+      const eligibility = describeNodelyShellEligibility(windowRef, windowRef.document ?? null);
+
+      if (eligibility.enabled) {
+        trace("foreign-window-defer-shell", {
+          parentNodeId,
+          reason: eligibility.reason
+        });
         return;
       }
 

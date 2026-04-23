@@ -671,6 +671,19 @@ function snapshotMatchesScenario(snapshot, scenario) {
     );
   }
 
+  if (scenario === "pagebar-foreign-window") {
+    return (
+      snapshot.browserSurface === "page" &&
+      snapshot.workspace?.nodeCount === 3 &&
+      snapshot.workspace?.edgeCount === 2 &&
+      snapshot.workspace?.selectedNode?.parentId != null &&
+      snapshot.workspace?.selectedNode?.url === FOREIGN_TAB_SMOKE_URL + "#new-window" &&
+      snapshot.ui?.pageToolbar?.addressValue === FOREIGN_TAB_SMOKE_URL + "#new-window" &&
+      runtimeMatchesSelection &&
+      runtimeMatchesNode
+    );
+  }
+
   if (scenario === "pagebar-subtree-tabs") {
     return (
       snapshot.browserSurface === "page" &&

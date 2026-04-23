@@ -55,6 +55,24 @@ function makeWindow() {
   };
 }
 
+function makeBrowserChromeDocument(attributes: Record<string, string> = {}) {
+  return {
+    readyState: "complete",
+    documentElement: {
+      getAttribute(name: string) {
+        if (name === "windowtype") {
+          return "navigator:browser";
+        }
+
+        return attributes[name] ?? "";
+      },
+      hasAttribute(name: string) {
+        return Object.prototype.hasOwnProperty.call(attributes, name);
+      }
+    }
+  };
+}
+
 describe("NodeRuntimeManager Gecko tab ownership", () => {
   it("reuses the seed tab for the first foreground node and prunes extra startup tabs", () => {
     const windowRef = makeWindow();
@@ -271,6 +289,46 @@ describe("NodeRuntimeManager Gecko tab ownership", () => {
         parentNodeId: "node-1"
       })
     );
+  });
+
+  it("lets full browser windows bootstrap their own Nodely shell instead of treating them like popup auth windows", () => {
+    const windowRef = makeWindow();
+    const onForeignOpenPending = vi.fn();
+    const manager = new NodeRuntimeManager(windowRef, {
+      onForeignOpenPending
+    });
+
+    manager.registerNodeTab("node-1", windowRef.primaryTab, { owned: true });
+    windowRef.gBrowser.selectedTab = windowRef.primaryTab;
+
+    const fullWindow = {
+      opener: windowRef,
+      toolbar: { visible: true },
+      locationbar: { visible: true },
+      menubar: { visible: true },
+      document: makeBrowserChromeDocument(),
+      gBrowser: {
+        selectedBrowser: {
+          currentURI: { spec: "about:blank" }
+        },
+        addTabsProgressListener: vi.fn(),
+        removeTabsProgressListener: vi.fn()
+      },
+      addEventListener: vi.fn(),
+      closed: false
+    };
+
+    manager.handleWindowOpen({
+      docShell: { domWindow: fullWindow }
+    } as any);
+
+    expect(onForeignOpenPending).not.toHaveBeenCalled();
+    expect(fullWindow).toMatchObject({
+      __nodelyStartupContext: {
+        parentNodeId: "node-1",
+        origin: "window-open"
+      }
+    });
   });
 });
 

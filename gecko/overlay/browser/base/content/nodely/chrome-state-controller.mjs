@@ -156,37 +156,61 @@ export class ChromeStateController extends EventTarget {
   }
 
   async seedWorkspaceFromLiveStartupTab() {
-    if (this.workspace?.nodes?.length) {
-      return false;
-    }
-
     const gBrowser = this.runtimeManager.window?.gBrowser ?? null;
     const tab = gBrowser?.selectedTab ?? null;
     const browser = tab?.linkedBrowser ?? null;
-    const url = browser?.currentURI?.spec ?? null;
+    const currentUrl = browser?.currentURI?.spec ?? null;
+    const startupContext = this.runtimeManager.consumeStartupWindowContext?.() ?? null;
+    const startupRequest = readStartupNavigationRequest(this.runtimeManager.window);
+    const liveStartupUrl =
+      currentUrl && !isTransientStartupUrl(currentUrl) ? currentUrl : null;
+    const pendingStartupUrl =
+      startupRequest.url && !isTransientStartupUrl(startupRequest.url) ? startupRequest.url : null;
+    const startupUrl = liveStartupUrl ?? pendingStartupUrl;
+    const hasExplicitStartupHint = Boolean(startupContext || startupRequest.url);
 
     if (
       !tab ||
       !browser ||
-      !url ||
-      isTransientStartupUrl(url) ||
+      !startupUrl ||
+      (this.workspace?.nodes?.length && !hasExplicitStartupHint) ||
       this.runtimeManager.nodeIdForTab?.(tab)
     ) {
       return false;
     }
 
-    let nextWorkspace = createRootNode(this.workspace);
-    const rootId = nextWorkspace.selectedNodeId;
+    const openerNode = startupContext?.parentNodeId
+      ? findNode(this.workspace, startupContext.parentNodeId)
+      : null;
+    const parentNode = isArtifactNode(openerNode)
+      ? findOwningPageNode(this.workspace, openerNode)
+      : openerNode;
+
+    let nextWorkspace = this.workspace;
+    let targetNodeId = null;
+    let adoption = "root";
+
+    if (parentNode) {
+      nextWorkspace = createPageChildNode(this.workspace, parentNode.id, startupContext?.origin ?? "window-open", {
+        selectChild: true
+      });
+      targetNodeId = nextWorkspace.selectedNodeId;
+      adoption = "child";
+    } else {
+      nextWorkspace = createRootNode(this.workspace);
+      targetNodeId = nextWorkspace.selectedNodeId;
+    }
 
     nextWorkspace = relayoutWorkspace(
       setSurfaceMode(
-        updateNodeMetadata(nextWorkspace, rootId, {
+        updateNodeMetadata(nextWorkspace, targetNodeId, {
           title: tab.label || browser.contentTitle || "Untitled page",
-          url,
+          url: startupUrl,
           faviconUrl: gBrowser.getIcon?.(tab) ?? null,
-          canGoBack: browser.canGoBack ?? false,
-          canGoForward: browser.canGoForward ?? false,
-          runtimeState: browser.isLoadingDocument ? "loading" : "live",
+          canGoBack: liveStartupUrl ? browser.canGoBack ?? false : false,
+          canGoForward: liveStartupUrl ? browser.canGoForward ?? false : false,
+          runtimeState:
+            liveStartupUrl == null || browser.isLoadingDocument ? "loading" : "live",
           errorMessage: null
         }),
         "page"
@@ -194,10 +218,20 @@ export class ChromeStateController extends EventTarget {
     );
 
     this.workspace = await this.workspaceStore.saveWorkspace(nextWorkspace);
-    this.runtimeManager.adoptOpenedTab(rootId, tab);
+    if (liveStartupUrl) {
+      this.runtimeManager.adoptOpenedTab(targetNodeId, tab);
+    } else {
+      this.runtimeManager.adoptOpenedTab(targetNodeId, tab, {
+        pendingUrl: startupUrl
+      });
+    }
     this.trace("initialize:seeded-live-startup-tab", {
-      nodeId: rootId,
-      url
+      nodeId: targetNodeId,
+      url: startupUrl,
+      adoption,
+      parentNodeId: parentNode?.id ?? null,
+      fromExternal: startupRequest.fromExternal === true,
+      pendingStartupUrl: liveStartupUrl == null
     });
     return true;
   }
@@ -1084,8 +1118,10 @@ export class ChromeStateController extends EventTarget {
 
     if (this.runtimeManager.tabForNode(node.id)) {
       const currentUrl = this.runtimeManager.currentUrlForNode?.(node.id) ?? null;
+      const hasPendingNavigation =
+        this.runtimeManager.hasPendingNavigation?.(node.id, node.url ?? null) === true;
 
-      if (node.url && !urlsMatchForRuntime(currentUrl, node.url)) {
+      if (node.url && !hasPendingNavigation && !urlsMatchForRuntime(currentUrl, node.url)) {
         this.runtimeManager.loadNode(node, node.url);
         this.trace("ensure-runtime:reload-existing", {
           nodeId: node.id,
@@ -1593,6 +1629,35 @@ function hasMeaningfulNodeMetadataChange(node, metadata) {
 
 function resolveRuntimeTarget(workspace, selectedNode) {
   return isArtifactNode(selectedNode) ? findOwningPageNode(workspace, selectedNode) : selectedNode;
+}
+
+function readStartupNavigationRequest(windowRef) {
+  const uriToLoad = windowRef?.arguments?.[0] ?? null;
+  let url = null;
+
+  if (typeof uriToLoad === "string") {
+    url = uriToLoad.trim() || null;
+  } else if (
+    Array.isArray(uriToLoad) &&
+    uriToLoad.length === 1 &&
+    typeof uriToLoad[0] === "string"
+  ) {
+    url = uriToLoad[0].trim() || null;
+  }
+
+  let fromExternal = false;
+  const extraOptions = windowRef?.arguments?.[1] ?? null;
+
+  try {
+    if (extraOptions?.hasKey?.("fromExternal")) {
+      fromExternal = extraOptions.getPropertyAsBool("fromExternal");
+    }
+  } catch {}
+
+  return {
+    url,
+    fromExternal
+  };
 }
 
 function normalizeUrlForRuntime(url) {

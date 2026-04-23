@@ -290,6 +290,16 @@ function formatMediaPermissionPromptTitle(notification) {
   return "Media Device Request";
 }
 
+function shouldHideNativePermissionPrompt(notification) {
+  if (!notification) {
+    return false;
+  }
+
+  // WebRTC permission requests depend on the live doorhanger remaining open so
+  // Gecko can keep its device selectors and allow flow intact.
+  return notification.id !== "webRTC-shareDevices";
+}
+
 function snapshotPermissionPrompt(notification, browser, nodeId = null) {
   if (!notification || !MIRRORED_PERMISSION_NOTIFICATION_IDS.includes(notification.id)) {
     return null;
@@ -893,7 +903,11 @@ export class BrowserBasicsBridge {
     this.activePermissionPrompt = notification;
     this.callbacks.onPermissionPromptChanged?.(promptSnapshot);
 
-    if (hideNative && this.window.PopupNotifications?.panel?.state === "open") {
+    if (
+      hideNative &&
+      shouldHideNativePermissionPrompt(notification) &&
+      this.window.PopupNotifications?.panel?.state === "open"
+    ) {
       this.window.PopupNotifications.panel.hidePopup?.();
     }
   }

@@ -16,6 +16,7 @@ function makeRuntimeManager() {
   return {
     callbacks: {},
     window: {
+      arguments: [],
       gBrowser: {
         selectedTab: null,
         getIcon: vi.fn(() => null)
@@ -29,7 +30,9 @@ function makeRuntimeManager() {
     ensureRuntime: vi.fn(),
     selectNode: vi.fn(),
     adoptOpenedTab: vi.fn(),
-    closeNodeRuntime: vi.fn()
+    closeNodeRuntime: vi.fn(),
+    hasPendingNavigation: vi.fn((_nodeId?: string, _url?: string) => false),
+    consumeStartupWindowContext: vi.fn(() => null)
   };
 }
 
@@ -257,6 +260,154 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     );
     expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(
       workspace.selectedNodeId,
+      runtimeManager.window.gBrowser.selectedTab
+    );
+    expect(runtimeManager.loadNode).not.toHaveBeenCalled();
+  });
+
+  it("adopts a pending startup URL in a new window as a child of the opener node", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const rootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, rootId, {
+      kind: "url",
+      url: "https://example.com/root",
+      input: "https://example.com/root",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const startupUrl = "https://example.com/new-window-child";
+    runtimeManager.consumeStartupWindowContext.mockReturnValue({
+      parentNodeId: rootId,
+      origin: "window-open"
+    });
+    runtimeManager.window.arguments = [startupUrl];
+    runtimeManager.window.gBrowser.selectedTab = {
+      label: "New Window Child",
+      linkedBrowser: {
+        currentURI: { spec: "about:blank" },
+        contentTitle: "",
+        canGoBack: false,
+        canGoForward: false,
+        isLoadingDocument: true
+      }
+    };
+    runtimeManager.adoptOpenedTab.mockImplementation((nodeId?: string, tab?: unknown, options?: any) => {
+      runtimeManager.tabForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? (tab as { id?: string } | null) ?? null : null
+      );
+      runtimeManager.currentUrlForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? "about:blank" : null
+      );
+      runtimeManager.hasPendingNavigation.mockImplementation(
+        (candidateNodeId?: string, candidateUrl?: string) =>
+          candidateNodeId === nodeId && candidateUrl === options?.pendingUrl
+      );
+    });
+
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      compatExtensionsStore: null,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+
+    expect(workspace.nodes).toHaveLength(2);
+    const childNode = workspace.nodes.find((node) => node.parentId === rootId);
+    expect(childNode?.url).toBe(startupUrl);
+    expect(workspace.selectedNodeId).toBe(childNode?.id);
+    expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(
+      childNode?.id,
+      runtimeManager.window.gBrowser.selectedTab,
+      { pendingUrl: startupUrl }
+    );
+    expect(runtimeManager.loadNode).not.toHaveBeenCalled();
+  });
+
+  it("adopts another app's startup URL as a new root instead of restoring the old selection into that window", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const existingRootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, existingRootId, {
+      kind: "url",
+      url: "https://example.com/original",
+      input: "https://example.com/original",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const startupUrl = "https://example.com/from-another-app";
+    runtimeManager.window.arguments = [
+      startupUrl,
+      {
+        hasKey(name: string) {
+          return name === "fromExternal";
+        },
+        getPropertyAsBool(_name: string) {
+          return true;
+        }
+      }
+    ];
+    runtimeManager.window.gBrowser.selectedTab = {
+      label: "From Another App",
+      linkedBrowser: {
+        currentURI: { spec: startupUrl },
+        contentTitle: "From Another App",
+        canGoBack: false,
+        canGoForward: false,
+        isLoadingDocument: false
+      }
+    };
+    runtimeManager.adoptOpenedTab.mockImplementation((nodeId?: string) => {
+      runtimeManager.tabForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? ({ id: "external-startup-tab" } as { id: string }) : null
+      );
+      runtimeManager.currentUrlForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? startupUrl : null
+      );
+    });
+
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      compatExtensionsStore: null,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+
+    expect(workspace.nodes).toHaveLength(2);
+    const newRoot = findNode(workspace, workspace.selectedNodeId);
+    expect(newRoot?.parentId).toBeNull();
+    expect(newRoot?.id).not.toBe(existingRootId);
+    expect(newRoot?.url).toBe(startupUrl);
+    expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(
+      newRoot?.id,
       runtimeManager.window.gBrowser.selectedTab
     );
     expect(runtimeManager.loadNode).not.toHaveBeenCalled();

@@ -1289,12 +1289,12 @@ async function runPagebarForeignWindowScenario() {
           null;
 
         return (
-          newWindow.gBrowser?.selectedBrowser?.currentURI?.spec === targetUrl ||
-          (
-            selectedNode?.url === targetUrl &&
-            state?.runtime?.selectedTabUrl === targetUrl &&
-            newWindow.document.documentElement?.getAttribute("nodely-browser-surface") === "page"
-          )
+          selectedNode?.url === targetUrl &&
+          selectedNode?.parentId != null &&
+          state?.workspace?.nodeCount === 3 &&
+          state?.runtime?.selectedTabNodeId === selectedNode.id &&
+          state?.runtime?.selectedTabUrl === targetUrl &&
+          newWindow.document.documentElement?.getAttribute("nodely-browser-surface") === "page"
         );
       },
       "new browser window target navigation"

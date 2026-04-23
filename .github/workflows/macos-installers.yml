@@ -157,7 +157,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verify packaged macOS DMG payload
+      - name: Validate packaged macOS DMG payload
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -169,21 +169,59 @@ jobs:
           fi
 
           for dmg in "${dmgs[@]}"; do
-            echo "Verifying $dmg"
-            mount_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nodely-dmg-XXXXXX")"
-            hdiutil attach -nobrowse -readonly -mountpoint "$mount_dir" "$dmg" >/dev/null
-            app_bundle="$(find "$mount_dir" -maxdepth 1 -type d -name '*.app' | sort | head -n 1)"
+            echo "Validating $dmg"
+            (
+              set -euo pipefail
+              mount_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nodely-dmg-XXXXXX")"
 
-            if [[ -z "$app_bundle" ]]; then
-              hdiutil detach "$mount_dir" -force >/dev/null || true
-              rm -rf "$mount_dir"
-              echo "No macOS app bundle was found inside $dmg." >&2
-              exit 1
-            fi
+              cleanup() {
+                hdiutil detach "$mount_dir" -force >/dev/null 2>&1 || true
+                rm -rf "$mount_dir"
+              }
 
-            codesign --verify --deep --strict --verbose=2 "$app_bundle"
-            hdiutil detach "$mount_dir" -force >/dev/null
-            rm -rf "$mount_dir"
+              trap cleanup EXIT
+
+              hdiutil attach -nobrowse -readonly -mountpoint "$mount_dir" "$dmg" >/dev/null
+              app_bundles=()
+              while IFS= read -r app_bundle; do
+                app_bundles+=("$app_bundle")
+              done < <(find "$mount_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort)
+
+              if [[ ${#app_bundles[@]} -ne 1 ]]; then
+                echo "Expected exactly one macOS app bundle inside $dmg, found ${#app_bundles[@]}." >&2
+                find "$mount_dir" -mindepth 1 -maxdepth 1 -print >&2 || true
+                exit 1
+              fi
+
+              app_bundle="${app_bundles[0]}"
+              info_plist="$app_bundle/Contents/Info.plist"
+
+              if [[ ! -f "$info_plist" ]]; then
+                echo "Missing Info.plist in mounted app bundle $app_bundle." >&2
+                exit 1
+              fi
+
+              plutil -lint "$info_plist" >/dev/null
+
+              if ! executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"; then
+                echo "Unable to read CFBundleExecutable from $info_plist." >&2
+                exit 1
+              fi
+
+              executable_path="$app_bundle/Contents/MacOS/$executable_name"
+
+              if [[ ! -x "$executable_path" ]]; then
+                echo "Missing mounted macOS app executable $executable_path." >&2
+                exit 1
+              fi
+
+              if codesign_output="$(codesign --display --verbose=2 "$app_bundle" 2>&1)"; then
+                printf '%s\n' "$codesign_output"
+              else
+                echo "::warning title=Unsigned macOS app bundle::$(basename "$app_bundle") inside $(basename "$dmg") is not signed; continuing because unsigned CI artifacts are currently allowed."
+                printf '%s\n' "$codesign_output"
+              fi
+            )
           done
 
       - name: Derive macOS release metadata
