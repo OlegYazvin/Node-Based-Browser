@@ -160,7 +160,7 @@ for dmg in "${dmgs[@]}"; do
 
     app_name="$(basename "$app_bundle")"
     signed_app="$payload_dir/$app_name"
-    ditto "$app_bundle" "$signed_app"
+    /usr/bin/ditto "$app_bundle" "$signed_app"
 
     hdiutil detach "$mount_dir" -force >/dev/null
     mounted=0
@@ -177,7 +177,7 @@ for dmg in "${dmgs[@]}"; do
     codesign --verify --deep --strict --verbose=2 "$signed_app"
 
     app_archive="$work_dir/${app_name%.app}.zip"
-    ditto -c -k --keepParent "$signed_app" "$app_archive"
+    /usr/bin/ditto -c -k --keepParent "$signed_app" "$app_archive"
 
     xcrun notarytool submit "$app_archive" \
       --apple-id "$MACOS_NOTARY_APPLE_ID" \

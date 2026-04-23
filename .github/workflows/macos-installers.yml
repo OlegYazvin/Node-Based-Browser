@@ -198,7 +198,7 @@ jobs:
           mkdir -p "$archive_dir"
           archive_path="$archive_dir/nodely-${FIREFOX_ESR_VERSION}.en-US.mac.zip"
 
-          if ! ditto -c -k --keepParent "${app_bundles[0]}" "$archive_path" 2>&1 | tee macos-unsigned-archive.log; then
+          if ! /usr/bin/ditto -c -k --keepParent "${app_bundles[0]}" "$archive_path" 2>&1 | tee macos-unsigned-archive.log; then
             summary="$(tail -n 20 macos-unsigned-archive.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
             echo "::error title=Unsigned macOS archive build failed::$summary"
             exit 1
@@ -333,7 +333,7 @@ jobs:
 
               trap cleanup EXIT
 
-              ditto -x -k "$archive" "$extract_dir"
+              /usr/bin/ditto -x -k "$archive" "$extract_dir"
               app_bundles=()
               while IFS= read -r app_bundle; do
                 app_bundles+=("$app_bundle")
@@ -396,7 +396,7 @@ jobs:
 
                 trap cleanup EXIT
 
-                ditto -x -k "$artifact" "$extract_dir"
+                /usr/bin/ditto -x -k "$artifact" "$extract_dir"
                 app_bundle="$(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort | head -n 1)"
 
                 if [[ -z "$app_bundle" ]]; then
