@@ -139,6 +139,17 @@ jobs:
             exit 1
           fi
 
+      - name: Sign and notarize macOS DMG
+        env:
+          MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64 }}
+          MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          MACOS_SIGNING_CHANNEL: release
+        run: bash scripts/sign-and-notarize-macos-release.sh
+
       - name: Stage Gecko release artifact
         run: |
           set -o pipefail
@@ -224,7 +235,93 @@ jobs:
             )
           done
 
+      - name: Assess macOS public release readiness
+        id: public_release_gate
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          output_dir="out/make/darwin/${{ matrix.arch }}"
+          marker="$output_dir/.public-release-ready"
+          artifacts=("$output_dir"/*.dmg "$output_dir"/*.pkg)
+          rm -f "$marker"
+
+          if [[ ${#artifacts[@]} -eq 0 ]]; then
+            echo "No macOS installers were found to assess for public release." >&2
+            exit 1
+          fi
+
+          publish_ready=1
+
+          for artifact in "${artifacts[@]}"; do
+            echo "Assessing Gatekeeper readiness for $artifact"
+            extension="${artifact##*.}"
+
+            if [[ "$extension" == "pkg" ]]; then
+              if assessment_output="$(spctl --assess --type install --verbose=4 "$artifact" 2>&1)"; then
+                printf '%s\n' "$assessment_output"
+              else
+                echo "::warning title=macOS public release blocked::Gatekeeper rejected $(basename "$artifact"); skipping public macOS release publication."
+                printf '%s\n' "$assessment_output"
+                publish_ready=0
+              fi
+            else
+              if assessment_output="$(spctl --assess --type open --context context:primary-signature --verbose=4 "$artifact" 2>&1)"; then
+                printf '%s\n' "$assessment_output"
+              else
+                echo "::warning title=macOS public release blocked::Gatekeeper rejected $(basename "$artifact"); skipping public macOS release publication."
+                printf '%s\n' "$assessment_output"
+                publish_ready=0
+              fi
+
+              if ! (
+                set -euo pipefail
+                mount_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nodely-public-release-XXXXXX")"
+
+                cleanup() {
+                  hdiutil detach "$mount_dir" -force >/dev/null 2>&1 || true
+                  rm -rf "$mount_dir"
+                }
+
+                trap cleanup EXIT
+
+                hdiutil attach -nobrowse -readonly -mountpoint "$mount_dir" "$artifact" >/dev/null
+                app_bundle="$(find "$mount_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort | head -n 1)"
+
+                if [[ -z "$app_bundle" ]]; then
+                  echo "No macOS app bundle was found inside $artifact during Gatekeeper assessment." >&2
+                  exit 1
+                fi
+
+                if app_assessment="$(spctl --assess --type execute --verbose=4 "$app_bundle" 2>&1)"; then
+                  printf '%s\n' "$app_assessment"
+                else
+                  echo "::warning title=macOS public release blocked::Gatekeeper rejected $(basename "$app_bundle") from $(basename "$artifact"); skipping public macOS release publication."
+                  printf '%s\n' "$app_assessment"
+                  exit 1
+                fi
+              ); then
+                publish_ready=0
+              fi
+            fi
+
+            if stapler_output="$(xcrun stapler validate "$artifact" 2>&1)"; then
+              printf '%s\n' "$stapler_output"
+            else
+              echo "::warning title=macOS public release blocked::Stapled notarization validation failed for $(basename "$artifact"); skipping public macOS release publication."
+              printf '%s\n' "$stapler_output"
+              publish_ready=0
+            fi
+          done
+
+          if [[ "$publish_ready" -eq 1 ]]; then
+            touch "$marker"
+            echo "publish_ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish_ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Derive macOS release metadata
+        if: steps.public_release_gate.outputs.publish_ready == 'true'
         id: release_meta
         run: |
           node --input-type=module <<'NODE'
@@ -278,6 +375,7 @@ jobs:
           NODE
 
       - name: Publish macOS release assets
+        if: steps.public_release_gate.outputs.publish_ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release_meta.outputs.tag }}
@@ -320,7 +418,11 @@ jobs:
             }
           }
           NODE
-          echo "macOS installer verification uploads artifacts and refreshes the matching GitHub Release assets directly."
+          if [[ "${{ steps.public_release_gate.outputs.publish_ready }}" == "true" ]]; then
+            echo "Gatekeeper-ready macOS installers were uploaded as workflow artifacts and refreshed on the matching GitHub Release."
+          else
+            echo "::warning title=macOS public release skipped::Built macOS installers were uploaded as workflow artifacts only. They were not published to the GitHub Release because Gatekeeper/notarization checks did not pass."
+          fi
 
       - name: Upload failure logs
         if: failure()

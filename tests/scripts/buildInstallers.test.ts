@@ -30,7 +30,7 @@ afterEach(async () => {
 describe("build-installers wrappers", () => {
   it("uses an absolute desktop launcher path for system installs", () => {
     const entry = buildDesktopEntry({
-      name: "Nodely Browser",
+      name: "Nodely",
       exec: "/usr/bin/nodely-browser",
       icon: "nodely-browser"
     });
@@ -241,6 +241,9 @@ describe("build-installers wrappers", () => {
     });
 
     expect(control).toContain(`Version: ${currentNodelyVersion}-9`);
+    expect(control).toContain("Maintainer: Nodely <noreply@nodely.invalid>");
+    expect(control).toContain("Description: Nodely for Ubuntu");
+    expect(control).toContain("Nodely is a node-based Gecko browser for research workflows packaged for Ubuntu.");
     expect(control).toContain("Depends:");
     expect(control).toContain("libatk1.0-0");
     expect(control).toContain("libdbus-1-3");
@@ -297,6 +300,10 @@ describe("build-installers wrappers", () => {
 
     expect(spec).toContain("BuildArch:      x86_64");
     expect(spec).toContain("Release:        9");
+    expect(spec).toContain("Nodely is a node-based Gecko browser for research workflows.");
+    expect(spec).toContain("* ");
+    expect(spec).toContain("Nodely <noreply@nodely.invalid>");
+    expect(spec).toContain("- Package the Gecko-based Nodely bundle");
     expect(spec).toContain("%global __os_install_post %{nil}");
     expect(spec).toContain("Source0:        nodely-browser-payload.tar.gz");
     expect(spec).toContain("Requires:       gtk3");

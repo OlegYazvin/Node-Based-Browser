@@ -180,6 +180,34 @@ function inspectLinuxArtifactBundle(filePath) {
 }
 
 export function selectPackagedArtifact(artifacts, platform) {
+  if (platform === "darwin") {
+    const artifactPriority = (artifactPath) => {
+      const lowerArtifactPath = artifactPath.toLowerCase();
+
+      if (lowerArtifactPath.endsWith(".dmg")) {
+        return 2;
+      }
+
+      if (lowerArtifactPath.endsWith(".pkg")) {
+        return 1;
+      }
+
+      return 0;
+    };
+
+    const [selectedArtifact] = [...artifacts].sort((left, right) => {
+      const priorityDifference = artifactPriority(right) - artifactPriority(left);
+
+      if (priorityDifference !== 0) {
+        return priorityDifference;
+      }
+
+      return right.localeCompare(left);
+    });
+
+    return selectedArtifact ?? null;
+  }
+
   if (platform !== "linux") {
     const [selectedArtifact] = [...artifacts].sort((left, right) => right.localeCompare(left));
     return selectedArtifact ?? null;

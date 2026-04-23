@@ -417,7 +417,7 @@ function ensureUnofficialBrandingPatched(checkoutDir) {
     next = next.replace("-brand-shorter-name = Nightly", "-brand-shorter-name = Nodely");
     next = next.replace("-brand-short-name = Nightly", "-brand-short-name = Nodely");
     next = next.replace("-brand-shortcut-name = Nightly", "-brand-shortcut-name = Nodely");
-    next = next.replace("-brand-full-name = Nightly", "-brand-full-name = Nodely Browser");
+    next = next.replace("-brand-full-name = Nightly", "-brand-full-name = Nodely");
     next = next.replace("-brand-product-name = Firefox", "-brand-product-name = Nodely");
     next = next.replace("-vendor-short-name = Mozilla", "-vendor-short-name = Nodely");
     return next;
@@ -430,7 +430,7 @@ function ensureUnofficialBrandingPatched(checkoutDir) {
       contents
         .replace("brandShorterName=Nightly", "brandShorterName=Nodely")
         .replace("brandShortName=Nightly", "brandShortName=Nodely")
-        .replace("brandFullName=Nightly", "brandFullName=Nodely Browser")
+        .replace("brandFullName=Nightly", "brandFullName=Nodely")
   );
 
   patchFile(brandingPrefsPath, "browser/branding/unofficial/pref/firefox-branding.js nodely update urls", (contents) => {

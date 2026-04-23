@@ -12,7 +12,8 @@ This directory contains the installers that actually exist in this repo right no
 - Each staged installer records whether it came from a local build or GitHub Actions promotion.
 - `Installer/RELEASE_NOTES.MD` captures the latest push-triggered installer/release summary for this repo.
 - If a section below says no installers are staged, check the [GitHub Releases](https://github.com/OlegYazvin/Node-Based-Browser/releases/latest) page for the latest published assets for that target.
-- First-pass Windows and macOS installers may be unsigned unless separate signing credentials are configured.
+- Windows installers may be unsigned unless separate signing credentials are configured.
+- macOS installers are only staged or published after Developer ID signing, notarization, and Gatekeeper checks pass on GitHub Actions.
 - Current Nodely version: `0.1`
 
 Generated from `Installer/manifest.json` at 2026-04-23T18:51:03.597Z.

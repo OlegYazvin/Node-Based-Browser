@@ -166,7 +166,7 @@ function main() {
     ]);
     const brandLocaleCheck = commandOutput("rg", [
       "-n",
-      "Nodely Browser|Nodely",
+      "Nodely",
       path.join(checkoutDir, "browser", "branding", "unofficial", "locales", "en-US", "brand.ftl")
     ]);
 

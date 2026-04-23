@@ -59,4 +59,11 @@ describe("stage-release-artifacts", () => {
 
     expect(selectPackagedArtifact([partialArtifact], "linux")).toBeNull();
   });
+
+  it("prefers DMG artifacts over PKG artifacts for macOS staging", () => {
+    const dmgArtifact = "/tmp/nodely-140.10.0.en-US.mac.dmg";
+    const pkgArtifact = "/tmp/nodely-140.10.0.en-US.mac.pkg";
+
+    expect(selectPackagedArtifact([pkgArtifact, dmgArtifact], "darwin")).toBe(dmgArtifact);
+  });
 });

@@ -26,6 +26,7 @@ const systemDesktopFileName = "nodely-browser.desktop";
 const systemIconName = "nodely-browser";
 const systemInstallRoot = "/opt/nodely-browser/app";
 const systemWrapperPath = "/usr/bin/nodely-browser";
+const nodelyAppName = "Nodely";
 const linuxPackageRelease = "9";
 const flatpakAppId = "io.nodely.Browser";
 const flatpakRuntime = "org.freedesktop.Platform";
@@ -613,12 +614,12 @@ function buildFlatpakMetainfo(version) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>${flatpakAppId}</id>
-  <name>Nodely Browser</name>
+  <name>${nodelyAppName}</name>
   <summary>Node-based Gecko browser for research workflows</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MPL-2.0</project_license>
   <description>
-    <p>Nodely Browser is a node-based Gecko browser focused on graph-first research workflows.</p>
+    <p>${nodelyAppName} is a node-based Gecko browser focused on graph-first research workflows.</p>
   </description>
   <launchable type="desktop-id">${flatpakAppId}.desktop</launchable>
   <categories>
@@ -662,7 +663,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --help)
       cat <<'HELP'
-Nodely Browser Linux installer
+Nodely Linux installer
 
 Options:
   --prefix <path>        Installation root (default: ~/.local/opt/nodely-browser)
@@ -721,7 +722,7 @@ chmod +x "$wrapper_path"
 
 cat >"$desktop_path" <<DESKTOP
 ${buildDesktopEntry({
-  name: "Nodely Browser",
+  name: nodelyAppName,
   exec: "$wrapper_path",
   icon: "$icon_path"
 }).trim()}
@@ -749,7 +750,7 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache "$(dirname "$(dirname "$icon_dir")")" >/dev/null 2>&1 || true
 fi
 
-echo "Installed Nodely Browser"
+echo "Installed ${nodelyAppName}"
 echo "  App: $install_root"
 echo "  Launcher: $wrapper_path"
 echo "  Desktop entry: $desktop_path"
@@ -771,11 +772,11 @@ Version: ${packageReleaseVersion(version)}
 Section: web
 Priority: optional
 Architecture: ${debArchNames[arch] ?? arch}
-Maintainer: Nodely Browser <noreply@nodely.invalid>
+Maintainer: ${nodelyAppName} <noreply@nodely.invalid>
 Depends: ${runtimeDependencies.join(", ")}
 Homepage: https://nodely.invalid/
-Description: Nodely Browser for ${distributionLabel}
- Node-based Gecko browser for research workflows packaged for ${distributionLabel}.
+Description: ${nodelyAppName} for ${distributionLabel}
+ ${nodelyAppName} is a node-based Gecko browser for research workflows packaged for ${distributionLabel}.
 `;
 }
 
@@ -817,7 +818,7 @@ BuildArch:      ${rpmArchNames[arch] ?? arch}
 ${requires}
 
 %description
-Nodely Browser is a node-based Gecko browser for research workflows.
+${nodelyAppName} is a node-based Gecko browser for research workflows.
 
 %prep
 %setup -q -c -T
@@ -852,8 +853,8 @@ fi
 /usr/share/icons/hicolor/scalable/apps/nodely-browser.svg
 
 %changelog
-* ${rpmChangelogDate()} Nodely Browser <noreply@nodely.invalid> - ${version}-1
-- Package the Gecko-based Nodely Browser bundle
+* ${rpmChangelogDate()} ${nodelyAppName} <noreply@nodely.invalid> - ${version}-1
+- Package the Gecko-based ${nodelyAppName} bundle
 `;
 }
 
@@ -1029,7 +1030,7 @@ async function prepareSystemPayload({ sourceArtifactPath, temporaryDirectory, ic
   await writeFile(
     desktopPath,
     buildDesktopEntry({
-      name: "Nodely Browser",
+      name: nodelyAppName,
       exec: systemWrapperPath,
       icon: systemIconName
     }),
@@ -1222,7 +1223,7 @@ async function buildFlatpakInstaller({ version, outputDirectory, arch, payloadRo
     await writeFile(
       desktopPath,
       buildDesktopEntry({
-        name: "Nodely Browser",
+        name: nodelyAppName,
         exec: "nodely-browser",
         icon: flatpakAppId
       }),
