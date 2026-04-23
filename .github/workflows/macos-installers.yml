@@ -153,7 +153,13 @@ jobs:
           MACOS_NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
           MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
           MACOS_SIGNING_CHANNEL: release
-        run: bash scripts/sign-and-notarize-macos-release.sh
+        run: |
+          set -o pipefail
+          if ! bash scripts/sign-and-notarize-macos-release.sh 2>&1 | tee macos-sign-and-notarize.log; then
+            summary="$(tail -n 20 macos-sign-and-notarize.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
+            echo "::error title=macOS signing/notarization failed::$summary"
+            exit 1
+          fi
 
       - name: Stage Gecko release artifact
         run: |
@@ -442,6 +448,7 @@ jobs:
             gecko-bootstrap.log
             gecko-build.log
             gecko-package.log
+            macos-sign-and-notarize.log
             gecko-stage-release.log
             installer-build.log
           if-no-files-found: ignore
