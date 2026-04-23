@@ -93,7 +93,7 @@ jobs:
       - name: Refresh artifact-build Nodely branding
         run: npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
 
-      - name: Re-sign macOS app bundle for release packaging
+      - name: Validate macOS app bundle before packaging
         run: |
           set -euo pipefail
           dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
@@ -104,11 +104,25 @@ jobs:
             exit 1
           fi
 
-          find "$dist_dir" -type d -name '*.app' | sort | while IFS= read -r app_bundle; do
-            echo "Re-signing $app_bundle"
-            codesign --force --deep --sign - "$app_bundle"
-            codesign --verify --deep --strict --verbose=2 "$app_bundle"
-          done
+          while IFS= read -r app_bundle; do
+            info_plist="$app_bundle/Contents/Info.plist"
+
+            if [[ ! -f "$info_plist" ]]; then
+              echo "Missing Info.plist in $app_bundle." >&2
+              exit 1
+            fi
+
+            plutil -lint "$info_plist" >/dev/null
+            executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
+            executable_path="$app_bundle/Contents/MacOS/$executable_name"
+
+            if [[ ! -x "$executable_path" ]]; then
+              echo "Missing macOS app executable $executable_path." >&2
+              exit 1
+            fi
+
+            echo "Validated $app_bundle"
+          done < <(find "$dist_dir" -type d -name '*.app' | sort)
 
       - name: Package Gecko build
         env:
