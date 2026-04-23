@@ -9,7 +9,6 @@ required_vars=(
   MACOS_NOTARY_APPLE_ID
   MACOS_NOTARY_APP_PASSWORD
   MACOS_NOTARY_TEAM_ID
-  MACOS_KEYCHAIN_PASSWORD
 )
 
 missing_vars=()
@@ -36,7 +35,16 @@ fi
 
 certificate_path="${RUNNER_TEMP:-/tmp}/nodely-developer-id-application.p12"
 keychain_path="${RUNNER_TEMP:-/tmp}/nodely-signing.keychain-db"
+keychain_password="${MACOS_KEYCHAIN_PASSWORD:-}"
 signing_channel="${MACOS_SIGNING_CHANNEL:-release}"
+
+if [[ -z "$keychain_password" ]]; then
+  keychain_password="$(python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(24))
+PY
+)"
+fi
 
 cleanup() {
   rm -f "$certificate_path"
@@ -56,16 +64,15 @@ with open(sys.argv[1], "wb") as certificate_file:
     )
 PY
 
-security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$keychain_path"
+security create-keychain -p "$keychain_password" "$keychain_path"
 security set-keychain-settings -lut 21600 "$keychain_path"
-security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$keychain_path"
+security unlock-keychain -p "$keychain_password" "$keychain_path"
 security import "$certificate_path" \
   -P "$MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD" \
   -A \
-  -t cert \
   -f pkcs12 \
   -k "$keychain_path"
-security set-key-partition-list -S apple-tool:,apple: -k "$MACOS_KEYCHAIN_PASSWORD" "$keychain_path"
+security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain_path"
 
 existing_keychains=()
 while IFS= read -r keychain; do
