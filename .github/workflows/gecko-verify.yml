@@ -106,12 +106,17 @@ jobs:
             exit 1
           fi
 
-          if [[ ! -e "$dist_dir/nodely/nodely" && -e "$dist_dir/nodely/firefox" ]]; then
-            ln -sf firefox "$dist_dir/nodely/nodely"
-          fi
-
           if [[ ! -e "$dist_dir/nodely/nodely-bin" && -e "$dist_dir/nodely/firefox-bin" ]]; then
             ln -sf firefox-bin "$dist_dir/nodely/nodely-bin"
+          fi
+
+          if [[ ! -e "$dist_dir/nodely/nodely" ]]; then
+            for candidate in nodely-bin firefox firefox-bin; do
+              if [[ -e "$dist_dir/nodely/$candidate" ]]; then
+                ln -sf "$candidate" "$dist_dir/nodely/nodely"
+                break
+              fi
+            done
           fi
 
           if [[ ! -e "$dist_dir/nodely/nodely" ]]; then
