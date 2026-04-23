@@ -37,6 +37,9 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
+      - name: Record installer job timing start
+        run: echo "INSTALLER_TIMING_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -56,6 +59,9 @@ jobs:
 
       - name: Choose Gecko checkout directory
         run: echo "GECKO_CHECKOUT_DIR=$RUNNER_TEMP/firefox-esr" >> "$GITHUB_ENV"
+
+      - name: Record installer pipeline timing start
+        run: echo "INSTALLER_TIMING_PIPELINE_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Bootstrap Gecko ESR checkout
         run: |
@@ -167,6 +173,10 @@ jobs:
             echo "::error title=macOS installer build failed::$summary"
             exit 1
           fi
+
+      - name: Record installer pipeline timing finish
+        if: always()
+        run: echo "INSTALLER_TIMING_PIPELINE_FINISHED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Validate packaged macOS DMG payload
         run: |
@@ -443,3 +453,14 @@ jobs:
           name: macos-installers-${{ matrix.arch }}
           path: out/make/darwin/${{ matrix.arch }}
           if-no-files-found: error
+
+      - name: Summarize installer timings
+        if: always() && env.INSTALLER_TIMING_JOB_STARTED_AT != ''
+        run: |
+          node scripts/write-installer-timing-summary.mjs \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --job-label "Build macOS installer (${{ matrix.label }})" \
+            --job-start "$INSTALLER_TIMING_JOB_STARTED_AT" \
+            --focus-label "Installer generation pipeline" \
+            --focus-start "$INSTALLER_TIMING_PIPELINE_STARTED_AT" \
+            --focus-end "${INSTALLER_TIMING_PIPELINE_FINISHED_AT:-}"

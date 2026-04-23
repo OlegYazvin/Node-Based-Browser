@@ -49,6 +49,9 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
+      - name: Record installer job timing start
+        run: echo "INSTALLER_TIMING_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -211,6 +214,9 @@ jobs:
           else
             echo "GECKO_CHECKOUT_DIR=$RUNNER_TEMP/firefox-esr" >> "$GITHUB_ENV"
           fi
+
+      - name: Record installer pipeline timing start
+        run: echo "INSTALLER_TIMING_PIPELINE_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Bootstrap Gecko ESR checkout
         run: |
@@ -393,6 +399,10 @@ jobs:
             echo "::error title=Installer build failed::$summary"
             exit 1
           fi
+
+      - name: Record installer pipeline timing finish
+        if: always()
+        run: echo "INSTALLER_TIMING_PIPELINE_FINISHED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Validate packaged macOS DMG payload
         if: matrix.platform == 'darwin'
@@ -610,6 +620,17 @@ jobs:
             ubuntu-compat.log
           if-no-files-found: ignore
 
+      - name: Summarize installer timings
+        if: always() && env.INSTALLER_TIMING_JOB_STARTED_AT != ''
+        run: |
+          node scripts/write-installer-timing-summary.mjs \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --job-label "Build ${{ matrix.label }}" \
+            --job-start "$INSTALLER_TIMING_JOB_STARTED_AT" \
+            --focus-label "Installer generation pipeline" \
+            --focus-start "$INSTALLER_TIMING_PIPELINE_STARTED_AT" \
+            --focus-end "${INSTALLER_TIMING_PIPELINE_FINISHED_AT:-}"
+
   assemble-installer-directory:
     name: Assemble Installer Directory
     needs:
@@ -628,6 +649,9 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
+      - name: Record installer job timing start
+        run: echo "INSTALLER_TIMING_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -636,6 +660,9 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Record installer assembly timing start
+        run: echo "INSTALLER_TIMING_PIPELINE_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Download installer outputs
         uses: actions/download-artifact@v4
@@ -856,9 +883,24 @@ jobs:
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
+      - name: Record installer assembly timing finish
+        if: always()
+        run: echo "INSTALLER_TIMING_PIPELINE_FINISHED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Upload assembled Installer directory
         uses: actions/upload-artifact@v4
         with:
           name: Installer
           path: Installer
           if-no-files-found: error
+
+      - name: Summarize installer timings
+        if: always() && env.INSTALLER_TIMING_JOB_STARTED_AT != ''
+        run: |
+          node scripts/write-installer-timing-summary.mjs \
+            --summary-path "$GITHUB_STEP_SUMMARY" \
+            --job-label "Assemble Installer Directory" \
+            --job-start "$INSTALLER_TIMING_JOB_STARTED_AT" \
+            --focus-label "Installer assembly and publication" \
+            --focus-start "$INSTALLER_TIMING_PIPELINE_STARTED_AT" \
+            --focus-end "${INSTALLER_TIMING_PIPELINE_FINISHED_AT:-}"
