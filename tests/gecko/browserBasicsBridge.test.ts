@@ -62,7 +62,68 @@ function makePersistentStorageHarness() {
   };
 }
 
-describe("BrowserBasicsBridge persistent storage prompt handling", () => {
+function makeWebRTCPromptHarness() {
+  const notification = {
+    id: "webRTC-shareDevices",
+    anchorID: "webRTC-shareDevices-notification-icon",
+    message: "Allow meet.google.com to use your camera and microphone?",
+    options: {
+      name: "meet.google.com"
+    },
+    mainAction: {
+      label: "Allow",
+      callback: vi.fn(async () => {})
+    },
+    secondaryActions: [
+      {
+        label: "Block",
+        callback: vi.fn(async () => {})
+      }
+    ]
+  };
+
+  const browser = {
+    currentURI: { spec: "https://meet.google.com/" },
+    contentTitle: "Meet",
+    contentPrincipal: {
+      siteOriginNoSuffix: "https://meet.google.com"
+    }
+  };
+
+  const panel = {
+    state: "open",
+    hidePopup: vi.fn(),
+    firstElementChild: {
+      checkbox: {
+        checked: false
+      }
+    }
+  };
+
+  const windowRef = {
+    gBrowser: {
+      selectedBrowser: browser,
+      tabContainer: {
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      }
+    },
+    PopupNotifications: {
+      getNotification: vi.fn((id) => (id === "webRTC-shareDevices" ? notification : null)),
+      _remove: vi.fn(),
+      panel
+    }
+  };
+
+  return {
+    browser,
+    notification,
+    panel,
+    windowRef
+  };
+}
+
+describe("BrowserBasicsBridge permission prompt handling", () => {
   it("mirrors the persistent storage prompt into Nodely and hides the native popup", () => {
     const { browser, notification, panel, windowRef } = makePersistentStorageHarness();
     const onPermissionPromptChanged = vi.fn();
@@ -97,6 +158,41 @@ describe("BrowserBasicsBridge persistent storage prompt handling", () => {
     expect(panel.hidePopup).toHaveBeenCalledTimes(1);
   });
 
+  it("mirrors the WebRTC camera and microphone prompt into Nodely", () => {
+    const { browser, notification, panel, windowRef } = makeWebRTCPromptHarness();
+    const onPermissionPromptChanged = vi.fn();
+    const bridge = new BrowserBasicsBridge(windowRef, {
+      runtimeManager: {
+        nodeIdForBrowser: vi.fn((targetBrowser) =>
+          targetBrowser === browser ? "node-meet" : null
+        )
+      },
+      callbacks: {
+        onPermissionPromptChanged
+      }
+    });
+
+    bridge.syncPermissionPromptState({ hideNative: true });
+
+    expect(windowRef.PopupNotifications.getNotification).toHaveBeenCalledWith(
+      "webRTC-shareDevices",
+      browser
+    );
+    expect(onPermissionPromptChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        open: true,
+        kind: "media-devices",
+        nodeId: "node-meet",
+        requestingUrl: "https://meet.google.com/",
+        title: "Camera and Microphone Request",
+        body: notification.message,
+        allowLabel: notification.mainAction.label,
+        blockLabel: notification.secondaryActions[0].label
+      })
+    );
+    expect(panel.hidePopup).toHaveBeenCalledTimes(1);
+  });
+
   it("allows the mirrored persistent storage prompt through the original Gecko callback", async () => {
     const { notification, windowRef } = makePersistentStorageHarness();
     const onPermissionPromptChanged = vi.fn();
@@ -118,6 +214,30 @@ describe("BrowserBasicsBridge persistent storage prompt handling", () => {
     expect(onPermissionPromptChanged).toHaveBeenLastCalledWith({
       open: false,
       kind: "persistent-storage"
+    });
+  });
+
+  it("allows the mirrored WebRTC prompt through the original Gecko callback", async () => {
+    const { notification, windowRef } = makeWebRTCPromptHarness();
+    const onPermissionPromptChanged = vi.fn();
+    const bridge = new BrowserBasicsBridge(windowRef, {
+      callbacks: {
+        onPermissionPromptChanged
+      }
+    });
+
+    bridge.activePermissionPrompt = notification;
+
+    await expect(bridge.resolvePermissionPrompt("allow")).resolves.toBe(true);
+
+    expect(notification.mainAction.callback).toHaveBeenCalledWith({
+      checkboxChecked: false,
+      source: "nodely"
+    });
+    expect(windowRef.PopupNotifications._remove).toHaveBeenCalledWith(notification);
+    expect(onPermissionPromptChanged).toHaveBeenLastCalledWith({
+      open: false,
+      kind: "media-devices"
     });
   });
 });

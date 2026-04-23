@@ -2911,16 +2911,20 @@ export class NodelyShell extends HTMLElement {
         {
           label: permissionPrompt.allowLabel || "Allow",
           action: "allow-permission-prompt"
-        },
-        {
-          label: permissionPrompt.blockLabel || "Block",
-          action: "block-permission-prompt"
-        },
-        {
-          label: "Dismiss",
-          action: "dismiss-permission-prompt"
         }
       ];
+
+      if (permissionPrompt.blockLabel) {
+        actions.push({
+          label: permissionPrompt.blockLabel,
+          action: "block-permission-prompt"
+        });
+      }
+
+      actions.push({
+        label: "Dismiss",
+        action: "dismiss-permission-prompt"
+      });
 
       if (permissionPrompt.nodeId != null) {
         actions.unshift({
@@ -2932,11 +2936,11 @@ export class NodelyShell extends HTMLElement {
 
       this.promptStack.append(
         createPromptCard(this.ownerDocument, {
-          title: "Persistent Storage Request",
+          title: permissionPrompt.title || "Permission Request",
           body:
             permissionPrompt.body ??
             permissionPrompt.requestingUrl ??
-            "A page wants to store data in persistent storage.",
+            "A page is requesting permission.",
           secondary:
             permissionPrompt.requestingUrl != null
               ? `Requested by ${permissionPrompt.requestingUrl}`

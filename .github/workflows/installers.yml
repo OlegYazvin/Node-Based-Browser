@@ -205,6 +205,24 @@ jobs:
       - name: Refresh artifact-build Nodely branding
         run: npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
 
+      - name: Re-sign macOS app bundle for release packaging
+        if: matrix.platform == 'darwin'
+        run: |
+          set -euo pipefail
+          dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
+          app_bundle_count="$(find "$dist_dir" -type d -name '*.app' | wc -l | tr -d ' ')"
+
+          if [[ "$app_bundle_count" == "0" ]]; then
+            echo "No macOS app bundles found under $dist_dir." >&2
+            exit 1
+          fi
+
+          find "$dist_dir" -type d -name '*.app' | sort | while IFS= read -r app_bundle; do
+            echo "Re-signing $app_bundle"
+            codesign --force --deep --sign - "$app_bundle"
+            codesign --verify --deep --strict --verbose=2 "$app_bundle"
+          done
+
       - name: Run Nodely Gecko smoke verification
         if: matrix.platform == 'linux'
         continue-on-error: true
@@ -261,6 +279,36 @@ jobs:
             echo "::error title=Installer build failed::$summary"
             exit 1
           fi
+
+      - name: Verify packaged macOS DMG payload
+        if: matrix.platform == 'darwin'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmgs=(out/make/darwin/${{ matrix.arch }}/*.dmg)
+
+          if [[ ${#dmgs[@]} -eq 0 ]]; then
+            echo "No macOS DMG outputs were found to verify." >&2
+            exit 1
+          fi
+
+          for dmg in "${dmgs[@]}"; do
+            echo "Verifying $dmg"
+            mount_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nodely-dmg-XXXXXX")"
+            hdiutil attach -nobrowse -readonly -mountpoint "$mount_dir" "$dmg" >/dev/null
+            app_bundle="$(find "$mount_dir" -maxdepth 1 -type d -name '*.app' | sort | head -n 1)"
+
+            if [[ -z "$app_bundle" ]]; then
+              hdiutil detach "$mount_dir" -force >/dev/null || true
+              rm -rf "$mount_dir"
+              echo "No macOS app bundle was found inside $dmg." >&2
+              exit 1
+            fi
+
+            codesign --verify --deep --strict --verbose=2 "$app_bundle"
+            hdiutil detach "$mount_dir" -force >/dev/null
+            rm -rf "$mount_dir"
+          done
 
       - name: Verify Linux x64 installer set
         if: matrix.platform == 'linux' && matrix.arch == 'x64'

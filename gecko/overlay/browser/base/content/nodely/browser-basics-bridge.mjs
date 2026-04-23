@@ -14,6 +14,7 @@ const EXTERNAL_PROTOCOL_EVENT = "nodely-external-protocol-state";
 const SESSION_CLOSED_OBJECTS_TOPIC = "sessionstore-closed-objects-changed";
 const SESSION_LAST_CLEARED_TOPIC = "sessionstore-last-session-cleared";
 const SESSION_LAST_ENABLED_TOPIC = "sessionstore-last-session-re-enable";
+const MIRRORED_PERMISSION_NOTIFICATION_IDS = ["webRTC-shareDevices", "persistent-storage"];
 
 const lazy = {};
 const ServicesRef = globalThis.Services ?? null;
@@ -250,17 +251,75 @@ function formatPermissionPromptBody(notification, browser) {
   return `Allow ${siteName} to store data in persistent storage?`;
 }
 
+function permissionPromptKindForNotificationId(notificationId) {
+  switch (notificationId) {
+    case "webRTC-shareDevices":
+      return "media-devices";
+    case "persistent-storage":
+      return "persistent-storage";
+    default:
+      return "permission";
+  }
+}
+
+function formatMediaPermissionPromptTitle(notification) {
+  const promptDetails = `${notification?.anchorID ?? ""} ${notification?.message ?? ""}`.toLowerCase();
+  const hasCamera = promptDetails.includes("camera");
+  const hasMicrophone = promptDetails.includes("microphone");
+
+  if (promptDetails.includes("screen")) {
+    return hasMicrophone ? "Screen and Microphone Request" : "Screen Sharing Request";
+  }
+
+  if (promptDetails.includes("speaker") || promptDetails.includes("audio output")) {
+    return "Speaker Request";
+  }
+
+  if (hasCamera && hasMicrophone) {
+    return "Camera and Microphone Request";
+  }
+
+  if (hasCamera) {
+    return "Camera Request";
+  }
+
+  if (hasMicrophone) {
+    return "Microphone Request";
+  }
+
+  return "Media Device Request";
+}
+
 function snapshotPermissionPrompt(notification, browser, nodeId = null) {
-  if (!notification || notification.id !== "persistent-storage") {
+  if (!notification || !MIRRORED_PERMISSION_NOTIFICATION_IDS.includes(notification.id)) {
     return null;
+  }
+
+  const requestingUrl = safeSpec(browser?.currentURI) ?? null;
+  const rawMessage = String(notification?.message ?? "").trim();
+
+  if (notification.id === "webRTC-shareDevices") {
+    return {
+      open: true,
+      kind: permissionPromptKindForNotificationId(notification.id),
+      notificationId: notification.id,
+      nodeId,
+      requestingUrl,
+      title: formatMediaPermissionPromptTitle(notification),
+      body:
+        rawMessage ||
+        `Allow ${notification?.options?.name ?? requestingUrl ?? "this site"} to use media devices?`,
+      allowLabel: notification.mainAction?.label ?? "Allow",
+      blockLabel: notification.secondaryActions?.[0]?.label ?? null
+    };
   }
 
   return {
     open: true,
-    kind: "persistent-storage",
+    kind: permissionPromptKindForNotificationId(notification.id),
     notificationId: notification.id,
     nodeId,
-    requestingUrl: safeSpec(browser?.currentURI) ?? null,
+    requestingUrl,
     title: notification.options?.name ?? browser?.contentTitle ?? "Persistent Storage Request",
     body: formatPermissionPromptBody(notification, browser),
     allowLabel: notification.mainAction?.label ?? "Allow",
@@ -796,12 +855,20 @@ export class BrowserBasicsBridge {
 
   getActivePermissionNotification() {
     const browser = this.window.gBrowser?.selectedBrowser ?? null;
+    const popupNotifications = this.window.PopupNotifications ?? null;
 
-    return (
-      this.window.PopupNotifications?.getNotification?.("persistent-storage", browser) ??
-      this.window.PopupNotifications?.getNotification?.("persistent-storage") ??
-      null
-    );
+    for (const notificationId of MIRRORED_PERMISSION_NOTIFICATION_IDS) {
+      const notification =
+        popupNotifications?.getNotification?.(notificationId, browser) ??
+        popupNotifications?.getNotification?.(notificationId) ??
+        null;
+
+      if (notification) {
+        return notification;
+      }
+    }
+
+    return null;
   }
 
   syncPermissionPromptState({ hideNative = false } = {}) {
@@ -815,8 +882,9 @@ export class BrowserBasicsBridge {
 
     if (!promptSnapshot) {
       if (this.activePermissionPrompt) {
+        const closedKind = permissionPromptKindForNotificationId(this.activePermissionPrompt.id);
         this.activePermissionPrompt = null;
-        this.callbacks.onPermissionPromptChanged?.({ open: false, kind: "persistent-storage" });
+        this.callbacks.onPermissionPromptChanged?.({ open: false, kind: closedKind });
       }
 
       return;
@@ -959,7 +1027,10 @@ export class BrowserBasicsBridge {
     });
     this.window.PopupNotifications?._remove?.(notification);
     this.activePermissionPrompt = null;
-    this.callbacks.onPermissionPromptChanged?.({ open: false, kind: "persistent-storage" });
+    this.callbacks.onPermissionPromptChanged?.({
+      open: false,
+      kind: permissionPromptKindForNotificationId(notification.id)
+    });
     return true;
   }
 
@@ -973,7 +1044,10 @@ export class BrowserBasicsBridge {
     this.window.PopupNotifications?.panel?.hidePopup?.();
     this.window.PopupNotifications?._remove?.(notification);
     this.activePermissionPrompt = null;
-    this.callbacks.onPermissionPromptChanged?.({ open: false, kind: "persistent-storage" });
+    this.callbacks.onPermissionPromptChanged?.({
+      open: false,
+      kind: permissionPromptKindForNotificationId(notification.id)
+    });
     return true;
   }
 
