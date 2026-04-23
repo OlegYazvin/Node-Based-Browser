@@ -2,14 +2,27 @@
 
 set -euo pipefail
 
+check_env_only=0
+
+if [[ "${1:-}" == "--check-env-only" ]]; then
+  check_env_only=1
+  shift
+fi
+
 required_vars=(
-  GECKO_CHECKOUT_DIR
   MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64
   MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD
   MACOS_NOTARY_APPLE_ID
   MACOS_NOTARY_APP_PASSWORD
   MACOS_NOTARY_TEAM_ID
 )
+
+if [[ "$check_env_only" -eq 0 ]]; then
+  required_vars=(
+    GECKO_CHECKOUT_DIR
+    "${required_vars[@]}"
+  )
+fi
 
 missing_vars=()
 
@@ -23,6 +36,10 @@ if [[ ${#missing_vars[@]} -gt 0 ]]; then
   printf 'Missing required macOS signing/notarization environment variables:\n' >&2
   printf '  %s\n' "${missing_vars[@]}" >&2
   exit 1
+fi
+
+if [[ "$check_env_only" -eq 1 ]]; then
+  exit 0
 fi
 
 checkout_dir="$(cd "$GECKO_CHECKOUT_DIR" && pwd)"

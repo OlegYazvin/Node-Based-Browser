@@ -40,6 +40,21 @@ jobs:
       - name: Record installer job timing start
         run: echo "INSTALLER_TIMING_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
+      - name: Validate macOS signing secrets
+        env:
+          MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64 }}
+          MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        run: |
+          set -o pipefail
+          if ! bash scripts/sign-and-notarize-macos-release.sh --check-env-only 2>&1 | tee macos-signing-preflight.log; then
+            summary="$(tail -n 20 macos-signing-preflight.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
+            echo "::error title=Missing macOS signing secrets::$summary"
+            exit 1
+          fi
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -445,6 +460,7 @@ jobs:
         with:
           name: macos-installer-failure-logs-${{ matrix.arch }}
           path: |
+            macos-signing-preflight.log
             gecko-bootstrap.log
             gecko-build.log
             gecko-package.log
