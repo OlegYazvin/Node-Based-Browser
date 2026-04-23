@@ -119,7 +119,7 @@ export function extractInstallerVersion(fileName) {
 
 export function extractGeckoArtifactVersion(fileName) {
   const match = fileName.match(
-    /^(?:nodely(?:-browser)?|firefox(?:-browser)?)-([0-9][0-9A-Za-z.-]*?)(?=\.en-US\.|\.linux-|\.mac(?:os)?(?:\.|-)|\.win|\.dmg$|\.pkg$|\.tar\.)/iu
+    /^(?:nodely(?:-browser)?|firefox(?:-browser)?)-([0-9][0-9A-Za-z.-]*?)(?=\.en-US\.|\.linux-|\.mac(?:os)?(?:\.|-)|\.win|\.dmg$|\.pkg$|\.zip$|\.tar\.)/iu
   );
   return match?.[1] ?? null;
 }
@@ -268,7 +268,7 @@ export function classifyInstallerFile(fileName, platform, arch = null) {
     };
   }
 
-  if (platform === "darwin" && (extension === ".dmg" || extension === ".pkg")) {
+  if (platform === "darwin" && (extension === ".dmg" || extension === ".pkg" || extension === ".zip")) {
     const compatibility =
       arch === "x64" ? ["macOS Intel"] : arch === "arm64" ? ["macOS Apple Silicon"] : ["macOS"];
 
@@ -359,7 +359,15 @@ function installerDisplayType(entry) {
   }
 
   if (entry.platform === "darwin") {
-    return entry.variant === "pkg" ? "macOS package installer (`.pkg`)" : "macOS disk image (`.dmg`)";
+    if (entry.variant === "pkg") {
+      return "macOS package installer (`.pkg`)";
+    }
+
+    if (entry.variant === "zip") {
+      return "macOS app archive (`.zip`)";
+    }
+
+    return "macOS disk image (`.dmg`)";
   }
 
   return entry.variant;
@@ -479,7 +487,8 @@ This directory contains the installers that actually exist in this repo right no
 - \`Installer/RELEASE_NOTES.MD\` captures the latest push-triggered installer/release summary for this repo.
 - If a section below says no installers are staged, check the [GitHub Releases](https://github.com/OlegYazvin/Node-Based-Browser/releases/latest) page for the latest published assets for that target.
 - Windows installers may be unsigned unless separate signing credentials are configured.
-- macOS installers are only staged or published after Developer ID signing, notarization, and Gatekeeper checks pass on GitHub Actions.
+- macOS DMG and PKG installers are only staged or published after Developer ID signing, notarization, and Gatekeeper checks pass on GitHub Actions.
+- When Apple signing credentials are unavailable, GitHub Actions may stage a macOS app archive (\`.zip\`) instead. That fallback requires the person installing Nodely to use macOS Privacy & Security -> Open Anyway the first time they launch it.
 ${versionSummary.length ? versionSummary.join("\n") : ""}
 
 Generated from \`Installer/manifest.json\` at ${generatedAt}.

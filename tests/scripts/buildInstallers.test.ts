@@ -353,6 +353,27 @@ describe("build-installers wrappers", () => {
     ).resolves.toEqual([path.join(outDirectory, "darwin", "arm64", `Nodely-Browser-${currentNodelyVersion}-macos-arm64.pkg`)]);
   });
 
+  it("accepts unsigned macOS app archives as native installer outputs", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-macos-zip-"));
+    tempDirectories.push(tempDirectory);
+
+    const sourceDirectory = path.join(tempDirectory, "source");
+    const outDirectory = path.join(tempDirectory, "out");
+    const macSource = path.join(sourceDirectory, "nodely-browser-140.9.1esr.en-US.mac.zip");
+
+    await mkdir(sourceDirectory, { recursive: true });
+    await writeFile(macSource, "maczip");
+
+    await expect(
+      copyNativeInstaller({
+        platform: "darwin",
+        arch: "arm64",
+        sourceArtifactPath: macSource,
+        outDirectory
+      })
+    ).resolves.toEqual([path.join(outDirectory, "darwin", "arm64", `Nodely-Browser-${currentNodelyVersion}-macos-arm64.zip`)]);
+  });
+
   it("uses an explicit visible Nodely version override for native installers", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-native-esr-"));
     tempDirectories.push(tempDirectory);

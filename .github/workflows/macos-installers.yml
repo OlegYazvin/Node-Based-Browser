@@ -40,7 +40,8 @@ jobs:
       - name: Record installer job timing start
         run: echo "INSTALLER_TIMING_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
-      - name: Validate macOS signing secrets
+      - name: Detect macOS signing mode
+        id: macos_signing_mode
         env:
           MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64 }}
           MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD }}
@@ -49,10 +50,12 @@ jobs:
           MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
         run: |
           set -o pipefail
-          if ! bash scripts/sign-and-notarize-macos-release.sh --check-env-only 2>&1 | tee macos-signing-preflight.log; then
+          if bash scripts/sign-and-notarize-macos-release.sh --check-env-only 2>&1 | tee macos-signing-preflight.log; then
+            echo "mode=notarized" >> "$GITHUB_OUTPUT"
+          else
             summary="$(tail -n 20 macos-signing-preflight.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
-            echo "::error title=Missing macOS signing secrets::$summary"
-            exit 1
+            echo "::warning title=Unsigned macOS fallback::$summary"
+            echo "mode=unsigned" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Node.js
@@ -161,6 +164,7 @@ jobs:
           fi
 
       - name: Sign and notarize macOS DMG
+        if: steps.macos_signing_mode.outputs.mode == 'notarized'
         env:
           MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERT_BASE64 }}
           MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_APPLICATION_CERT_PASSWORD }}
@@ -176,7 +180,34 @@ jobs:
             exit 1
           fi
 
+      - name: Build unsigned macOS app archive
+        if: steps.macos_signing_mode.outputs.mode == 'unsigned'
+        id: unsigned_macos_archive
+        run: |
+          set -o pipefail
+          dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
+          mapfile -t app_bundles < <(find "$dist_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort)
+
+          if [[ ${#app_bundles[@]} -ne 1 ]]; then
+            echo "Expected exactly one macOS app bundle under $dist_dir, found ${#app_bundles[@]}." >&2
+            printf '  %s\n' "${app_bundles[@]}" >&2 || true
+            exit 1
+          fi
+
+          archive_dir="$RUNNER_TEMP/nodely-unsigned-macos"
+          mkdir -p "$archive_dir"
+          archive_path="$archive_dir/nodely-${FIREFOX_ESR_VERSION}.en-US.mac.zip"
+
+          if ! ditto -c -k --keepParent "${app_bundles[0]}" "$archive_path" 2>&1 | tee macos-unsigned-archive.log; then
+            summary="$(tail -n 20 macos-unsigned-archive.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
+            echo "::error title=Unsigned macOS archive build failed::$summary"
+            exit 1
+          fi
+
+          echo "artifact=$archive_path" >> "$GITHUB_OUTPUT"
+
       - name: Stage Gecko release artifact
+        if: steps.macos_signing_mode.outputs.mode == 'notarized'
         run: |
           set -o pipefail
           if ! npm run gecko:stage-release -- --checkout-dir "$GECKO_CHECKOUT_DIR" --platform darwin --arch ${{ matrix.arch }} --channel ci 2>&1 | tee gecko-stage-release.log; then
@@ -188,7 +219,19 @@ jobs:
       - name: Build macOS installer
         run: |
           set -o pipefail
-          if ! npm run installers -- --platform darwin --arch ${{ matrix.arch }} --channel ci --no-sync --strict 2>&1 | tee installer-build.log; then
+          installer_args=(
+            --platform darwin
+            --arch ${{ matrix.arch }}
+            --channel ci
+            --no-sync
+            --strict
+          )
+
+          if [[ "${{ steps.macos_signing_mode.outputs.mode }}" == "unsigned" ]]; then
+            installer_args+=(--artifact "${{ steps.unsigned_macos_archive.outputs.artifact }}")
+          fi
+
+          if ! npm run installers -- "${installer_args[@]}" 2>&1 | tee installer-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log installer-build.log --mode installer)"
             echo "::error title=macOS installer build failed::$summary"
             exit 1
@@ -199,6 +242,7 @@ jobs:
         run: echo "INSTALLER_TIMING_PIPELINE_FINISHED_AT=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Validate packaged macOS DMG payload
+        if: steps.macos_signing_mode.outputs.mode == 'notarized'
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -265,6 +309,61 @@ jobs:
             )
           done
 
+      - name: Validate unsigned macOS app archive
+        if: steps.macos_signing_mode.outputs.mode == 'unsigned'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(out/make/darwin/${{ matrix.arch }}/*.zip)
+
+          if [[ ${#archives[@]} -eq 0 ]]; then
+            echo "No macOS app archives were found to verify." >&2
+            exit 1
+          fi
+
+          for archive in "${archives[@]}"; do
+            echo "Validating $archive"
+            (
+              set -euo pipefail
+              extract_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nodely-zip-XXXXXX")"
+
+              cleanup() {
+                rm -rf "$extract_dir"
+              }
+
+              trap cleanup EXIT
+
+              ditto -x -k "$archive" "$extract_dir"
+              app_bundles=()
+              while IFS= read -r app_bundle; do
+                app_bundles+=("$app_bundle")
+              done < <(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort)
+
+              if [[ ${#app_bundles[@]} -ne 1 ]]; then
+                echo "Expected exactly one macOS app bundle inside $archive, found ${#app_bundles[@]}." >&2
+                find "$extract_dir" -mindepth 1 -maxdepth 1 -print >&2 || true
+                exit 1
+              fi
+
+              app_bundle="${app_bundles[0]}"
+              info_plist="$app_bundle/Contents/Info.plist"
+
+              if [[ ! -f "$info_plist" ]]; then
+                echo "Missing Info.plist in extracted app bundle $app_bundle." >&2
+                exit 1
+              fi
+
+              plutil -lint "$info_plist" >/dev/null
+              executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
+              executable_path="$app_bundle/Contents/MacOS/$executable_name"
+
+              if [[ ! -x "$executable_path" ]]; then
+                echo "Missing extracted macOS app executable $executable_path." >&2
+                exit 1
+              fi
+            )
+          done
+
       - name: Assess macOS public release readiness
         id: public_release_gate
         run: |
@@ -272,7 +371,7 @@ jobs:
           shopt -s nullglob
           output_dir="out/make/darwin/${{ matrix.arch }}"
           marker="$output_dir/.public-release-ready"
-          artifacts=("$output_dir"/*.dmg "$output_dir"/*.pkg)
+          artifacts=("$output_dir"/*.dmg "$output_dir"/*.pkg "$output_dir"/*.zip)
           rm -f "$marker"
 
           if [[ ${#artifacts[@]} -eq 0 ]]; then
@@ -286,7 +385,44 @@ jobs:
             echo "Assessing Gatekeeper readiness for $artifact"
             extension="${artifact##*.}"
 
-            if [[ "$extension" == "pkg" ]]; then
+            if [[ "$extension" == "zip" ]]; then
+              (
+                set -euo pipefail
+                extract_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/nodely-public-release-XXXXXX")"
+
+                cleanup() {
+                  rm -rf "$extract_dir"
+                }
+
+                trap cleanup EXIT
+
+                ditto -x -k "$artifact" "$extract_dir"
+                app_bundle="$(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort | head -n 1)"
+
+                if [[ -z "$app_bundle" ]]; then
+                  echo "No macOS app bundle was found inside $artifact during archive assessment." >&2
+                  exit 1
+                fi
+
+                info_plist="$app_bundle/Contents/Info.plist"
+
+                if [[ ! -f "$info_plist" ]]; then
+                  echo "Missing Info.plist in extracted app bundle $app_bundle." >&2
+                  exit 1
+                fi
+
+                executable_name="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$info_plist")"
+                executable_path="$app_bundle/Contents/MacOS/$executable_name"
+
+                if [[ ! -x "$executable_path" ]]; then
+                  echo "Missing extracted macOS app executable $executable_path." >&2
+                  exit 1
+                fi
+              )
+
+              echo "::warning title=Unsigned macOS archive published::$(basename "$artifact") will require Privacy & Security -> Open Anyway on the destination Mac."
+              continue
+            elif [[ "$extension" == "pkg" ]]; then
               if assessment_output="$(spctl --assess --type install --verbose=4 "$artifact" 2>&1)"; then
                 printf '%s\n' "$assessment_output"
               else
@@ -364,7 +500,7 @@ jobs:
           const outputDirectory = path.join("out", "make", "darwin", "${{ matrix.arch }}");
           const fileNames = readdirSync(outputDirectory)
             .filter((name) => name.startsWith("Nodely-Browser-"))
-            .filter((name) => /\.(?:dmg|pkg)$/iu.test(name))
+            .filter((name) => /\.(?:dmg|pkg|zip)$/iu.test(name))
             .sort();
 
           if (!fileNames.length) {
@@ -449,7 +585,11 @@ jobs:
           }
           NODE
           if [[ "${{ steps.public_release_gate.outputs.publish_ready }}" == "true" ]]; then
-            echo "Gatekeeper-ready macOS installers were uploaded as workflow artifacts and refreshed on the matching GitHub Release."
+            if [[ "${{ steps.macos_signing_mode.outputs.mode }}" == "unsigned" ]]; then
+              echo "::warning title=Unsigned macOS archive published::An unsigned macOS app archive was uploaded and published. People installing it will need Privacy & Security -> Open Anyway the first time they launch Nodely."
+            else
+              echo "Gatekeeper-ready macOS installers were uploaded as workflow artifacts and refreshed on the matching GitHub Release."
+            fi
           else
             echo "::warning title=macOS public release skipped::Built macOS installers were uploaded as workflow artifacts only. They were not published to the GitHub Release because Gatekeeper/notarization checks did not pass."
           fi
@@ -464,6 +604,7 @@ jobs:
             gecko-bootstrap.log
             gecko-build.log
             gecko-package.log
+            macos-unsigned-archive.log
             macos-sign-and-notarize.log
             gecko-stage-release.log
             installer-build.log

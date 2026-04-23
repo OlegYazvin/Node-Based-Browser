@@ -38,7 +38,7 @@ const { displayVersion: currentNodelyVersion } = readNodelyVersionMetadata();
 
 const nativeInstallerExtensions = {
   win32: [".exe"],
-  darwin: [".dmg", ".pkg"]
+  darwin: [".dmg", ".pkg", ".zip"]
 };
 
 const flatpakArchNames = {

@@ -20,6 +20,7 @@ describe("installers-lib", () => {
     expect(extractInstallerVersion(`Nodely-Browser-${currentNodelyVersion}-linux-arm64.run`)).toBe(currentNodelyVersion);
     expect(extractInstallerVersion(`nodely-browser-${currentNodelyVersion}.en-US.win64.installer.exe`)).toBe(currentNodelyVersion);
     expect(extractGeckoArtifactVersion("nodely-browser-140.10.0.en-US.linux-aarch64.tar.xz")).toBe("140.10.0");
+    expect(extractGeckoArtifactVersion("nodely-browser-140.10.0.en-US.mac.zip")).toBe("140.10.0");
   });
 
   it("renders a support matrix from the installer manifest", () => {
@@ -47,12 +48,12 @@ describe("installers-lib", () => {
           geckoVersion: "140.10.0esr",
           platform: "darwin",
           arch: "arm64",
-          variant: "dmg",
+          variant: "zip",
           distribution: "macos",
           compatibility: ["macOS Apple Silicon"],
-          path: `macos/Nodely-Browser-${currentNodelyVersion}-macos-arm64.dmg`,
-          fileName: `Nodely-Browser-${currentNodelyVersion}-macos-arm64.dmg`,
-          source: `out/make/darwin/arm64/Nodely-Browser-${currentNodelyVersion}-macos-arm64.dmg`,
+          path: `macos/Nodely-Browser-${currentNodelyVersion}-macos-arm64.zip`,
+          fileName: `Nodely-Browser-${currentNodelyVersion}-macos-arm64.zip`,
+          source: `out/make/darwin/arm64/Nodely-Browser-${currentNodelyVersion}-macos-arm64.zip`,
           size: 9,
           builtBy: "github-actions",
           buildWorkflow: ".github/workflows/installers.yml",
@@ -69,9 +70,11 @@ describe("installers-lib", () => {
     expect(readme).toContain(`[Nodely-Browser-${currentNodelyVersion}-linux-arm64.run](./linux/Nodely-Browser-${currentNodelyVersion}-linux-arm64.run)`);
     expect(readme).toContain("Ubuntu, Debian; arm64 only");
     expect(readme).toContain("macOS Apple Silicon");
+    expect(readme).toContain("macOS app archive (`.zip`)");
     expect(readme).toContain("Built by");
     expect(readme).toContain("Local build");
     expect(readme).toContain("[GitHub Actions](https://github.com/example/repo/actions/runs/123) (`installers.yml`)");
+    expect(readme).toContain("GitHub Actions may stage a macOS app archive (`.zip`) instead");
   });
 
   it("replaces stale installer entries for the synced platform and architecture", async () => {
