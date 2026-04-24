@@ -186,7 +186,10 @@ jobs:
         run: |
           set -o pipefail
           dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
-          mapfile -t app_bundles < <(find "$dist_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort)
+          app_bundles=()
+          while IFS= read -r app_bundle; do
+            app_bundles+=("$app_bundle")
+          done < <(find "$dist_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort)
 
           if [[ ${#app_bundles[@]} -ne 1 ]]; then
             echo "Expected exactly one macOS app bundle under $dist_dir, found ${#app_bundles[@]}." >&2

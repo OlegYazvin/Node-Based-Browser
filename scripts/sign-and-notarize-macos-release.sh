@@ -119,7 +119,10 @@ fi
 echo "Using macOS signing identity: $signing_identity"
 
 shopt -s nullglob
-mapfile -t dmgs < <(find "$dist_dir" -type f -name '*.dmg' | sort)
+dmgs=()
+while IFS= read -r dmg; do
+  dmgs+=("$dmg")
+done < <(find "$dist_dir" -type f -name '*.dmg' | sort)
 
 if [[ ${#dmgs[@]} -eq 0 ]]; then
   echo "No macOS DMG outputs were found under $dist_dir." >&2
