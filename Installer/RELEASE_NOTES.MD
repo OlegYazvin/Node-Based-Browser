@@ -1,35 +1,26 @@
 # Latest Release Notes
 
-Generated automatically at 2026-04-23T18:51:03Z.
+Generated automatically at 2026-04-24T02:32:19Z.
 
 - Ref: `main`
-- Range: `d1f2486 -> 3692597`
-- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24851831273
+- Range: `f8d364e -> 80641c4`
+- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24868620646
 - Nodely version: `0.1`
-- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/d1f248644f5e96e99153ef7353e167b1e5463f96...3692597afae5c1b6feb37ce12f87a210128e8cd2
+- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/f8d364ee1fea4b04680be09b605f4f8ced2c00c4...80641c48ab80c77b29ba43044735bca859c8371f
 
 ## Highlights
 
 - Commits included: 1
-- Files changed: 11
+- Files changed: 3
 - GitHub Actions: 2
-- Gecko overlay/runtime: 6
-- Tests: 3
+- Build and packaging scripts: 1
 
 ## Commits
 
-- `3692597` Fixed Video/Microphone permissions and fixed MacOS installation flow (Codex)
+- `80641c4` Make macOS workflows Bash 3.2 compatible (Codex)
 
 ## Changed Files
 
 - `.github/workflows/installers.yml`
 - `.github/workflows/macos-installers.yml`
-- `gecko/overlay/browser/base/content/nodely/browser-basics-bridge.mjs`
-- `gecko/overlay/browser/base/content/nodely/chrome-state-controller.mjs`
-- `gecko/overlay/browser/base/content/nodely/node-runtime-manager.mjs`
-- `gecko/overlay/browser/base/content/nodely/nodely-bootstrap.mjs`
-- `gecko/overlay/browser/base/content/nodely/nodely-shell.css`
-- `gecko/scripts/run-nodely-smoke.mjs`
-- `tests/gecko/browserBasicsBridge.test.ts`
-- `tests/gecko/chromeStateController.test.ts`
-- `tests/gecko/nodeRuntimeManager.test.ts`
+- `scripts/sign-and-notarize-macos-release.sh`
