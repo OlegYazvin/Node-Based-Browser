@@ -7,13 +7,11 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { inspectWindowsInstallerListing } from "./stage-release-artifacts.mjs";
+import { inspectWindowsInstallerListing, isPackagedWindowsInstallerName } from "./stage-release-artifacts.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(geckoRoot, "..");
-
-const win32InstallerMatcher = /^(?:nodely(?:-browser)?|firefox(?:-browser)?)-.*\.exe$/iu;
 
 function usage() {
   console.log(`Usage: node gecko/scripts/repair-windows-installer.mjs [options]
@@ -217,7 +215,7 @@ async function downloadOfficialInstaller(version, cacheDirectory) {
   return outputPath;
 }
 
-async function findWindowsInstallers(checkoutDir) {
+export async function findWindowsInstallers(checkoutDir) {
   const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
 
   if (!(await pathExists(distDirectory))) {
@@ -225,7 +223,9 @@ async function findWindowsInstallers(checkoutDir) {
   }
 
   const files = await walkFiles(distDirectory);
-  return files.filter((filePath) => win32InstallerMatcher.test(path.basename(filePath)));
+  return files
+    .filter((filePath) => isPackagedWindowsInstallerName(path.basename(filePath)))
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function verifyNodelyApplicationIni(installerPath) {

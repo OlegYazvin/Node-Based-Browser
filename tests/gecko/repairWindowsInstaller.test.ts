@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   computeMissingArchiveEntries,
+  findWindowsInstallers,
   parse7zTechnicalListing,
   repairWindowsInstaller
 } from "../../gecko/scripts/repair-windows-installer.mjs";
@@ -142,5 +143,20 @@ Attributes = A
         verifyOnly: true
       })
     ).rejects.toThrow(/is incomplete/u);
+  });
+
+  it("discovers packaged Windows installers without picking runtime executables", async () => {
+    const checkoutDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-windows-installer-discovery-"));
+    tempDirectories.push(checkoutDirectory);
+
+    const distDirectory = path.join(checkoutDirectory, "obj-nodely", "dist");
+    await mkdir(path.join(distDirectory, "nodely"), { recursive: true });
+    await writeFile(path.join(distDirectory, "nodely", "nodely-bin.exe"), "runtime", "utf8");
+    await writeFile(path.join(distDirectory, "nodely", "firefox-bin.exe"), "runtime", "utf8");
+
+    const installerPath = path.join(distDirectory, "nodely-browser-140.10.0.en-US.win64.installer.exe");
+    await writeFile(installerPath, "installer", "utf8");
+
+    await expect(findWindowsInstallers(checkoutDirectory)).resolves.toEqual([installerPath]);
   });
 });

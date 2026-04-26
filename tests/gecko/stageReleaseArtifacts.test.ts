@@ -5,7 +5,11 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { inspectWindowsInstallerListing, selectPackagedArtifact } from "../../gecko/scripts/stage-release-artifacts.mjs";
+import {
+  inspectWindowsInstallerListing,
+  isPackagedWindowsInstallerName,
+  selectPackagedArtifact
+} from "../../gecko/scripts/stage-release-artifacts.mjs";
 
 const tempDirectories = [];
 
@@ -116,5 +120,12 @@ describe("stage-release-artifacts", () => {
       hasBrowserBinary: true,
       hasRuntimeLibrary: true
     });
+  });
+
+  it("matches packaged Windows installer names without treating runtime executables as installers", () => {
+    expect(isPackagedWindowsInstallerName("nodely-browser-140.10.0.en-US.win64.installer.exe")).toBe(true);
+    expect(isPackagedWindowsInstallerName("Nodely-Browser-0.1-windows-x64.installer.exe")).toBe(true);
+    expect(isPackagedWindowsInstallerName("nodely-bin.exe")).toBe(false);
+    expect(isPackagedWindowsInstallerName("firefox-bin.exe")).toBe(false);
   });
 });

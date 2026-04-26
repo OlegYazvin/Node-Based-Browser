@@ -33,7 +33,7 @@ const artifactMatchers = {
     /^firefox-.*\.dmg$/iu,
     /^nodely-browser-.*\.pkg$/iu
   ],
-  win32: [/^nodely-.*\.exe$/iu, /^nodely-browser-.*\.exe$/iu, /^firefox-.*\.exe$/iu]
+  win32: []
 };
 
 function usage() {
@@ -114,9 +114,18 @@ async function walkFiles(directory) {
   return files;
 }
 
-async function findPackagedArtifacts(checkoutDir, platform) {
+export function isPackagedWindowsInstallerName(fileName) {
+  return /^(?:nodely(?:-browser)?|firefox(?:-browser)?)-.+\.installer\.exe$/iu.test(fileName);
+}
+
+export async function findPackagedArtifacts(checkoutDir, platform) {
   const distDirectory = path.join(checkoutDir, "obj-nodely", "dist");
   const files = await walkFiles(distDirectory);
+
+  if (platform === "win32") {
+    return files.filter((filePath) => isPackagedWindowsInstallerName(path.basename(filePath)));
+  }
+
   const matchers = artifactMatchers[platform];
 
   return files.filter((filePath) => matchers.some((matcher) => matcher.test(path.basename(filePath))));
