@@ -23,4 +23,12 @@ describe("Windows Gecko artifact workflows", () => {
     expect(workflow).toContain("python ./mach artifact install");
     expect(workflow).toContain("python ./mach build faster");
   });
+
+  it("installs Gecko artifacts before the Linux Gecko verify faster build", async () => {
+    const workflow = await readWorkflow(".github/workflows/gecko-verify.yml");
+
+    expect(workflow).toContain("python3.12 ./mach configure");
+    expect(workflow).toContain("python3.12 ./mach artifact install");
+    expect(workflow).toContain("python3.12 ./mach build faster");
+  });
 });

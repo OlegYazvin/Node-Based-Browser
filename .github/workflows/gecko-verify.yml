@@ -70,7 +70,10 @@ jobs:
         env:
           MOZCONFIG: mozconfig.nodely
           NODEJS: node
-        run: python3.12 ./mach build faster
+        run: |
+          python3.12 ./mach configure
+          python3.12 ./mach artifact install
+          python3.12 ./mach build faster
 
       - name: Refresh artifact-build Nodely branding
         run: npm run gecko:refresh-branding -- --checkout-dir "$RUNNER_TEMP/firefox-esr"

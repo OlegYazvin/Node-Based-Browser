@@ -122,6 +122,21 @@ describe("stage-release-artifacts", () => {
     });
   });
 
+  it("accepts Windows installer listings that use backslash separators", () => {
+    const runnableListing = `
+2026-04-23 13:38:42 ....A          679  core\\application.ini
+2026-04-23 13:38:42 ....A      667648  core\\firefox.exe
+2026-04-23 13:38:42 ....A   209715200  core\\xul.dll
+2026-04-23 13:38:42 ....A       973433  setup.exe
+`;
+
+    expect(inspectWindowsInstallerListing(runnableListing)).toEqual({
+      hasMetadata: true,
+      hasBrowserBinary: true,
+      hasRuntimeLibrary: true
+    });
+  });
+
   it("matches packaged Windows installer names without treating runtime executables as installers", () => {
     expect(isPackagedWindowsInstallerName("nodely-browser-140.10.0.en-US.win64.installer.exe")).toBe(true);
     expect(isPackagedWindowsInstallerName("Nodely-Browser-0.1-windows-x64.installer.exe")).toBe(true);

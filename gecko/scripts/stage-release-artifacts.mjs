@@ -197,9 +197,9 @@ export function inspectWindowsInstallerListing(listing) {
   const normalizedListing = String(listing ?? "");
 
   return {
-    hasMetadata: /(?:^|\n).*\bcore\/application\.ini\b/mu.test(normalizedListing),
-    hasBrowserBinary: /(?:^|\n).*\bcore\/(?:nodely(?:-bin)?|firefox(?:-bin)?)\.exe\b/mu.test(normalizedListing),
-    hasRuntimeLibrary: /(?:^|\n).*\bcore\/xul\.dll\b/mu.test(normalizedListing)
+    hasMetadata: /(?:^|\n).*\bcore[\\/]+application\.ini\b/mu.test(normalizedListing),
+    hasBrowserBinary: /(?:^|\n).*\bcore[\\/]+(?:nodely(?:-bin)?|firefox(?:-bin)?)\.exe\b/mu.test(normalizedListing),
+    hasRuntimeLibrary: /(?:^|\n).*\bcore[\\/]+xul\.dll\b/mu.test(normalizedListing)
   };
 }
 
