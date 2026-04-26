@@ -275,6 +275,10 @@ jobs:
               python ./mach build faster
             elif [[ "${{ matrix.platform }}" == "linux" && "${{ matrix.arch }}" == "x64" ]]; then
               printf '%s\n' "Using prepared Linux runtime flow for ${FIREFOX_ESR_VERSION}."
+            elif [[ "${{ matrix.platform }}" == "win32" ]]; then
+              python ./mach configure
+              python ./mach artifact install
+              python ./mach build faster
             else
               python ./mach build faster
             fi

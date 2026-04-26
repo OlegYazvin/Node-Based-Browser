@@ -183,6 +183,8 @@ jobs:
           set -o pipefail
           if ! (
             cd "$GECKO_CHECKOUT_DIR"
+            python ./mach configure
+            python ./mach artifact install
             python ./mach build faster
           ) 2>&1 | tee gecko-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log gecko-build.log --mode build)"

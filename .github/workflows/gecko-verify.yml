@@ -87,19 +87,12 @@ jobs:
           set -euo pipefail
 
           dist_dir="$RUNNER_TEMP/firefox-esr/obj-nodely/dist"
-          archive="$(
-            CHECKOUT_DIR="$RUNNER_TEMP/firefox-esr" node --input-type=module <<'NODE'
-            import { findPackagedArtifacts, selectPackagedArtifact } from "./gecko/scripts/stage-release-artifacts.mjs";
-
-            const checkoutDir = process.env.CHECKOUT_DIR;
-            const artifacts = await findPackagedArtifacts(checkoutDir, "linux");
-            const selectedArtifact = selectPackagedArtifact(artifacts, "linux");
-
-            if (selectedArtifact) {
-              process.stdout.write(selectedArtifact);
-            }
-            NODE
-          )"
+          archive="$(node gecko/scripts/stage-release-artifacts.mjs \
+            --checkout-dir "$RUNNER_TEMP/firefox-esr" \
+            --platform linux \
+            --arch x64 \
+            --channel ci \
+            --select-only)"
 
           if [[ -z "${archive:-}" ]]; then
             echo "::error title=Packaged Gecko archive missing::No runnable packaged Linux archive was found under $dist_dir"

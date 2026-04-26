@@ -45,6 +45,7 @@ Options:
   --arch <arch>          Artifact architecture label
   --channel <name>       Release channel label
   --stage-dir <path>     Staging directory (defaults to gecko/release-artifacts)
+  --select-only          Print the selected packaged artifact path without staging it
   --help                 Show this help text
 `);
 }
@@ -55,7 +56,8 @@ function parseArguments(argv) {
     platform: platformAliases[process.platform] ?? process.platform,
     arch: process.arch,
     channel: "local",
-    stageDir: path.join(geckoRoot, "release-artifacts")
+    stageDir: path.join(geckoRoot, "release-artifacts"),
+    selectOnly: false
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -77,6 +79,9 @@ function parseArguments(argv) {
         break;
       case "--stage-dir":
         options.stageDir = path.resolve(argv[++index]);
+        break;
+      case "--select-only":
+        options.selectOnly = true;
         break;
       case "--help":
         usage();
@@ -358,6 +363,11 @@ async function stageArtifacts(options) {
     }
 
     throw new Error(`Unable to select a packaged Gecko artifact for ${options.platform}.`);
+  }
+
+  if (options.selectOnly) {
+    console.log(selectedArtifact);
+    return;
   }
 
   const destinationDirectory = path.join(options.stageDir, options.platform, options.arch, options.channel);
