@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { selectPackagedArtifact } from "../../gecko/scripts/stage-release-artifacts.mjs";
+import { inspectWindowsInstallerListing, selectPackagedArtifact } from "../../gecko/scripts/stage-release-artifacts.mjs";
 
 const tempDirectories = [];
 
@@ -65,5 +65,56 @@ describe("stage-release-artifacts", () => {
     const pkgArtifact = "/tmp/nodely-140.10.0.en-US.mac.pkg";
 
     expect(selectPackagedArtifact([pkgArtifact, dmgArtifact], "darwin")).toBe(dmgArtifact);
+  });
+
+  it("prefers a Windows installer that contains a runnable app bundle", () => {
+    const partialArtifact = "/tmp/nodely-browser-140.10.0.en-US.win64.installer.exe";
+    const runnableArtifact = "/tmp/nodely-140.10.0.en-US.win64.installer.exe";
+
+    expect(
+      selectPackagedArtifact([partialArtifact, runnableArtifact], "win32", {
+        inspectWindowsArtifact: (artifactPath) => artifactPath === runnableArtifact
+      })
+    ).toBe(runnableArtifact);
+  });
+
+  it("rejects Windows installers that do not contain a runnable app bundle", () => {
+    const partialArtifact = "/tmp/nodely-browser-140.10.0.en-US.win64.installer.exe";
+
+    expect(
+      selectPackagedArtifact([partialArtifact], "win32", {
+        inspectWindowsArtifact: () => false
+      })
+    ).toBeNull();
+  });
+
+  it("flags Windows installers that ship metadata but no executable payload", () => {
+    const brokenListing = `
+2026-04-23 13:38:42 ....A          679  core/application.ini
+2026-04-23 13:38:42 ....A     46945902  core/browser/omni.ja
+2026-04-23 13:38:42 ....A     38279515  core/omni.ja
+2026-04-23 13:38:42 ....A       973433  setup.exe
+`;
+
+    expect(inspectWindowsInstallerListing(brokenListing)).toEqual({
+      hasMetadata: true,
+      hasBrowserBinary: false,
+      hasRuntimeLibrary: false
+    });
+  });
+
+  it("accepts Windows installers that include the browser executable and runtime library", () => {
+    const runnableListing = `
+2026-04-23 13:38:42 ....A          679  core/application.ini
+2026-04-23 13:38:42 ....A      667648  core/nodely.exe
+2026-04-23 13:38:42 ....A   209715200  core/xul.dll
+2026-04-23 13:38:42 ....A       973433  setup.exe
+`;
+
+    expect(inspectWindowsInstallerListing(runnableListing)).toEqual({
+      hasMetadata: true,
+      hasBrowserBinary: true,
+      hasRuntimeLibrary: true
+    });
   });
 });

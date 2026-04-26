@@ -179,7 +179,43 @@ function inspectLinuxArtifactBundle(filePath) {
   }
 }
 
-export function selectPackagedArtifact(artifacts, platform) {
+export function inspectWindowsInstallerListing(listing) {
+  const normalizedListing = String(listing ?? "");
+
+  return {
+    hasMetadata: /(?:^|\n).*\bcore\/application\.ini\b/mu.test(normalizedListing),
+    hasBrowserBinary: /(?:^|\n).*\bcore\/(?:nodely(?:-bin)?|firefox(?:-bin)?)\.exe\b/mu.test(normalizedListing),
+    hasRuntimeLibrary: /(?:^|\n).*\bcore\/xul\.dll\b/mu.test(normalizedListing)
+  };
+}
+
+function windowsArtifactContainsRunnableBundle(filePath) {
+  const inspection = inspectWindowsArtifactBundle(filePath);
+  return inspection.hasMetadata && inspection.hasBrowserBinary && inspection.hasRuntimeLibrary;
+}
+
+function inspectWindowsArtifactBundle(filePath) {
+  try {
+    const listing = execFileSync("7z", ["l", filePath], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+
+    return inspectWindowsInstallerListing(listing);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+      hasMetadata: false,
+      hasBrowserBinary: false,
+      hasRuntimeLibrary: false
+    };
+  }
+}
+
+export function selectPackagedArtifact(artifacts, platform, inspectors = {}) {
+  const inspectLinuxArtifact = inspectors.inspectLinuxArtifact ?? linuxArtifactContainsRunnableBundle;
+  const inspectWindowsArtifact = inspectors.inspectWindowsArtifact ?? windowsArtifactContainsRunnableBundle;
+
   if (platform === "darwin") {
     const artifactPriority = (artifactPath) => {
       const lowerArtifactPath = artifactPath.toLowerCase();
@@ -208,12 +244,23 @@ export function selectPackagedArtifact(artifacts, platform) {
     return selectedArtifact ?? null;
   }
 
+  if (platform === "win32") {
+    const runnableArtifacts = artifacts.filter((artifact) => inspectWindowsArtifact(artifact));
+
+    if (!runnableArtifacts.length) {
+      return null;
+    }
+
+    const [selectedArtifact] = [...runnableArtifacts].sort((left, right) => right.localeCompare(left));
+    return selectedArtifact ?? null;
+  }
+
   if (platform !== "linux") {
     const [selectedArtifact] = [...artifacts].sort((left, right) => right.localeCompare(left));
     return selectedArtifact ?? null;
   }
 
-  const runnableArtifacts = artifacts.filter((artifact) => linuxArtifactContainsRunnableBundle(artifact));
+  const runnableArtifacts = artifacts.filter((artifact) => inspectLinuxArtifact(artifact));
 
   if (!runnableArtifacts.length) {
     return null;
@@ -283,6 +330,24 @@ async function stageArtifacts(options) {
       );
     }
 
+    if (options.platform === "win32") {
+      const artifactSummary = artifacts
+        .map((artifact) => {
+          const inspection = inspectWindowsArtifactBundle(artifact);
+
+          if (inspection.error) {
+            return `${path.basename(artifact)} [error=${inspection.error}]`;
+          }
+
+          return `${path.basename(artifact)} [metadata=${inspection.hasMetadata} binary=${inspection.hasBrowserBinary} runtime=${inspection.hasRuntimeLibrary}]`;
+        })
+        .join(", ");
+
+      throw new Error(
+        `Unable to select a packaged Gecko artifact for ${options.platform}. Candidates: ${artifactSummary || "(none)"}.`
+      );
+    }
+
     throw new Error(`Unable to select a packaged Gecko artifact for ${options.platform}.`);
   }
 
@@ -327,7 +392,7 @@ async function stageArtifacts(options) {
   console.log(destinationPath);
 }
 
-if (!process.env.VITEST) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     await stageArtifacts(parseArguments(process.argv.slice(2)));
   } catch (error) {

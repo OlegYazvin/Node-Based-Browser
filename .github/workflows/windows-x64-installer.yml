@@ -208,6 +208,17 @@ jobs:
             exit 1
           fi
 
+      - name: Repair Windows installer payload from official ESR base
+        run: |
+          set -o pipefail
+          if ! node gecko/scripts/repair-windows-installer.mjs \
+              --checkout-dir "$GECKO_CHECKOUT_DIR" \
+              --version "$FIREFOX_ESR_VERSION" 2>&1 | tee gecko-repair-windows-installer.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-repair-windows-installer.log --mode stage)"
+            echo "::error title=Windows installer payload repair failed::$summary"
+            exit 1
+          fi
+
       - name: Stage Gecko release artifact
         run: |
           set -o pipefail
@@ -223,6 +234,24 @@ jobs:
           if ! npm run installers -- --platform win32 --arch x64 --channel ci --no-sync --strict 2>&1 | tee installer-build.log; then
             summary="$(node scripts/summarize-ci-log.mjs --log installer-build.log --mode installer)"
             echo "::error title=Windows installer build failed::$summary"
+            exit 1
+          fi
+
+      - name: Verify final Windows installer payload
+        run: |
+          set -o pipefail
+          installer_path="$(find out/make/win32/x64 -maxdepth 1 -type f -name '*.exe' | sort | head -n 1)"
+          if [[ -z "$installer_path" ]]; then
+            echo "No Windows installer output was found to verify." >&2
+            exit 1
+          fi
+
+          if ! node gecko/scripts/repair-windows-installer.mjs \
+              --installer "$installer_path" \
+              --version "$FIREFOX_ESR_VERSION" \
+              --verify-only 2>&1 | tee windows-installer-verify.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log windows-installer-verify.log --mode installer)"
+            echo "::error title=Windows installer payload verification failed::$summary"
             exit 1
           fi
 
@@ -324,8 +353,10 @@ jobs:
             gecko-bootstrap.log
             gecko-build.log
             gecko-package.log
+            gecko-repair-windows-installer.log
             gecko-stage-release.log
             installer-build.log
+            windows-installer-verify.log
           if-no-files-found: ignore
 
       - name: Upload Windows x64 installers
