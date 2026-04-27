@@ -374,8 +374,9 @@ jobs:
           shopt -s nullglob
           output_dir="out/make/darwin/${{ matrix.arch }}"
           marker="$output_dir/.public-release-ready"
+          artifact_marker="$output_dir/public-release-ready.txt"
           artifacts=("$output_dir"/*.dmg "$output_dir"/*.pkg "$output_dir"/*.zip)
-          rm -f "$marker"
+          rm -f "$marker" "$artifact_marker"
 
           if [[ ${#artifacts[@]} -eq 0 ]]; then
             echo "No macOS installers were found to assess for public release." >&2
@@ -484,6 +485,7 @@ jobs:
 
           if [[ "$publish_ready" -eq 1 ]]; then
             touch "$marker"
+            printf 'macOS public release gate passed for %s (signed/notarized or validated unsigned ZIP fallback).\n' "${{ matrix.arch }}" > "$artifact_marker"
             echo "publish_ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish_ready=false" >> "$GITHUB_OUTPUT"

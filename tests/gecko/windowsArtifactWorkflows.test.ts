@@ -6,7 +6,18 @@ async function readWorkflow(path: string) {
   return readFile(path, "utf8");
 }
 
-describe("Windows Gecko artifact workflows", () => {
+function readStep(workflow: string, name: string) {
+  const stepStart = workflow.indexOf(`- name: ${name}`);
+
+  if (stepStart === -1) {
+    throw new Error(`Unable to find workflow step: ${name}`);
+  }
+
+  const nextStepStart = workflow.indexOf("\n      - name:", stepStart + 1);
+  return workflow.slice(stepStart, nextStepStart === -1 ? undefined : nextStepStart);
+}
+
+describe("Gecko and installer workflows", () => {
   it("installs Gecko artifacts before the dedicated Windows faster build", async () => {
     const workflow = await readWorkflow(".github/workflows/windows-x64-installer.yml");
 
@@ -53,5 +64,51 @@ describe("Windows Gecko artifact workflows", () => {
     const packageIndex = workflow.indexOf("python3.12 ./mach package", syncIndex);
     expect(syncIndex).toBeGreaterThan(buildIndex);
     expect(packageIndex).toBeGreaterThan(syncIndex);
+  });
+
+  it("carries macOS public release readiness through the all-platform installer artifact boundary", async () => {
+    const workflow = await readWorkflow(".github/workflows/installers.yml");
+    const readinessStep = readStep(workflow, "Assess macOS public release readiness");
+    const syncStep = readStep(workflow, "Sync finished installers into Installer");
+    const metadataStep = readStep(workflow, "Derive release metadata");
+
+    expect(readinessStep).toContain('marker="$output_dir/.public-release-ready"');
+    expect(readinessStep).toContain('artifact_marker="$output_dir/public-release-ready.txt"');
+    expect(readinessStep).toContain('rm -f "$marker" "$artifact_marker"');
+    expect(readinessStep).toContain('touch "$marker"');
+    expect(readinessStep).toContain('> "$artifact_marker"');
+    expect(readinessStep).toContain("Unsigned macOS archive published");
+
+    expect(syncStep).toContain('out/make/$platform/$arch/public-release-ready.txt');
+    expect(syncStep).toContain('out/make/$platform/$arch/.public-release-ready');
+    expect(metadataStep).toContain('path.join(archDirectory, "public-release-ready.txt")');
+    expect(metadataStep).toContain('path.join(archDirectory, ".public-release-ready")');
+  });
+
+  it("keeps the dedicated macOS installer artifact self-describing with a visible release marker", async () => {
+    const workflow = await readWorkflow(".github/workflows/macos-installers.yml");
+    const readinessStep = readStep(workflow, "Assess macOS public release readiness");
+
+    expect(readinessStep).toContain('marker="$output_dir/.public-release-ready"');
+    expect(readinessStep).toContain('artifact_marker="$output_dir/public-release-ready.txt"');
+    expect(readinessStep).toContain('rm -f "$marker" "$artifact_marker"');
+    expect(readinessStep).toContain('touch "$marker"');
+    expect(readinessStep).toContain('> "$artifact_marker"');
+  });
+
+  it("only deletes stale macOS release assets for architectures refreshed in the same installer promotion", async () => {
+    const workflow = await readWorkflow(".github/workflows/installers.yml");
+    const publishStep = readStep(workflow, "Publish GitHub Release assets");
+
+    expect(publishStep).toContain("expected_macos_assets=()");
+    expect(publishStep).toContain("expected_macos_arches=()");
+    expect(publishStep).toContain('asset_arch="${asset#out/make/darwin/}"');
+    expect(publishStep).toContain('expected_macos_arches+=("${asset_arch%%/*}")');
+    expect(publishStep).toContain('if [[ "$asset_name" =~ -macos-(x64|arm64)\\.(dmg|pkg|zip)$ ]]; then');
+    expect(publishStep).toContain('if [[ "$refresh_arch" -eq 0 ]]; then');
+
+    const refreshGuardIndex = publishStep.indexOf('if [[ "$refresh_arch" -eq 0 ]]; then');
+    const deleteIndex = publishStep.indexOf('gh release delete-asset "$RELEASE_TAG" "$asset_name" --yes');
+    expect(deleteIndex).toBeGreaterThan(refreshGuardIndex);
   });
 });

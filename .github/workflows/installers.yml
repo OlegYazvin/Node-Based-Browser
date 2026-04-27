@@ -648,8 +648,9 @@ jobs:
           shopt -s nullglob
           output_dir="out/make/darwin/${{ matrix.arch }}"
           marker="$output_dir/.public-release-ready"
+          artifact_marker="$output_dir/public-release-ready.txt"
           artifacts=("$output_dir"/*.dmg "$output_dir"/*.pkg "$output_dir"/*.zip)
-          rm -f "$marker"
+          rm -f "$marker" "$artifact_marker"
 
           if [[ ${#artifacts[@]} -eq 0 ]]; then
             echo "No macOS installers were found to assess for public release." >&2
@@ -761,6 +762,7 @@ jobs:
 
           if [[ "$publish_ready" -eq 1 ]]; then
             touch "$marker"
+            printf 'macOS public release gate passed for %s (signed/notarized or validated unsigned ZIP fallback).\n' "${{ matrix.arch }}" > "$artifact_marker"
             echo "publish_ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish_ready=false" >> "$GITHUB_OUTPUT"
@@ -906,7 +908,7 @@ jobs:
             arch="${target##*:}"
 
             if [[ -d "out/make/$platform/$arch" ]]; then
-              if [[ "$platform" == "darwin" && ! -f "out/make/$platform/$arch/.public-release-ready" ]]; then
+              if [[ "$platform" == "darwin" && ! -f "out/make/$platform/$arch/public-release-ready.txt" && ! -f "out/make/$platform/$arch/.public-release-ready" ]]; then
                 echo "Skipping public sync for $platform/$arch because Gatekeeper/notarization checks did not pass."
                 continue
               fi
@@ -973,7 +975,11 @@ jobs:
 
               const archDirectory = path.join(platformDirectory, arch.name);
 
-              if (platform.name === "darwin" && !existsSync(path.join(archDirectory, ".public-release-ready"))) {
+              if (
+                platform.name === "darwin" &&
+                !existsSync(path.join(archDirectory, "public-release-ready.txt")) &&
+                !existsSync(path.join(archDirectory, ".public-release-ready"))
+              ) {
                 continue;
               }
 
@@ -1054,11 +1060,14 @@ jobs:
           fi
 
           expected_macos_assets=()
+          expected_macos_arches=()
 
           while IFS= read -r asset; do
             if [[ -n "$asset" ]]; then
               if [[ "$asset" == out/make/darwin/* ]]; then
                 expected_macos_assets+=("$(basename "$asset")")
+                asset_arch="${asset#out/make/darwin/}"
+                expected_macos_arches+=("${asset_arch%%/*}")
               fi
 
               gh release upload "$RELEASE_TAG" "$asset" --clobber
@@ -1071,6 +1080,24 @@ jobs:
             fi
 
             keep_asset=0
+            refresh_arch=0
+
+            if [[ "$asset_name" =~ -macos-(x64|arm64)\.(dmg|pkg|zip)$ ]]; then
+              asset_arch="${BASH_REMATCH[1]}"
+            else
+              continue
+            fi
+
+            for expected_arch in "${expected_macos_arches[@]}"; do
+              if [[ "$asset_arch" == "$expected_arch" ]]; then
+                refresh_arch=1
+                break
+              fi
+            done
+
+            if [[ "$refresh_arch" -eq 0 ]]; then
+              continue
+            fi
 
             for expected_asset in "${expected_macos_assets[@]}"; do
               if [[ "$asset_name" == "$expected_asset" ]]; then
