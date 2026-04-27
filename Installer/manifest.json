@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-24T02:32:19.268Z",
+  "generatedAt": "2026-04-27T03:28:07.034Z",
   "nodelyVersion": "0.1",
   "installers": [
     {
@@ -103,6 +103,7 @@
     },
     {
       "version": "0.1",
+      "geckoVersion": "140.10.0esr",
       "platform": "win32",
       "arch": "x64",
       "variant": "installer",
@@ -112,13 +113,13 @@
         "Windows 11"
       ],
       "builtBy": "github-actions",
-      "buildWorkflow": ".github/workflows/installers.yml",
-      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24868620646",
+      "buildWorkflow": ".github/workflows/windows-x64-installer.yml",
+      "buildRunUrl": "https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24974651263",
       "path": "windows/Nodely-Browser-0.1-windows-x64.installer.exe",
       "fileName": "Nodely-Browser-0.1-windows-x64.installer.exe",
       "source": "out/make/win32/x64/Nodely-Browser-0.1-windows-x64.installer.exe",
-      "size": 19262145,
-      "syncedAt": "2026-04-24T02:32:19.268Z"
+      "size": 72569451,
+      "syncedAt": "2026-04-27T03:28:07.034Z"
     }
   ]
 }

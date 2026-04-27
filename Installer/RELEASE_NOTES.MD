@@ -1,26 +1,38 @@
 # Latest Release Notes
 
-Generated automatically at 2026-04-24T02:32:19Z.
+Generated automatically at 2026-04-27T03:28:14Z.
 
 - Ref: `main`
-- Range: `f8d364e -> 80641c4`
-- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24868620646
+- Range: `1e972ce -> 26aad03`
+- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24974651263
 - Nodely version: `0.1`
-- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/f8d364ee1fea4b04680be09b605f4f8ced2c00c4...80641c48ab80c77b29ba43044735bca859c8371f
+- Gecko base version: `140.10.0esr`
+- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/1e972ce...26aad03340a54e130d810454c2c2dd6d107d6131
 
 ## Highlights
 
-- Commits included: 1
-- Files changed: 3
-- GitHub Actions: 2
-- Build and packaging scripts: 1
+- Commits included: 5
+- Files changed: 9
+- GitHub Actions: 3
+- Gecko overlay/runtime: 3
+- Tests: 3
 
 ## Commits
 
-- `80641c4` Make macOS workflows Bash 3.2 compatible (Codex)
+- `333b6ec` Fix artifact overlay sync before Windows packaging (Codex)
+- `1ae6753` Repair Windows installer browser omni payload (Codex)
+- `27b0984` Raise Windows installer omni repair buffer (Codex)
+- `a2cda93` Replace Windows installer browser omni during repair (Codex)
+- `26aad03` Accept Windows separators in browser omni inspection (Codex)
 
 ## Changed Files
 
+- `.github/workflows/gecko-verify.yml`
 - `.github/workflows/installers.yml`
-- `.github/workflows/macos-installers.yml`
-- `scripts/sign-and-notarize-macos-release.sh`
+- `.github/workflows/windows-x64-installer.yml`
+- `gecko/scripts/repair-windows-installer.mjs`
+- `gecko/scripts/stage-release-artifacts.mjs`
+- `gecko/scripts/sync-overlay.mjs`
+- `tests/gecko/repairWindowsInstaller.test.ts`
+- `tests/gecko/stageReleaseArtifacts.test.ts`
+- `tests/gecko/windowsArtifactWorkflows.test.ts`

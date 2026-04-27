@@ -16,8 +16,9 @@ This directory contains the installers that actually exist in this repo right no
 - macOS DMG and PKG installers are only staged or published after Developer ID signing, notarization, and Gatekeeper checks pass on GitHub Actions.
 - When Apple signing credentials are unavailable, GitHub Actions may stage a macOS app archive (`.zip`) instead. That fallback requires the person installing Nodely to use macOS Privacy & Security -> Open Anyway the first time they launch it.
 - Current Nodely version: `0.1`
+- Gecko base version: `140.10.0esr`
 
-Generated from `Installer/manifest.json` at 2026-04-24T02:32:19.268Z.
+Generated from `Installer/manifest.json` at 2026-04-27T03:28:07.034Z.
 
 ## Windows 10 and 11
 
@@ -25,7 +26,7 @@ Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |
-| [Nodely-Browser-0.1-windows-x64.installer.exe](./windows/Nodely-Browser-0.1-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24868620646) (`installers.yml`) |
+| [Nodely-Browser-0.1-windows-x64.installer.exe](./windows/Nodely-Browser-0.1-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/24974651263) (`windows-x64-installer.yml`) |
 
 ## macOS Intel
 
