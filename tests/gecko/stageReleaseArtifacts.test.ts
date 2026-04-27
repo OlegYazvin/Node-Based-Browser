@@ -162,6 +162,17 @@ describe("stage-release-artifacts", () => {
     expect(inspection.missingNodelyFiles).toContain("chrome-extension-compat.mjs");
   });
 
+  it("accepts Windows browser omni listings that use backslash separators", () => {
+    const completeListing = (runtimeOverlayFileNames() as string[])
+      .map((fileName: string) => `2010-01-01 00:00:00 ..... chrome\\browser\\content\\browser\\nodely\\${fileName}`)
+      .join("\n");
+
+    expect(inspectWindowsBrowserOmniListing(completeListing)).toEqual({
+      hasCompleteNodelyChrome: true,
+      missingNodelyFiles: []
+    });
+  });
+
   it("accepts Windows installers only when the nested browser omni has all Nodely files", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-stage-release-"));
     tempDirectories.push(tempDirectory);

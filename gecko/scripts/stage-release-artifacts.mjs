@@ -213,9 +213,13 @@ export function inspectWindowsInstallerListing(listing) {
 
 export function inspectWindowsBrowserOmniListing(listing, requiredFileNames = runtimeOverlayFileNames()) {
   const normalizedListing = String(listing ?? "");
+  const separatorPattern = "[\\\\/]";
+  const nodelyChromePrefix = ["chrome", "browser", "content", "browser", "nodely"]
+    .map(escapeRegExp)
+    .join(separatorPattern);
   const missingNodelyFiles = requiredFileNames.filter((fileName) => {
     const entryPattern = new RegExp(
-      `(?:^|\\n).*\\bchrome/browser/content/browser/nodely/${escapeRegExp(fileName)}\\b`,
+      `(?:^|\\n).*\\b${nodelyChromePrefix}${separatorPattern}${escapeRegExp(fileName)}\\b`,
       "mu"
     );
 
