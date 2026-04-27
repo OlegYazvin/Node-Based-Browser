@@ -7,7 +7,11 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { inspectWindowsInstallerListing, isPackagedWindowsInstallerName } from "./stage-release-artifacts.mjs";
+import {
+  inspectWindowsArtifactBundle,
+  inspectWindowsInstallerListing,
+  isPackagedWindowsInstallerName
+} from "./stage-release-artifacts.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
@@ -236,6 +240,20 @@ function verifyNodelyApplicationIni(installerPath) {
   }
 }
 
+function verifyNodelyChromePayload(installerPath) {
+  const inspection = inspectWindowsArtifactBundle(installerPath);
+
+  if (inspection.error) {
+    throw new Error(`Unable to inspect Nodely browser chrome in ${installerPath}: ${inspection.error}`);
+  }
+
+  if (!inspection.hasCompleteNodelyChrome) {
+    throw new Error(
+      `Windows installer ${installerPath} is missing Nodely browser chrome files: ${inspection.missingNodelyFiles.join(", ")}`
+    );
+  }
+}
+
 export async function repairWindowsInstaller({
   installerPath,
   officialInstallerPath,
@@ -246,6 +264,7 @@ export async function repairWindowsInstaller({
 
   if (partialInspection.hasMetadata && partialInspection.hasBrowserBinary && partialInspection.hasRuntimeLibrary) {
     verifyNodelyApplicationIni(installerPath);
+    verifyNodelyChromePayload(installerPath);
 
     return {
       repaired: false,
@@ -292,6 +311,7 @@ export async function repairWindowsInstaller({
   }
 
   verifyNodelyApplicationIni(installerPath);
+  verifyNodelyChromePayload(installerPath);
 
   return {
     repaired: true,

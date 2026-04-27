@@ -1,17 +1,21 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { extractGeckoArtifactVersion } from "../../scripts/installers-lib.mjs";
 import { readNodelyVersionMetadata } from "../../scripts/nodely-version.mjs";
+import { runtimeOverlayFileNames } from "./sync-overlay.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(geckoRoot, "..");
+const archiveInspectionMaxBuffer = 256 * 1024 * 1024;
 
 const platformAliases = {
   linux: "linux",
@@ -193,6 +197,10 @@ function inspectLinuxArtifactBundle(filePath) {
   }
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
 export function inspectWindowsInstallerListing(listing) {
   const normalizedListing = String(listing ?? "");
 
@@ -203,25 +211,74 @@ export function inspectWindowsInstallerListing(listing) {
   };
 }
 
-function windowsArtifactContainsRunnableBundle(filePath) {
-  const inspection = inspectWindowsArtifactBundle(filePath);
-  return inspection.hasMetadata && inspection.hasBrowserBinary && inspection.hasRuntimeLibrary;
+export function inspectWindowsBrowserOmniListing(listing, requiredFileNames = runtimeOverlayFileNames()) {
+  const normalizedListing = String(listing ?? "");
+  const missingNodelyFiles = requiredFileNames.filter((fileName) => {
+    const entryPattern = new RegExp(
+      `(?:^|\\n).*\\bchrome/browser/content/browser/nodely/${escapeRegExp(fileName)}\\b`,
+      "mu"
+    );
+
+    return !entryPattern.test(normalizedListing);
+  });
+
+  return {
+    hasCompleteNodelyChrome: missingNodelyFiles.length === 0,
+    missingNodelyFiles
+  };
 }
 
-function inspectWindowsArtifactBundle(filePath) {
+function windowsArtifactContainsRunnableBundle(filePath) {
+  const inspection = inspectWindowsArtifactBundle(filePath);
+  return (
+    inspection.hasMetadata &&
+    inspection.hasBrowserBinary &&
+    inspection.hasRuntimeLibrary &&
+    inspection.hasCompleteNodelyChrome
+  );
+}
+
+export function inspectWindowsArtifactBundle(filePath) {
   try {
     const listing = execFileSync("7z", ["l", filePath], {
       encoding: "utf8",
+      maxBuffer: archiveInspectionMaxBuffer,
       stdio: ["ignore", "pipe", "ignore"]
     });
+    const installerInspection = inspectWindowsInstallerListing(listing);
+    const browserOmni = execFileSync("7z", ["x", "-so", filePath, "core/browser/omni.ja"], {
+      maxBuffer: archiveInspectionMaxBuffer,
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    const temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "nodely-browser-omni-"));
 
-    return inspectWindowsInstallerListing(listing);
+    try {
+      const browserOmniPath = path.join(temporaryDirectory, "browser-omni.ja");
+      writeFileSync(browserOmniPath, browserOmni);
+      const browserOmniListing = execFileSync("7z", ["l", browserOmniPath], {
+        encoding: "utf8",
+        maxBuffer: archiveInspectionMaxBuffer,
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+
+      return {
+        ...installerInspection,
+        ...inspectWindowsBrowserOmniListing(browserOmniListing)
+      };
+    } finally {
+      rmSync(temporaryDirectory, {
+        force: true,
+        recursive: true
+      });
+    }
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : String(error),
       hasMetadata: false,
       hasBrowserBinary: false,
-      hasRuntimeLibrary: false
+      hasRuntimeLibrary: false,
+      hasCompleteNodelyChrome: false,
+      missingNodelyFiles: runtimeOverlayFileNames()
     };
   }
 }
@@ -353,7 +410,13 @@ async function stageArtifacts(options) {
             return `${path.basename(artifact)} [error=${inspection.error}]`;
           }
 
-          return `${path.basename(artifact)} [metadata=${inspection.hasMetadata} binary=${inspection.hasBrowserBinary} runtime=${inspection.hasRuntimeLibrary}]`;
+          return `${path.basename(artifact)} [metadata=${inspection.hasMetadata} binary=${inspection.hasBrowserBinary} runtime=${inspection.hasRuntimeLibrary} nodelyChrome=${inspection.hasCompleteNodelyChrome}${
+            inspection.missingNodelyFiles?.length
+              ? ` missing=${inspection.missingNodelyFiles.slice(0, 6).join("|")}${
+                  inspection.missingNodelyFiles.length > 6 ? "|..." : ""
+                }`
+              : ""
+          }]`;
         })
         .join(", ");
 

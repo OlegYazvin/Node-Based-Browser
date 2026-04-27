@@ -6,9 +6,12 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  nodelyJarManifestBlock,
   patchCrashReporterFtlContents,
   patchCrashReporterMacInfoStringsContents,
   patchCrashReporterMacPlistContents,
+  patchJarManifestContents,
+  runtimeOverlayFileNames,
   syncLooseRuntimeOverlay,
   syncPackagedRuntimeOmniOverlay
 } from "../../gecko/scripts/sync-overlay.mjs";
@@ -225,6 +228,40 @@ describe("sync-overlay", () => {
       expect(crashReporterFtl).toContain("send a crash report to olegyazvin@gmail.com");
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("adds every top-level Nodely runtime overlay file to browser/base/jar.mn", () => {
+    const fileNames = runtimeOverlayFileNames();
+    const manifestBlock = nodelyJarManifestBlock();
+
+    expect(fileNames).toContain("compat-extensions-store.mjs");
+    expect(fileNames).toContain("chrome-extension-compat.mjs");
+
+    for (const fileName of fileNames) {
+      expect(manifestBlock).toContain(`content/browser/nodely/${fileName}`);
+      expect(manifestBlock).toContain(`(content/nodely/${fileName})`);
+    }
+  });
+
+  it("replaces stale Nodely jar entries when the overlay file set changes", () => {
+    const staleManifest = [
+      "        content/browser/contentTheme.js                     (content/contentTheme.js)",
+      "        content/browser/nodely/window-context.mjs        (content/nodely/window-context.mjs)",
+      "        content/browser/nodely/nodely-bootstrap.mjs      (content/nodely/nodely-bootstrap.mjs)",
+      "        content/browser/other.js                            (content/other.js)",
+      ""
+    ].join("\n");
+
+    const patchedManifest = patchJarManifestContents(staleManifest);
+
+    expect(patchedManifest).toContain("content/browser/nodely/compat-extensions-store.mjs");
+    expect(patchedManifest).toContain("content/browser/nodely/chrome-extension-compat.mjs");
+    expect(patchedManifest).not.toContain("content/browser/nodely/window-context.mjs");
+
+    for (const fileName of runtimeOverlayFileNames()) {
+      const occurrences = patchedManifest.split(`content/browser/nodely/${fileName}`).length - 1;
+      expect(occurrences).toBe(1);
     }
   });
 });

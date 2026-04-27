@@ -1,23 +1,31 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  inspectWindowsArtifactBundle,
+  inspectWindowsBrowserOmniListing,
   inspectWindowsInstallerListing,
   isPackagedWindowsInstallerName,
   selectPackagedArtifact
 } from "../../gecko/scripts/stage-release-artifacts.mjs";
+import { runtimeOverlayFileNames } from "../../gecko/scripts/sync-overlay.mjs";
 
-const tempDirectories = [];
+type ArchiveEntry = {
+  path: string;
+  contents?: string;
+};
+
+const tempDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(tempDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-async function createTarball(rootDirectory, fileName, entries) {
+async function createTarball(rootDirectory: string, fileName: string, entries: ArchiveEntry[]) {
   const sourceDirectory = path.join(rootDirectory, fileName.replace(/\.tar\.(?:xz|bz2|gz)$/u, ""));
   await mkdir(sourceDirectory, { recursive: true });
 
@@ -30,6 +38,24 @@ async function createTarball(rootDirectory, fileName, entries) {
   const tarballPath = path.join(rootDirectory, fileName);
   execFileSync("tar", ["-cJf", tarballPath, "-C", rootDirectory, path.basename(sourceDirectory)]);
   return tarballPath;
+}
+
+async function createZipArchive(rootDirectory: string, fileName: string, entries: ArchiveEntry[]) {
+  const sourceDirectory = path.join(rootDirectory, fileName.replace(/\.(?:zip|ja|exe)$/u, ""));
+  await mkdir(sourceDirectory, { recursive: true });
+
+  for (const entry of entries) {
+    const entryPath = path.join(sourceDirectory, entry.path);
+    await mkdir(path.dirname(entryPath), { recursive: true });
+    await writeFile(entryPath, entry.contents ?? "", "utf8");
+  }
+
+  const archivePath = path.join(rootDirectory, fileName);
+  execFileSync("7z", ["a", "-tzip", archivePath, "."], {
+    cwd: sourceDirectory,
+    stdio: ["ignore", "ignore", "ignore"]
+  });
+  return archivePath;
 }
 
 describe("stage-release-artifacts", () => {
@@ -77,7 +103,7 @@ describe("stage-release-artifacts", () => {
 
     expect(
       selectPackagedArtifact([partialArtifact, runnableArtifact], "win32", {
-        inspectWindowsArtifact: (artifactPath) => artifactPath === runnableArtifact
+        inspectWindowsArtifact: (artifactPath: string) => artifactPath === runnableArtifact
       })
     ).toBe(runnableArtifact);
   });
@@ -119,6 +145,54 @@ describe("stage-release-artifacts", () => {
       hasMetadata: true,
       hasBrowserBinary: true,
       hasRuntimeLibrary: true
+    });
+  });
+
+  it("flags Windows browser omni archives missing Nodely module dependencies", () => {
+    const incompleteListing = `
+2010-01-01 00:00:00 ..... chrome/browser/content/browser/nodely/browser-basics-bridge.mjs
+2010-01-01 00:00:00 ..... chrome/browser/content/browser/nodely/nodely-bootstrap.mjs
+2010-01-01 00:00:00 ..... chrome/browser/content/browser/nodely/nodely-shell.mjs
+`;
+
+    const inspection = inspectWindowsBrowserOmniListing(incompleteListing);
+
+    expect(inspection.hasCompleteNodelyChrome).toBe(false);
+    expect(inspection.missingNodelyFiles).toContain("compat-extensions-store.mjs");
+    expect(inspection.missingNodelyFiles).toContain("chrome-extension-compat.mjs");
+  });
+
+  it("accepts Windows installers only when the nested browser omni has all Nodely files", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-stage-release-"));
+    tempDirectories.push(tempDirectory);
+
+    const browserOmni = await createZipArchive(
+      tempDirectory,
+      "browser.omni.ja",
+      (runtimeOverlayFileNames() as string[]).map((fileName: string) => ({
+        path: path.posix.join("chrome", "browser", "content", "browser", "nodely", fileName)
+      }))
+    );
+
+    const outerSourceDirectory = path.join(tempDirectory, "installer-source");
+    await mkdir(path.join(outerSourceDirectory, "core", "browser"), { recursive: true });
+    await writeFile(path.join(outerSourceDirectory, "core", "application.ini"), "[App]\nName=Nodely\n", "utf8");
+    await writeFile(path.join(outerSourceDirectory, "core", "firefox.exe"), "", "utf8");
+    await writeFile(path.join(outerSourceDirectory, "core", "xul.dll"), "", "utf8");
+    await copyFile(browserOmni, path.join(outerSourceDirectory, "core", "browser", "omni.ja"));
+
+    const installerPath = path.join(tempDirectory, "nodely-140.10.0.en-US.win64.installer.exe");
+    execFileSync("7z", ["a", "-tzip", installerPath, "."], {
+      cwd: outerSourceDirectory,
+      stdio: ["ignore", "ignore", "ignore"]
+    });
+
+    expect(inspectWindowsArtifactBundle(installerPath)).toMatchObject({
+      hasMetadata: true,
+      hasBrowserBinary: true,
+      hasRuntimeLibrary: true,
+      hasCompleteNodelyChrome: true,
+      missingNodelyFiles: []
     });
   });
 

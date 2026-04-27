@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -11,14 +11,17 @@ import {
   parse7zTechnicalListing,
   repairWindowsInstaller
 } from "../../gecko/scripts/repair-windows-installer.mjs";
+import { runtimeOverlayFileNames } from "../../gecko/scripts/sync-overlay.mjs";
 
-const tempDirectories = [];
+type ArchiveEntry = [entryPath: string, contents: string];
+
+const tempDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(tempDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-async function createArchive(archivePath, entries) {
+async function createArchive(archivePath: string, entries: ArchiveEntry[]) {
   const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-windows-archive-stage-"));
   tempDirectories.push(stagingDirectory);
 
@@ -32,6 +35,32 @@ async function createArchive(archivePath, entries) {
     cwd: stagingDirectory,
     stdio: ["ignore", "ignore", "inherit"]
   });
+}
+
+async function createBrowserOmniArchive(rootDirectory: string) {
+  const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-browser-omni-stage-"));
+  tempDirectories.push(stagingDirectory);
+
+  for (const fileName of runtimeOverlayFileNames()) {
+    const targetPath = path.join(
+      stagingDirectory,
+      "chrome",
+      "browser",
+      "content",
+      "browser",
+      "nodely",
+      fileName
+    );
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, `// ${fileName}\n`, "utf8");
+  }
+
+  const archivePath = path.join(rootDirectory, "browser.omni.ja");
+  execFileSync("7z", ["a", "-tzip", archivePath, "."], {
+    cwd: stagingDirectory,
+    stdio: ["ignore", "ignore", "inherit"]
+  });
+  return archivePath;
 }
 
 describe("repair-windows-installer", () => {
@@ -78,13 +107,22 @@ Attributes = A
 
     const partialInstallerPath = path.join(tempDirectory, "partial.exe");
     const donorInstallerPath = path.join(tempDirectory, "donor.exe");
+    const browserOmniPath = await createBrowserOmniArchive(tempDirectory);
 
     await createArchive(partialInstallerPath, [
       ["core/application.ini", "[App]\nVendor=Nodely\nName=Nodely\n"],
-      ["core/browser/omni.ja", "nodely-browser-omni"],
       ["core/omni.ja", "nodely-omni"],
       ["setup.exe", "setup"]
     ]);
+    const browserOmniStagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-browser-omni-copy-"));
+    tempDirectories.push(browserOmniStagingDirectory);
+    await mkdir(path.join(browserOmniStagingDirectory, "core", "browser"), { recursive: true });
+    await copyFile(browserOmniPath, path.join(browserOmniStagingDirectory, "core", "browser", "omni.ja"));
+    execFileSync("7z", ["u", partialInstallerPath, "core/browser/omni.ja"], {
+      cwd: browserOmniStagingDirectory,
+      stdio: ["ignore", "ignore", "inherit"]
+    });
+
     await createArchive(donorInstallerPath, [
       ["core/application.ini", "[App]\nVendor=Mozilla\nName=Firefox\n"],
       ["core/firefox.exe", "firefox-binary"],
@@ -112,10 +150,12 @@ Attributes = A
     expect(applicationIni).toContain("Vendor=Nodely");
     expect(applicationIni).toContain("Name=Nodely");
 
-    const browserOmni = execFileSync("7z", ["x", "-so", partialInstallerPath, "core/browser/omni.ja"], {
-      encoding: "utf8"
-    });
-    expect(browserOmni).toBe("nodely-browser-omni");
+    const browserOmni = execFileSync("7z", ["x", "-so", partialInstallerPath, "core/browser/omni.ja"]);
+    const extractedBrowserOmniPath = path.join(tempDirectory, "repaired-browser.omni.ja");
+    await writeFile(extractedBrowserOmniPath, browserOmni);
+    const browserOmniListing = execFileSync("7z", ["l", extractedBrowserOmniPath], { encoding: "utf8" });
+    expect(browserOmniListing).toContain("chrome/browser/content/browser/nodely/chrome-extension-compat.mjs");
+    expect(browserOmniListing).toContain("chrome/browser/content/browser/nodely/compat-extensions-store.mjs");
   });
 
   it("fails verification-only mode when the installer is incomplete", async () => {

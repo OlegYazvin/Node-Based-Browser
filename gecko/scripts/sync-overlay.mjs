@@ -29,6 +29,7 @@ const runtimeOverlaySourceDirectory = path.join(
   "nodely"
 );
 const NODELY_CRASH_REPORT_EMAIL = "olegyazvin@gmail.com";
+const jarManifestInsertionPoint = "        content/browser/contentTheme.js                     (content/contentTheme.js)\n";
 
 function usage() {
   console.log(`Usage: node gecko/scripts/sync-overlay.mjs --checkout-dir <path>
@@ -95,6 +96,43 @@ function copyDirectory(sourceDirectory, targetDirectory) {
 
     cpSync(sourcePath, targetPath, { force: true });
   }
+}
+
+export function runtimeOverlayFileNames() {
+  if (!existsSync(runtimeOverlaySourceDirectory)) {
+    return [];
+  }
+
+  return readdirSync(runtimeOverlaySourceDirectory, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function formatNodelyJarManifestEntry(fileName) {
+  const destination = `content/browser/nodely/${fileName}`;
+  const source = `(content/nodely/${fileName})`;
+  return `        ${destination.padEnd(48)} ${source}\n`;
+}
+
+export function nodelyJarManifestBlock() {
+  return runtimeOverlayFileNames().map(formatNodelyJarManifestEntry).join("");
+}
+
+export function patchJarManifestContents(contents) {
+  if (!contents.includes(jarManifestInsertionPoint)) {
+    throw new Error("Unable to find browser/base/jar.mn insertion point for Nodely runtime files.");
+  }
+
+  const withoutStaleNodelyEntries = contents.replace(
+    /^        content\/browser\/nodely\/[^\n]+\(content\/nodely\/[^\n]+\)\r?\n/gmu,
+    ""
+  );
+
+  return withoutStaleNodelyEntries.replace(
+    jarManifestInsertionPoint,
+    `${jarManifestInsertionPoint}${nodelyJarManifestBlock()}`
+  );
 }
 
 function patchFile(filePath, marker, patcher) {
@@ -458,32 +496,7 @@ function ensureJarManifestPatched(checkoutDir) {
     throw new Error(`Gecko checkout is missing jar.mn: ${jarManifestPath}`);
   }
 
-  patchFile(jarManifestPath, "browser/base/jar.mn nodely files", (contents) => {
-    if (contents.includes("content/browser/nodely/nodely-bootstrap.mjs")) {
-      return contents.replace(
-        "        content/browser/nodely/window-context.mjs        (content/nodely/window-context.mjs)\n",
-        ""
-      );
-    }
-
-    const insertionPoint = "        content/browser/contentTheme.js                     (content/contentTheme.js)\n";
-    const injectedBlock =
-      `${insertionPoint}` +
-      "        content/browser/nodely/browser-basics-bridge.mjs  (content/nodely/browser-basics-bridge.mjs)\n" +
-      "        content/browser/nodely/chrome-state-controller.mjs (content/nodely/chrome-state-controller.mjs)\n" +
-      "        content/browser/nodely/domain.mjs                 (content/nodely/domain.mjs)\n" +
-      "        content/browser/nodely/favorites-store.mjs       (content/nodely/favorites-store.mjs)\n" +
-      "        content/browser/nodely/node-runtime-manager.mjs  (content/nodely/node-runtime-manager.mjs)\n" +
-      "        content/browser/nodely/nodely-bootstrap.mjs      (content/nodely/nodely-bootstrap.mjs)\n" +
-      "        content/browser/nodely/nodely-graph-surface.mjs  (content/nodely/nodely-graph-surface.mjs)\n" +
-      "        content/browser/nodely/nodely-shell.css          (content/nodely/nodely-shell.css)\n" +
-      "        content/browser/nodely/nodely-shell.mjs          (content/nodely/nodely-shell.mjs)\n" +
-      "        content/browser/nodely/nodely-upload-child.mjs   (content/nodely/nodely-upload-child.mjs)\n" +
-      "        content/browser/nodely/nodely-upload-parent.mjs  (content/nodely/nodely-upload-parent.mjs)\n" +
-      "        content/browser/nodely/workspace-store.mjs       (content/nodely/workspace-store.mjs)\n";
-
-    return contents.replace(insertionPoint, injectedBlock);
-  });
+  patchFile(jarManifestPath, "browser/base/jar.mn nodely files", patchJarManifestContents);
 }
 
 function ensureBrowserBaseMozbuildPatched(checkoutDir) {
