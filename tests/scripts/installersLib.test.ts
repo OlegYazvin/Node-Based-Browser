@@ -281,6 +281,40 @@ describe("installers-lib", () => {
     }
   });
 
+  it("ignores macOS public release marker files while syncing installer outputs", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-installers-lib-macos-marker-"));
+    const makeDirectory = path.join(tempDirectory, "out", "make");
+    const targetDirectory = path.join(tempDirectory, "Installer");
+
+    try {
+      const outputDirectory = path.join(makeDirectory, "darwin", "x64");
+      await mkdir(outputDirectory, { recursive: true });
+      await writeFile(
+        path.join(outputDirectory, `Nodely-Browser-${currentNodelyVersion}-macos-x64.zip`),
+        "payload",
+        "utf8"
+      );
+      await writeFile(path.join(outputDirectory, "public-release-ready.txt"), "validated unsigned ZIP fallback\n", "utf8");
+
+      const manifest = await syncInstallers({
+        platform: "darwin",
+        arch: "x64",
+        makeDirectory,
+        targetDirectory,
+        builtBy: "github-actions",
+        buildWorkflow: ".github/workflows/installers.yml",
+        buildRunUrl: "https://github.com/example/repo/actions/runs/790"
+      });
+
+      expect(manifest.installers).toHaveLength(1);
+      expect(manifest.installers[0].fileName).toBe(`Nodely-Browser-${currentNodelyVersion}-macos-x64.zip`);
+      expect(manifest.installers[0].variant).toBe("zip");
+      await expect(access(path.join(targetDirectory, "macos", "public-release-ready.txt"))).rejects.toThrow();
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("prunes only the targeted installer slices and preserves unrelated entries", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-prune-installers-"));
     const targetDirectory = path.join(tempDirectory, "Installer");

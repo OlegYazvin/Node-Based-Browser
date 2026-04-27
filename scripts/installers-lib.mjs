@@ -557,7 +557,8 @@ export async function syncInstallers({
   const normalizedPlatform = normalizePlatform(platform);
   const normalizedArch = normalizeArch(arch);
   const normalizedBuildSource = normalizeInstallerBuildSource(builtBy);
-  const outputs = await listInstallerOutputs(normalizedPlatform, normalizedArch, makeDirectory);
+  const outputs = (await listInstallerOutputs(normalizedPlatform, normalizedArch, makeDirectory))
+    .filter((outputPath) => classifyInstallerFile(path.basename(outputPath), normalizedPlatform, normalizedArch));
 
   if (!outputs.length) {
     throw new Error(
