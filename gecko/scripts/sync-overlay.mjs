@@ -665,7 +665,7 @@ function stageArchiveEntry(stagingDirectory, entryPath, contents) {
   return entryPath;
 }
 
-function syncRuntimeOmniArchive(archivePath) {
+export function syncRuntimeOmniArchive(archivePath) {
   if (!existsSync(archivePath) || !existsSync(runtimeOverlaySourceDirectory)) {
     return false;
   }

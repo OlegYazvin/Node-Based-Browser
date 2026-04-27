@@ -63,6 +63,51 @@ async function createBrowserOmniArchive(rootDirectory: string) {
   return archivePath;
 }
 
+async function createIncompleteBrowserOmniArchive(rootDirectory: string) {
+  const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-browser-omni-incomplete-stage-"));
+  tempDirectories.push(stagingDirectory);
+
+  const browserXhtmlPath = path.join(
+    stagingDirectory,
+    "chrome",
+    "browser",
+    "content",
+    "browser",
+    "browser.xhtml"
+  );
+  const firefoxDefaultsPath = path.join(stagingDirectory, "defaults", "preferences", "firefox.js");
+  await mkdir(path.dirname(browserXhtmlPath), { recursive: true });
+  await mkdir(path.dirname(firefoxDefaultsPath), { recursive: true });
+  await writeFile(browserXhtmlPath, "<html><head></head><body></body></html>", "utf8");
+  await writeFile(
+    firefoxDefaultsPath,
+    [
+      'pref("browser.startup.page",                1);',
+      'pref("browser.startup.homepage",            "about:home");',
+      'pref("browser.aboutwelcome.enabled", true);'
+    ].join("\n"),
+    "utf8"
+  );
+
+  const archivePath = path.join(rootDirectory, "incomplete-browser.omni.ja");
+  execFileSync("7z", ["a", "-tzip", archivePath, "."], {
+    cwd: stagingDirectory,
+    stdio: ["ignore", "ignore", "inherit"]
+  });
+  return archivePath;
+}
+
+async function addBrowserOmniToInstaller(installerPath: string, browserOmniPath: string) {
+  const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-browser-omni-copy-"));
+  tempDirectories.push(stagingDirectory);
+  await mkdir(path.join(stagingDirectory, "core", "browser"), { recursive: true });
+  await copyFile(browserOmniPath, path.join(stagingDirectory, "core", "browser", "omni.ja"));
+  execFileSync("7z", ["u", installerPath, "core/browser/omni.ja"], {
+    cwd: stagingDirectory,
+    stdio: ["ignore", "ignore", "inherit"]
+  });
+}
+
 describe("repair-windows-installer", () => {
   it("parses 7z technical listings into file and directory entries", () => {
     const listing = `
@@ -114,14 +159,7 @@ Attributes = A
       ["core/omni.ja", "nodely-omni"],
       ["setup.exe", "setup"]
     ]);
-    const browserOmniStagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-browser-omni-copy-"));
-    tempDirectories.push(browserOmniStagingDirectory);
-    await mkdir(path.join(browserOmniStagingDirectory, "core", "browser"), { recursive: true });
-    await copyFile(browserOmniPath, path.join(browserOmniStagingDirectory, "core", "browser", "omni.ja"));
-    execFileSync("7z", ["u", partialInstallerPath, "core/browser/omni.ja"], {
-      cwd: browserOmniStagingDirectory,
-      stdio: ["ignore", "ignore", "inherit"]
-    });
+    await addBrowserOmniToInstaller(partialInstallerPath, browserOmniPath);
 
     await createArchive(donorInstallerPath, [
       ["core/application.ini", "[App]\nVendor=Mozilla\nName=Firefox\n"],
@@ -152,6 +190,47 @@ Attributes = A
 
     const browserOmni = execFileSync("7z", ["x", "-so", partialInstallerPath, "core/browser/omni.ja"]);
     const extractedBrowserOmniPath = path.join(tempDirectory, "repaired-browser.omni.ja");
+    await writeFile(extractedBrowserOmniPath, browserOmni);
+    const browserOmniListing = execFileSync("7z", ["l", extractedBrowserOmniPath], { encoding: "utf8" });
+    expect(browserOmniListing).toContain("chrome/browser/content/browser/nodely/chrome-extension-compat.mjs");
+    expect(browserOmniListing).toContain("chrome/browser/content/browser/nodely/compat-extensions-store.mjs");
+  });
+
+  it("refreshes Nodely browser chrome in an otherwise complete Windows installer", async () => {
+    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-windows-installer-chrome-repair-"));
+    tempDirectories.push(tempDirectory);
+
+    const installerPath = path.join(tempDirectory, "complete-with-firefox-chrome.exe");
+    const donorInstallerPath = path.join(tempDirectory, "donor.exe");
+    const browserOmniPath = await createIncompleteBrowserOmniArchive(tempDirectory);
+
+    await createArchive(installerPath, [
+      ["core/application.ini", "[App]\nVendor=Nodely\nName=Nodely\n"],
+      ["core/firefox.exe", "firefox-binary"],
+      ["core/xul.dll", "xul-binary"],
+      ["setup.exe", "setup"]
+    ]);
+    await addBrowserOmniToInstaller(installerPath, browserOmniPath);
+
+    await createArchive(donorInstallerPath, [
+      ["core/application.ini", "[App]\nVendor=Mozilla\nName=Firefox\n"],
+      ["core/firefox.exe", "firefox-binary"],
+      ["core/xul.dll", "xul-binary"],
+      ["setup.exe", "official-setup"]
+    ]);
+
+    const result = await repairWindowsInstaller({
+      installerPath,
+      officialInstallerPath: donorInstallerPath
+    });
+
+    expect(result).toEqual({
+      repaired: true,
+      addedEntries: ["core/browser/omni.ja"]
+    });
+
+    const browserOmni = execFileSync("7z", ["x", "-so", installerPath, "core/browser/omni.ja"]);
+    const extractedBrowserOmniPath = path.join(tempDirectory, "repaired-complete-browser.omni.ja");
     await writeFile(extractedBrowserOmniPath, browserOmni);
     const browserOmniListing = execFileSync("7z", ["l", extractedBrowserOmniPath], { encoding: "utf8" });
     expect(browserOmniListing).toContain("chrome/browser/content/browser/nodely/chrome-extension-compat.mjs");

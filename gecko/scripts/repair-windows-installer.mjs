@@ -12,6 +12,7 @@ import {
   inspectWindowsInstallerListing,
   isPackagedWindowsInstallerName
 } from "./stage-release-artifacts.mjs";
+import { syncRuntimeOmniArchive } from "./sync-overlay.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
@@ -254,6 +255,33 @@ function verifyNodelyChromePayload(installerPath) {
   }
 }
 
+async function repairNodelyChromePayload(installerPath) {
+  const inspection = inspectWindowsArtifactBundle(installerPath);
+
+  if (inspection.error || inspection.hasCompleteNodelyChrome) {
+    return false;
+  }
+
+  const stagingDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-windows-browser-omni-repair-"));
+
+  try {
+    const browserOmniPath = path.join(stagingDirectory, "core", "browser", "omni.ja");
+    const browserOmni = execFileSync("7z", ["x", "-so", installerPath, "core/browser/omni.ja"], {
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+
+    await mkdir(path.dirname(browserOmniPath), { recursive: true });
+    await writeFile(browserOmniPath, browserOmni);
+    syncRuntimeOmniArchive(browserOmniPath);
+    run7z(["u", installerPath, "core/browser/omni.ja"], {
+      cwd: stagingDirectory
+    });
+    return true;
+  } finally {
+    await rm(stagingDirectory, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 export async function repairWindowsInstaller({
   installerPath,
   officialInstallerPath,
@@ -264,11 +292,12 @@ export async function repairWindowsInstaller({
 
   if (partialInspection.hasMetadata && partialInspection.hasBrowserBinary && partialInspection.hasRuntimeLibrary) {
     verifyNodelyApplicationIni(installerPath);
+    const repairedNodelyChrome = verifyOnly ? false : await repairNodelyChromePayload(installerPath);
     verifyNodelyChromePayload(installerPath);
 
     return {
-      repaired: false,
-      addedEntries: []
+      repaired: repairedNodelyChrome,
+      addedEntries: repairedNodelyChrome ? ["core/browser/omni.ja"] : []
     };
   }
 
@@ -311,6 +340,7 @@ export async function repairWindowsInstaller({
   }
 
   verifyNodelyApplicationIni(installerPath);
+  await repairNodelyChromePayload(installerPath);
   verifyNodelyChromePayload(installerPath);
 
   return {
