@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { copyFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -16,6 +17,7 @@ import { runtimeOverlayFileNames } from "../../gecko/scripts/sync-overlay.mjs";
 type ArchiveEntry = [entryPath: string, contents: string];
 
 const tempDirectories: string[] = [];
+const archivePayloadMaxBuffer = 256 * 1024 * 1024;
 
 afterEach(async () => {
   await Promise.all(tempDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
@@ -75,10 +77,19 @@ async function createIncompleteBrowserOmniArchive(rootDirectory: string) {
     "browser",
     "browser.xhtml"
   );
+  const largePayloadPath = path.join(
+    stagingDirectory,
+    "chrome",
+    "browser",
+    "content",
+    "browser",
+    "large-payload.bin"
+  );
   const firefoxDefaultsPath = path.join(stagingDirectory, "defaults", "preferences", "firefox.js");
   await mkdir(path.dirname(browserXhtmlPath), { recursive: true });
   await mkdir(path.dirname(firefoxDefaultsPath), { recursive: true });
   await writeFile(browserXhtmlPath, "<html><head></head><body></body></html>", "utf8");
+  await writeFile(largePayloadPath, randomBytes(2 * 1024 * 1024));
   await writeFile(
     firefoxDefaultsPath,
     [
@@ -188,7 +199,9 @@ Attributes = A
     expect(applicationIni).toContain("Vendor=Nodely");
     expect(applicationIni).toContain("Name=Nodely");
 
-    const browserOmni = execFileSync("7z", ["x", "-so", partialInstallerPath, "core/browser/omni.ja"]);
+    const browserOmni = execFileSync("7z", ["x", "-so", partialInstallerPath, "core/browser/omni.ja"], {
+      maxBuffer: archivePayloadMaxBuffer
+    });
     const extractedBrowserOmniPath = path.join(tempDirectory, "repaired-browser.omni.ja");
     await writeFile(extractedBrowserOmniPath, browserOmni);
     const browserOmniListing = execFileSync("7z", ["l", extractedBrowserOmniPath], { encoding: "utf8" });
@@ -229,7 +242,9 @@ Attributes = A
       addedEntries: ["core/browser/omni.ja"]
     });
 
-    const browserOmni = execFileSync("7z", ["x", "-so", installerPath, "core/browser/omni.ja"]);
+    const browserOmni = execFileSync("7z", ["x", "-so", installerPath, "core/browser/omni.ja"], {
+      maxBuffer: archivePayloadMaxBuffer
+    });
     const extractedBrowserOmniPath = path.join(tempDirectory, "repaired-complete-browser.omni.ja");
     await writeFile(extractedBrowserOmniPath, browserOmni);
     const browserOmniListing = execFileSync("7z", ["l", extractedBrowserOmniPath], { encoding: "utf8" });

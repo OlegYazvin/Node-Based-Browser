@@ -17,6 +17,7 @@ import { syncRuntimeOmniArchive } from "./sync-overlay.mjs";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const geckoRoot = path.resolve(scriptDirectory, "..");
 const repositoryRoot = path.resolve(geckoRoot, "..");
+const archivePayloadMaxBuffer = 256 * 1024 * 1024;
 
 function usage() {
   console.log(`Usage: node gecko/scripts/repair-windows-installer.mjs [options]
@@ -267,6 +268,7 @@ async function repairNodelyChromePayload(installerPath) {
   try {
     const browserOmniPath = path.join(stagingDirectory, "core", "browser", "omni.ja");
     const browserOmni = execFileSync("7z", ["x", "-so", installerPath, "core/browser/omni.ja"], {
+      maxBuffer: archivePayloadMaxBuffer,
       stdio: ["ignore", "pipe", "pipe"]
     });
 
