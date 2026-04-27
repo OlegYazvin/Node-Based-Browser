@@ -8,6 +8,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import {
+  inspectWindowsBrowserOmniListing,
   inspectWindowsArtifactBundle,
   inspectWindowsInstallerListing,
   isPackagedWindowsInstallerName
@@ -275,7 +276,17 @@ async function repairNodelyChromePayload(installerPath) {
     await mkdir(path.dirname(browserOmniPath), { recursive: true });
     await writeFile(browserOmniPath, browserOmni);
     syncRuntimeOmniArchive(browserOmniPath);
-    run7z(["u", installerPath, "core/browser/omni.ja"], {
+    const repairedBrowserOmniListing = run7z(["l", browserOmniPath]);
+    const repairedBrowserOmniInspection = inspectWindowsBrowserOmniListing(repairedBrowserOmniListing);
+
+    if (!repairedBrowserOmniInspection.hasCompleteNodelyChrome) {
+      throw new Error(
+        `Prepared Windows browser omni is missing Nodely browser chrome files: ${repairedBrowserOmniInspection.missingNodelyFiles.join(", ")}`
+      );
+    }
+
+    run7z(["d", "-y", installerPath, "core/browser/omni.ja"]);
+    run7z(["a", "-y", installerPath, "core/browser/omni.ja"], {
       cwd: stagingDirectory
     });
     return true;
