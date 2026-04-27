@@ -319,6 +319,17 @@ jobs:
             exit 1
           fi
 
+      - name: Sync Nodely overlay into Windows artifact runtime
+        if: matrix.platform == 'win32'
+        run: |
+          set -o pipefail
+
+          if ! npm run gecko:sync -- --checkout-dir "$GECKO_CHECKOUT_DIR" 2>&1 | tee gecko-sync.log; then
+            summary="$(node scripts/summarize-ci-log.mjs --log gecko-sync.log --mode stage)"
+            echo "::error title=Nodely overlay sync failed::$summary"
+            exit 1
+          fi
+
       - name: Refresh artifact-build Nodely branding
         run: npm run gecko:refresh-branding -- --checkout-dir "$GECKO_CHECKOUT_DIR"
 

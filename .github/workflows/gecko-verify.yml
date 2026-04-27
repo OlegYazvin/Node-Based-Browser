@@ -59,8 +59,11 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Resolve Firefox ESR release
+        run: node gecko/scripts/resolve-supported-esr-release.mjs >> "$GITHUB_ENV"
+
       - name: Bootstrap Gecko ESR checkout
-        run: npm run gecko:bootstrap -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
+        run: npm run gecko:bootstrap -- --checkout-dir "$RUNNER_TEMP/firefox-esr" --ref "$FIREFOX_ESR_REF"
 
       - name: Write Gecko mozconfig
         run: npm run gecko:mozconfig -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
@@ -74,6 +77,9 @@ jobs:
           python3.12 ./mach configure
           python3.12 ./mach artifact install
           python3.12 ./mach build faster
+
+      - name: Sync Nodely overlay into artifact runtime
+        run: npm run gecko:sync -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
 
       - name: Refresh artifact-build Nodely branding
         run: npm run gecko:refresh-branding -- --checkout-dir "$RUNNER_TEMP/firefox-esr"
