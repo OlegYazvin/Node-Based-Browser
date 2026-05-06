@@ -315,6 +315,10 @@ describe("refresh-artifact-branding", () => {
       expect(wrapper).toContain('MOZ_APP_REMOTINGNAME="${MOZ_APP_REMOTINGNAME:-nodely}"');
       expect(wrapper).toContain('MOZ_DESKTOP_FILE_NAME="${MOZ_DESKTOP_FILE_NAME:-$desktop_file_name}"');
       expect(wrapper).toContain('NoDisplay=true');
+      expect(wrapper).toContain("MimeType=text/html;text/xml;application/xhtml+xml;");
+      expect(wrapper).toContain('"$applications_dir"/userapp-Nodely-*.desktop');
+      expect(wrapper).toContain("Nodely-Gecko/.*/obj-nodely/dist/nodely/(nodely|nodely-bin)");
+      expect(wrapper).toContain('xdg-mime default "$desktop_file_name" "$mime_type"');
     } finally {
       await rm(tempDirectory, { recursive: true, force: true });
     }

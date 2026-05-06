@@ -193,6 +193,27 @@ describe("BrowserBasicsBridge permission prompt handling", () => {
     expect(panel.hidePopup).not.toHaveBeenCalled();
   });
 
+  it("keeps an unchanged mirrored prompt stable across native popup churn", () => {
+    const { browser, panel, windowRef } = makeWebRTCPromptHarness();
+    const onPermissionPromptChanged = vi.fn();
+    const bridge = new BrowserBasicsBridge(windowRef, {
+      runtimeManager: {
+        nodeIdForBrowser: vi.fn((targetBrowser) =>
+          targetBrowser === browser ? "node-meet" : null
+        )
+      },
+      callbacks: {
+        onPermissionPromptChanged
+      }
+    });
+
+    bridge.syncPermissionPromptState({ hideNative: true });
+    bridge.syncPermissionPromptState({ hideNative: true });
+
+    expect(onPermissionPromptChanged).toHaveBeenCalledTimes(1);
+    expect(panel.hidePopup).not.toHaveBeenCalled();
+  });
+
   it("allows the mirrored persistent storage prompt through the original Gecko callback", async () => {
     const { notification, windowRef } = makePersistentStorageHarness();
     const onPermissionPromptChanged = vi.fn();

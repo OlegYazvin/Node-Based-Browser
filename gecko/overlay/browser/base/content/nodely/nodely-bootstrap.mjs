@@ -1695,10 +1695,21 @@ async function runWebRTCMicrophonePromptScenario({ controller }) {
         window.PopupNotifications?.getNotification?.("webRTC-shareDevices")
     );
   }, "webrtc microphone permission prompt");
-  await waitForCondition(
-    () => window.PopupNotifications?.panel?.state === "open",
-    "webrtc microphone permission panel open"
-  );
+  await waitForCondition(() => {
+    const popupPanel = window.PopupNotifications?.panel ?? null;
+    const popupNotification = popupPanel?.firstElementChild ?? null;
+    const mainButton =
+      popupNotification?.button ??
+      popupPanel?.querySelector?.(".popup-notification-primary-button");
+    const promptNotification = popupNotification?.notification ?? null;
+
+    return Boolean(
+      (popupPanel?.state === "open" || popupPanel?.state === "showing") &&
+        mainButton &&
+        promptNotification &&
+        typeof promptNotification.mainAction?.callback === "function"
+    );
+  }, "webrtc microphone permission controls ready");
   await nextAnimationFrame();
   await nextAnimationFrame();
 

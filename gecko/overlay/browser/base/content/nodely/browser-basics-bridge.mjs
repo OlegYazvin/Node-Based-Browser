@@ -801,6 +801,7 @@ export class BrowserBasicsBridge {
     this.downloadObservers = [];
     this.seenDownloadIds = new Set();
     this.activePermissionPrompt = null;
+    this.activePermissionPromptSnapshotKey = "";
     this.lastFindQuery = "";
     this.handleUploadObserved = this.handleUploadObserved.bind(this);
     this.handleSessionStoreChanged = this.handleSessionStoreChanged.bind(this);
@@ -894,6 +895,7 @@ export class BrowserBasicsBridge {
       if (this.activePermissionPrompt) {
         const closedKind = permissionPromptKindForNotificationId(this.activePermissionPrompt.id);
         this.activePermissionPrompt = null;
+        this.activePermissionPromptSnapshotKey = "";
         this.callbacks.onPermissionPromptChanged?.({ open: false, kind: closedKind });
       }
 
@@ -901,7 +903,11 @@ export class BrowserBasicsBridge {
     }
 
     this.activePermissionPrompt = notification;
-    this.callbacks.onPermissionPromptChanged?.(promptSnapshot);
+    const snapshotKey = JSON.stringify(promptSnapshot);
+    if (snapshotKey !== this.activePermissionPromptSnapshotKey) {
+      this.activePermissionPromptSnapshotKey = snapshotKey;
+      this.callbacks.onPermissionPromptChanged?.(promptSnapshot);
+    }
 
     if (
       hideNative &&
@@ -1041,6 +1047,7 @@ export class BrowserBasicsBridge {
     });
     this.window.PopupNotifications?._remove?.(notification);
     this.activePermissionPrompt = null;
+    this.activePermissionPromptSnapshotKey = "";
     this.callbacks.onPermissionPromptChanged?.({
       open: false,
       kind: permissionPromptKindForNotificationId(notification.id)
@@ -1058,6 +1065,7 @@ export class BrowserBasicsBridge {
     this.window.PopupNotifications?.panel?.hidePopup?.();
     this.window.PopupNotifications?._remove?.(notification);
     this.activePermissionPrompt = null;
+    this.activePermissionPromptSnapshotKey = "";
     this.callbacks.onPermissionPromptChanged?.({
       open: false,
       kind: permissionPromptKindForNotificationId(notification.id)

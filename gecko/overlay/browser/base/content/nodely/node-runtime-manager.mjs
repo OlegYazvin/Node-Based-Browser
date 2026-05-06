@@ -572,10 +572,20 @@ export class NodeRuntimeManager {
     const tab = tabForBrowser(this.window.gBrowser, browser);
 
     if (tab) {
-      this.maybeResolvePendingForeignTab(tab, url);
+      const hasPendingForeignTab = this.pendingForeignTabByTab.has(tab);
+      if (hasPendingForeignTab) {
+        this.maybeResolvePendingForeignTab(tab, url);
+        return;
+      }
 
-      if (this.window.gBrowser?.selectedTab === tab) {
+      const selected = this.window.gBrowser?.selectedTab === tab;
+      if (selected && this.nodeIdForTab(tab)) {
         this.syncNodeMetadataFromTab(tab);
+      } else if (selected && url && !isTransientStartupUrl(url)) {
+        this.callbacks.onUnownedSelectedTabNavigated?.(tab, {
+          url,
+          title: tab?.label || browser?.contentTitle || null
+        });
       }
 
       return;

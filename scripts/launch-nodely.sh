@@ -23,13 +23,61 @@ desktop_exec_escape() {
   printf '%s' "$value"
 }
 
+is_stale_nodely_desktop_id() {
+  case "$1" in
+    nodely.desktop|userapp-Nodely-*.desktop)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+clean_stale_nodely_desktop_entries() {
+  local applications_dir="$1"
+
+  for desktop_path in \
+    "$applications_dir"/nodely.desktop \
+    "$applications_dir"/userapp-Nodely-*.desktop; do
+    [[ -f "$desktop_path" ]] || continue
+
+    if grep -Eq 'Node-Based(\\ | )Browser/scripts/launch-nodely\.sh|Nodely-Gecko/.*/obj-nodely/dist/nodely/(nodely|nodely-bin)' "$desktop_path"; then
+      mv -f "$desktop_path" "$desktop_path.nodely-local-backup" 2>/dev/null || rm -f "$desktop_path" || true
+    fi
+  done
+}
+
+repair_stale_nodely_mime_defaults() {
+  local applications_dir="$1"
+  local desktop_file_name="$2"
+
+  command -v xdg-mime >/dev/null 2>&1 || return 0
+
+  for mime_type in text/html text/xml application/xhtml+xml; do
+    local default_desktop
+    default_desktop="$(xdg-mime query default "$mime_type" 2>/dev/null || true)"
+
+    if [[ "$default_desktop" == "$desktop_file_name" || -z "$default_desktop" ]]; then
+      continue
+    fi
+
+    if is_stale_nodely_desktop_id "$default_desktop" || {
+      [[ -f "$applications_dir/$default_desktop" ]] &&
+        grep -Eq 'Node-Based(\\ | )Browser/scripts/launch-nodely\.sh|Nodely-Gecko/.*/obj-nodely/dist/nodely/(nodely|nodely-bin)' "$applications_dir/$default_desktop"
+    }; then
+      xdg-mime default "$desktop_file_name" "$mime_type" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 ensure_linux_desktop_integration() {
   [[ "$(uname -s)" == "Linux" ]] || return 0
 
   local applications_dir="$HOME/.local/share/applications"
   local icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
   local desktop_file="$applications_dir/nodely-local-build.desktop"
-  local legacy_desktop_file="$applications_dir/nodely.desktop"
+  local desktop_file_name="nodely-local-build.desktop"
   local icon_file="$icon_dir/nodely-local-build.svg"
   local escaped_script_path
 
@@ -39,10 +87,6 @@ ensure_linux_desktop_integration() {
 
   if [[ -f "$repo_root/desktop/nodely-icon.svg" ]]; then
     cp "$repo_root/desktop/nodely-icon.svg" "$icon_file" 2>/dev/null || true
-  fi
-
-  if [[ -f "$legacy_desktop_file" ]] && grep -Eq 'Node-Based(\\ | )Browser/scripts/launch-nodely\.sh' "$legacy_desktop_file"; then
-    mv -f "$legacy_desktop_file" "$legacy_desktop_file.nodely-local-backup" 2>/dev/null || rm -f "$legacy_desktop_file" || true
   fi
 
   cat >"$desktop_file" <<EOF
@@ -62,6 +106,7 @@ X-GNOME-WMClass=nodely
 NoDisplay=true
 Categories=Network;WebBrowser;
 Keywords=browser;research;nodely;graph;
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
 EOF
 
   if command -v update-desktop-database >/dev/null 2>&1; then
@@ -70,6 +115,13 @@ EOF
 
   if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+  fi
+
+  repair_stale_nodely_mime_defaults "$applications_dir" "$desktop_file_name"
+  clean_stale_nodely_desktop_entries "$applications_dir"
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$applications_dir" >/dev/null 2>&1 || true
   fi
 
   if command -v kbuildsycoca6 >/dev/null 2>&1; then

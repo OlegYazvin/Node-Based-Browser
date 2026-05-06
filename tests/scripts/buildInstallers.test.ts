@@ -37,6 +37,16 @@ describe("build-installers wrappers", () => {
 
     expect(entry).toContain("TryExec=/usr/bin/nodely-browser");
     expect(entry).toContain("Exec=/usr/bin/nodely-browser %u");
+    expect(entry).toContain("MimeType=text/html;text/xml;application/xhtml+xml;");
+  });
+
+  it("keeps the local launcher registered for HTML files and repairs stale Nodely MIME defaults", async () => {
+    const launcher = await readFile(path.join(process.cwd(), "scripts", "launch-nodely.sh"), "utf8");
+
+    expect(launcher).toContain("MimeType=text/html;text/xml;application/xhtml+xml;");
+    expect(launcher).toContain('"$applications_dir"/userapp-Nodely-*.desktop');
+    expect(launcher).toContain("Nodely-Gecko/.*/obj-nodely/dist/nodely/(nodely|nodely-bin)");
+    expect(launcher).toContain('xdg-mime default "$desktop_file_name" "$mime_type"');
   });
 
   it("uses session-aware backend detection for system installs", () => {

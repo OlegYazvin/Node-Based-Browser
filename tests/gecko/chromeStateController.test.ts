@@ -265,6 +265,63 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     expect(runtimeManager.loadNode).not.toHaveBeenCalled();
   });
 
+  it("adopts a late desktop file startup URL into an empty workspace", async () => {
+    let workspace = createEmptyWorkspace();
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const startupTab = {
+      label: "Nodely Desktop HTML Smoke",
+      linkedBrowser: {
+        currentURI: { spec: "about:blank" },
+        contentTitle: "",
+        canGoBack: false,
+        canGoForward: false,
+        isLoadingDocument: false
+      }
+    };
+    (runtimeManager.window.gBrowser as any).selectedTab = startupTab;
+    runtimeManager.adoptOpenedTab.mockImplementation((nodeId?: string, tab?: unknown) => {
+      runtimeManager.tabForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? (tab as { id: string } | null) ?? null : null
+      );
+      runtimeManager.currentUrlForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? "file:///tmp/nodely-desktop-smoke.html" : null
+      );
+    });
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      compatExtensionsStore: null,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+    startupTab.linkedBrowser.currentURI.spec = "file:///tmp/nodely-desktop-smoke.html";
+    startupTab.linkedBrowser.contentTitle = "Nodely Desktop HTML Smoke";
+    await (runtimeManager.callbacks as any).onUnownedSelectedTabNavigated(startupTab, {
+      url: "file:///tmp/nodely-desktop-smoke.html",
+      title: "Nodely Desktop HTML Smoke"
+    });
+
+    expect(workspace.nodes).toHaveLength(1);
+    const root = findNode(workspace, workspace.selectedNodeId);
+    expect(root?.parentId).toBeNull();
+    expect(root?.url).toBe("file:///tmp/nodely-desktop-smoke.html");
+    expect(root?.title).toBe("Nodely Desktop HTML Smoke");
+    expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(workspace.selectedNodeId, startupTab);
+    expect(runtimeManager.loadNode).not.toHaveBeenCalled();
+  });
+
   it("adopts a pending startup URL in a new window as a child of the opener node", async () => {
     let workspace = createRootNode(createEmptyWorkspace());
     const rootId = workspace.selectedNodeId as string;

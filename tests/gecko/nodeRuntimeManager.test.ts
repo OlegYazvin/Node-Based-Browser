@@ -190,6 +190,32 @@ describe("NodeRuntimeManager Gecko tab ownership", () => {
     expect(onForeignTabOpen).not.toHaveBeenCalled();
   });
 
+  it("reports a selected unowned startup tab when its real file URL commits late", () => {
+    const windowRef = makeWindow();
+    const onUnownedSelectedTabNavigated = vi.fn();
+    const manager = new NodeRuntimeManager(windowRef, {
+      onUnownedSelectedTabNavigated
+    });
+
+    manager.attach();
+    windowRef.primaryTab.linkedBrowser.currentURI.spec = "file:///tmp/nodely-desktop-smoke.html";
+    manager.progressListener.onLocationChange(
+      windowRef.primaryTab.linkedBrowser,
+      null,
+      null,
+      { spec: "file:///tmp/nodely-desktop-smoke.html" } as any,
+      null
+    );
+
+    expect(onUnownedSelectedTabNavigated).toHaveBeenCalledWith(
+      windowRef.primaryTab,
+      expect.objectContaining({
+        url: "file:///tmp/nodely-desktop-smoke.html",
+        title: "Tab primary"
+      })
+    );
+  });
+
   it("classifies opener-owned OAuth tabs as transient auth flows instead of child graph nodes", () => {
     const windowRef = makeWindow();
     const onForeignTabOpen = vi.fn();

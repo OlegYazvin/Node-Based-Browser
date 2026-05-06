@@ -18,6 +18,11 @@
   box-shadow: none !important;
 }
 
+:root[nodely-active="true"] #notification-popup,
+:root[nodely-active="true"] #notification-popup * {
+  pointer-events: auto !important;
+}
+
 :root[nodely-active="true"] #TabsToolbar {
   min-height: 0 !important;
   max-height: 0 !important;

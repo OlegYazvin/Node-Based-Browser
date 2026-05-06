@@ -65,6 +65,7 @@ export class ChromeStateController extends EventTarget {
     this.favorites = [];
     this.favoriteJumpBackNodeId = null;
     this.favoriteJumpForwardNodeId = null;
+    this.pendingUnownedSelectedTabAdoptions = new WeakSet();
     this.chrome = createChromeState();
     this.basicsBridge.callbacks = {
       ...(this.basicsBridge.callbacks ?? {}),
@@ -84,6 +85,8 @@ export class ChromeStateController extends EventTarget {
     this.runtimeManager.callbacks.onForeignOpenPending = (details) => this.handleForeignOpenPending(details);
     this.runtimeManager.callbacks.onForeignOpenCancelled = (details) => this.handleForeignOpenCancelled(details);
     this.runtimeManager.callbacks.onForeignTabOpen = (tab, details) => this.handleForeignTabOpen(tab, details);
+    this.runtimeManager.callbacks.onUnownedSelectedTabNavigated = (tab, details) =>
+      this.handleUnownedSelectedTabNavigated(tab, details);
     this.runtimeManager.callbacks.onTransientAuthChanged = (details) => this.handleTransientAuthChanged(details);
   }
 
@@ -234,6 +237,58 @@ export class ChromeStateController extends EventTarget {
       pendingStartupUrl: liveStartupUrl == null
     });
     return true;
+  }
+
+  async handleUnownedSelectedTabNavigated(tab, details = {}) {
+    if (
+      !this.workspace ||
+      !tab ||
+      this.pendingUnownedSelectedTabAdoptions.has(tab) ||
+      this.runtimeManager.nodeIdForTab?.(tab)
+    ) {
+      return false;
+    }
+
+    const browser = tab.linkedBrowser ?? null;
+    const url = details?.url ?? browser?.currentURI?.spec ?? null;
+
+    if (!browser || !url || isTransientStartupUrl(url)) {
+      return false;
+    }
+
+    this.pendingUnownedSelectedTabAdoptions.add(tab);
+
+    try {
+      let nextWorkspace = createRootNode(this.workspace);
+      const targetNodeId = nextWorkspace.selectedNodeId;
+
+      nextWorkspace = relayoutWorkspace(
+        setSurfaceMode(
+          updateNodeMetadata(nextWorkspace, targetNodeId, {
+            title: details?.title || tab.label || browser.contentTitle || "Untitled page",
+            url,
+            faviconUrl: this.runtimeManager.window?.gBrowser?.getIcon?.(tab) ?? null,
+            canGoBack: browser.canGoBack ?? false,
+            canGoForward: browser.canGoForward ?? false,
+            runtimeState: browser.isLoadingDocument ? "loading" : "live",
+            errorMessage: null
+          }),
+          "page"
+        )
+      );
+
+      this.workspace = await this.workspaceStore.saveWorkspace(nextWorkspace);
+      this.runtimeManager.adoptOpenedTab(targetNodeId, tab);
+      this.trace("unowned-selected-tab-adopted", {
+        nodeId: targetNodeId,
+        url
+      });
+      this.emitStateChange();
+      this.scheduleTreeTitleRefresh();
+      return true;
+    } finally {
+      this.pendingUnownedSelectedTabAdoptions.delete(tab);
+    }
   }
 
   async persistWorkspace(nextWorkspaceOrUpdater, { scheduleTreeTitleRefresh = true } = {}) {
