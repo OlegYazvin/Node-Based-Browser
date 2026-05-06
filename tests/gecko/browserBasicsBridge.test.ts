@@ -261,6 +261,80 @@ describe("BrowserBasicsBridge permission prompt handling", () => {
       kind: "media-devices"
     });
   });
+
+  it("routes mirrored WebRTC allow through Gecko's live primary button when present", async () => {
+    const { notification, panel, windowRef } = makeWebRTCPromptHarness();
+    const onPermissionPromptChanged = vi.fn();
+    const primaryButton = {
+      disabled: false,
+      doCommand: vi.fn()
+    };
+    (panel as any).firstElementChild = {
+      notification,
+      button: primaryButton,
+      checkbox: {
+        checked: false
+      }
+    };
+    const bridge = new BrowserBasicsBridge(windowRef, {
+      callbacks: {
+        onPermissionPromptChanged
+      }
+    });
+
+    bridge.activePermissionPrompt = notification;
+
+    await expect(bridge.resolvePermissionPrompt("allow")).resolves.toBe(true);
+
+    expect(primaryButton.doCommand).toHaveBeenCalledTimes(1);
+    expect(notification.mainAction.callback).not.toHaveBeenCalled();
+    expect(windowRef.PopupNotifications._remove).not.toHaveBeenCalled();
+    expect(onPermissionPromptChanged).toHaveBeenLastCalledWith({
+      open: false,
+      kind: "media-devices"
+    });
+  });
+
+  it("keeps mirrored WebRTC allow disabled while Gecko is waiting for device selection", async () => {
+    const { browser, notification, panel, windowRef } = makeWebRTCPromptHarness();
+    const onPermissionPromptChanged = vi.fn();
+    const primaryButton = {
+      disabled: true,
+      doCommand: vi.fn()
+    };
+    (panel as any).firstElementChild = {
+      notification,
+      button: primaryButton,
+      checkbox: {
+        checked: false
+      }
+    };
+    const bridge = new BrowserBasicsBridge(windowRef, {
+      runtimeManager: {
+        nodeIdForBrowser: vi.fn((targetBrowser) =>
+          targetBrowser === browser ? "node-zoom" : null
+        )
+      },
+      callbacks: {
+        onPermissionPromptChanged
+      }
+    });
+
+    bridge.syncPermissionPromptState({ hideNative: true });
+    await expect(bridge.resolvePermissionPrompt("allow")).resolves.toBe(false);
+
+    expect(onPermissionPromptChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        open: true,
+        kind: "media-devices",
+        nodeId: "node-zoom",
+        allowDisabled: true
+      })
+    );
+    expect(primaryButton.doCommand).not.toHaveBeenCalled();
+    expect(notification.mainAction.callback).not.toHaveBeenCalled();
+    expect(windowRef.PopupNotifications._remove).not.toHaveBeenCalled();
+  });
 });
 
 describe("BrowserBasicsBridge compat extension management", () => {

@@ -300,13 +300,70 @@ function shouldHideNativePermissionPrompt(notification) {
   return notification.id !== "webRTC-shareDevices";
 }
 
-function snapshotPermissionPrompt(notification, browser, nodeId = null) {
+function popupNotificationElementForNotification(panel, notification) {
+  if (!panel || !notification) {
+    return null;
+  }
+
+  const children = Array.from(panel.children ?? []);
+  const matchingChild = children.find(
+    (child) =>
+      child?.notification === notification ||
+      child?._notification === notification ||
+      child?.notification?.id === notification.id ||
+      child?._notification?.id === notification.id
+  );
+
+  return matchingChild ?? panel.firstElementChild ?? null;
+}
+
+function popupNotificationButton(popupNotification, action = "allow") {
+  if (!popupNotification) {
+    return null;
+  }
+
+  if (action === "block") {
+    return (
+      popupNotification.secondaryButton ??
+      popupNotification.querySelector?.(".popup-notification-secondary-button") ??
+      null
+    );
+  }
+
+  return (
+    popupNotification.button ??
+    popupNotification.querySelector?.(".popup-notification-primary-button") ??
+    null
+  );
+}
+
+function activatePopupNotificationButton(button) {
+  if (!button || button.disabled) {
+    return false;
+  }
+
+  if (typeof button.doCommand === "function") {
+    button.doCommand();
+    return true;
+  }
+
+  if (typeof button.click === "function") {
+    button.click();
+    return true;
+  }
+
+  return false;
+}
+
+function snapshotPermissionPrompt(notification, browser, nodeId = null, popupNotification = null) {
   if (!notification || !MIRRORED_PERMISSION_NOTIFICATION_IDS.includes(notification.id)) {
     return null;
   }
 
   const requestingUrl = safeSpec(browser?.currentURI) ?? null;
   const rawMessage = String(notification?.message ?? "").trim();
+  const allowButton = popupNotificationButton(popupNotification, "allow");
+  const blockButton = popupNotificationButton(popupNotification, "block");
 
   if (notification.id === "webRTC-shareDevices") {
     return {
@@ -320,7 +377,9 @@ function snapshotPermissionPrompt(notification, browser, nodeId = null) {
         rawMessage ||
         `Allow ${notification?.options?.name ?? requestingUrl ?? "this site"} to use media devices?`,
       allowLabel: notification.mainAction?.label ?? "Allow",
-      blockLabel: notification.secondaryActions?.[0]?.label ?? null
+      allowDisabled: Boolean(allowButton?.disabled),
+      blockLabel: notification.secondaryActions?.[0]?.label ?? null,
+      blockDisabled: Boolean(blockButton?.disabled)
     };
   }
 
@@ -333,7 +392,9 @@ function snapshotPermissionPrompt(notification, browser, nodeId = null) {
     title: notification.options?.name ?? browser?.contentTitle ?? "Persistent Storage Request",
     body: formatPermissionPromptBody(notification, browser),
     allowLabel: notification.mainAction?.label ?? "Allow",
-    blockLabel: notification.secondaryActions?.[0]?.label ?? "Block"
+    allowDisabled: Boolean(allowButton?.disabled),
+    blockLabel: notification.secondaryActions?.[0]?.label ?? "Block",
+    blockDisabled: Boolean(blockButton?.disabled)
   };
 }
 
@@ -885,10 +946,15 @@ export class BrowserBasicsBridge {
   syncPermissionPromptState({ hideNative = false } = {}) {
     const browser = this.window.gBrowser?.selectedBrowser ?? null;
     const notification = this.getActivePermissionNotification();
+    const popupNotification = popupNotificationElementForNotification(
+      this.window.PopupNotifications?.panel,
+      notification
+    );
     const promptSnapshot = snapshotPermissionPrompt(
       notification,
       browser,
-      this.runtimeManager?.nodeIdForBrowser?.(browser) ?? null
+      this.runtimeManager?.nodeIdForBrowser?.(browser) ?? null,
+      popupNotification
     );
 
     if (!promptSnapshot) {
@@ -1031,7 +1097,26 @@ export class BrowserBasicsBridge {
       return false;
     }
 
-    const popupNotification = this.window.PopupNotifications?.panel?.firstElementChild ?? null;
+    const popupNotification = popupNotificationElementForNotification(
+      this.window.PopupNotifications?.panel,
+      notification
+    );
+    const popupButton = popupNotificationButton(popupNotification, action);
+
+    if (notification.id === "webRTC-shareDevices" && popupButton) {
+      if (!activatePopupNotificationButton(popupButton)) {
+        return false;
+      }
+
+      this.activePermissionPrompt = null;
+      this.activePermissionPromptSnapshotKey = "";
+      this.callbacks.onPermissionPromptChanged?.({
+        open: false,
+        kind: permissionPromptKindForNotificationId(notification.id)
+      });
+      return true;
+    }
+
     const callback =
       action === "block"
         ? notification.secondaryActions?.[0]?.callback

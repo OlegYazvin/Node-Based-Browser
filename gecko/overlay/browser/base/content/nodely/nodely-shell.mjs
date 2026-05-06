@@ -2910,14 +2910,16 @@ export class NodelyShell extends HTMLElement {
       const actions = [
         {
           label: permissionPrompt.allowLabel || "Allow",
-          action: "allow-permission-prompt"
+          action: "allow-permission-prompt",
+          disabled: permissionPrompt.allowDisabled === true
         }
       ];
 
       if (permissionPrompt.blockLabel) {
         actions.push({
           label: permissionPrompt.blockLabel,
-          action: "block-permission-prompt"
+          action: "block-permission-prompt",
+          disabled: permissionPrompt.blockDisabled === true
         });
       }
 
@@ -4390,7 +4392,8 @@ function createPromptCard(documentRef, { title, body, secondary, action = null, 
       actionRow.append(
         createActionButton(documentRef, entry.label, "nodely-shell__drawer-pill", {
           action: entry.action,
-          dataset: entry.dataset
+          dataset: entry.dataset,
+          disabled: entry.disabled === true
         })
       );
     });
