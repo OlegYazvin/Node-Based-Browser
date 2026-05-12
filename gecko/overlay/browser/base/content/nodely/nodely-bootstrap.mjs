@@ -365,6 +365,7 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         width: Math.round(rect.width),
         height: Math.round(rect.height),
         visibility: style.visibility,
+        opacity: style.opacity,
         pointerEvents: style.pointerEvents,
         marginTop: style.marginTop,
         marginInlineStart: style.marginInlineStart
@@ -674,6 +675,9 @@ function installTestBridge({ shell, controller, workspaceStore, favoritesStore, 
         webrtcPrompt: {
           visible: Boolean(webRTCPrompt),
           panelState: popupPanel?.state ?? "",
+          nativeSuppressed:
+            document.documentElement?.getAttribute("nodely-native-webrtc-prompt-suppressed") ===
+            "true",
           anchorId: popupAnchorId,
           anchorConnected: Boolean(popupAnchor?.isConnected),
           anchorHidden: Boolean(popupAnchor?.hidden),
@@ -1712,29 +1716,33 @@ async function runWebRTCMicrophonePromptScenario({ controller }) {
   }, "webrtc microphone permission controls ready");
   await nextAnimationFrame();
   await nextAnimationFrame();
+  await waitForCondition(() => {
+    const popupPanel = window.PopupNotifications?.panel ?? null;
+    const panelStyle = popupPanel ? window.getComputedStyle(popupPanel) : null;
+    const nodelyAllowButton = document.querySelector(
+      '.nodely-shell__prompt-stack [data-action="allow-permission-prompt"]'
+    );
+
+    return (
+      document.documentElement?.getAttribute("nodely-native-webrtc-prompt-suppressed") ===
+        "true" &&
+      panelStyle?.opacity === "0" &&
+      panelStyle?.pointerEvents === "none" &&
+      Boolean(nodelyAllowButton && !nodelyAllowButton.disabled)
+    );
+  }, "webrtc native prompt suppressed behind Nodely controls");
 
   const popupNotification = window.PopupNotifications?.panel?.firstElementChild ?? null;
   const mainButton =
     popupNotification?.button ??
     window.PopupNotifications?.panel?.querySelector?.(".popup-notification-primary-button");
-  const promptNotification = popupNotification?.notification ?? null;
 
   if (!mainButton) {
     throw new Error("Smoke webrtc-microphone-prompt scenario could not find the Allow button.");
   }
 
   if (!smokeManualWebRTCConfirm()) {
-    if (typeof promptNotification?.mainAction?.callback === "function") {
-      await promptNotification.mainAction.callback({
-        checkboxChecked: Boolean(popupNotification?.checkbox?.checked),
-        source: "smoke"
-      });
-      window.PopupNotifications?._remove?.(promptNotification);
-    } else if (typeof mainButton.doCommand === "function") {
-      mainButton.doCommand();
-    } else {
-      mainButton.click();
-    }
+    await controller.allowPermissionPrompt();
   }
   await waitForCondition(() => {
     const selectedBrowser = window.gBrowser?.selectedBrowser ?? null;

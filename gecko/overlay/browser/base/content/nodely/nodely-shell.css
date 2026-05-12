@@ -23,6 +23,15 @@
   pointer-events: auto !important;
 }
 
+:root[nodely-active="true"][nodely-native-webrtc-prompt-suppressed="true"] #notification-popup {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+:root[nodely-active="true"][nodely-native-webrtc-prompt-suppressed="true"] #notification-popup * {
+  pointer-events: none !important;
+}
+
 :root[nodely-active="true"] #TabsToolbar {
   min-height: 0 !important;
   max-height: 0 !important;

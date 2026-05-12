@@ -148,6 +148,9 @@ jobs:
             echo "Validated $app_bundle"
           done < <(find "$dist_dir" -type d -name '*.app' | sort)
 
+      - name: Materialize macOS app bundle symlinks before packaging
+        run: node scripts/materialize-macos-app-symlinks.mjs "$GECKO_CHECKOUT_DIR/obj-nodely/dist"
+
       - name: Package Gecko build
         env:
           MOZCONFIG: mozconfig.nodely
@@ -162,6 +165,9 @@ jobs:
             echo "::error title=Gecko package failed::$summary"
             exit 1
           fi
+
+      - name: Materialize macOS app bundle symlinks after packaging
+        run: node scripts/materialize-macos-app-symlinks.mjs "$GECKO_CHECKOUT_DIR/obj-nodely/dist"
 
       - name: Sign and notarize macOS DMG
         if: steps.macos_signing_mode.outputs.mode == 'notarized'
@@ -303,6 +309,8 @@ jobs:
                 exit 1
               fi
 
+              node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
+
               if codesign_output="$(codesign --display --verbose=2 "$app_bundle" 2>&1)"; then
                 printf '%s\n' "$codesign_output"
               else
@@ -364,6 +372,8 @@ jobs:
                 echo "Missing extracted macOS app executable $executable_path." >&2
                 exit 1
               fi
+
+              node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
             )
           done
 
@@ -422,6 +432,8 @@ jobs:
                   echo "Missing extracted macOS app executable $executable_path." >&2
                   exit 1
                 fi
+
+                node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
               )
 
               echo "::warning title=Unsigned macOS archive published::$(basename "$artifact") will require Privacy & Security -> Open Anyway on the destination Mac."
@@ -461,6 +473,8 @@ jobs:
                   echo "No macOS app bundle was found inside $artifact during Gatekeeper assessment." >&2
                   exit 1
                 fi
+
+                node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
 
                 if app_assessment="$(spctl --assess --type execute --verbose=4 "$app_bundle" 2>&1)"; then
                   printf '%s\n' "$app_assessment"

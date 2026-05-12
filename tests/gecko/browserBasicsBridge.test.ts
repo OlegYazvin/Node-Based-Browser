@@ -38,8 +38,15 @@ function makePersistentStorageHarness() {
       }
     }
   };
+  const documentElement = {
+    setAttribute: vi.fn(),
+    removeAttribute: vi.fn()
+  };
 
   const windowRef = {
+    document: {
+      documentElement
+    },
     gBrowser: {
       selectedBrowser: browser,
       tabContainer: {
@@ -57,6 +64,7 @@ function makePersistentStorageHarness() {
   return {
     browser,
     notification,
+    documentElement,
     panel,
     windowRef
   };
@@ -99,8 +107,15 @@ function makeWebRTCPromptHarness() {
       }
     }
   };
+  const documentElement = {
+    setAttribute: vi.fn(),
+    removeAttribute: vi.fn()
+  };
 
   const windowRef = {
+    document: {
+      documentElement
+    },
     gBrowser: {
       selectedBrowser: browser,
       tabContainer: {
@@ -118,6 +133,7 @@ function makeWebRTCPromptHarness() {
   return {
     browser,
     notification,
+    documentElement,
     panel,
     windowRef
   };
@@ -158,8 +174,8 @@ describe("BrowserBasicsBridge permission prompt handling", () => {
     expect(panel.hidePopup).toHaveBeenCalledTimes(1);
   });
 
-  it("mirrors the WebRTC camera and microphone prompt into Nodely", () => {
-    const { browser, notification, panel, windowRef } = makeWebRTCPromptHarness();
+  it("mirrors the WebRTC camera and microphone prompt into Nodely while suppressing the native panel", () => {
+    const { browser, documentElement, notification, panel, windowRef } = makeWebRTCPromptHarness();
     const onPermissionPromptChanged = vi.fn();
     const bridge = new BrowserBasicsBridge(windowRef, {
       runtimeManager: {
@@ -191,6 +207,10 @@ describe("BrowserBasicsBridge permission prompt handling", () => {
       })
     );
     expect(panel.hidePopup).not.toHaveBeenCalled();
+    expect(documentElement.setAttribute).toHaveBeenCalledWith(
+      "nodely-native-webrtc-prompt-suppressed",
+      "true"
+    );
   });
 
   it("keeps an unchanged mirrored prompt stable across native popup churn", () => {
@@ -238,7 +258,7 @@ describe("BrowserBasicsBridge permission prompt handling", () => {
     });
   });
 
-  it("allows the mirrored WebRTC prompt through the original Gecko callback", async () => {
+  it("does not bypass the live WebRTC picker when the native button is missing", async () => {
     const { notification, windowRef } = makeWebRTCPromptHarness();
     const onPermissionPromptChanged = vi.fn();
     const bridge = new BrowserBasicsBridge(windowRef, {
@@ -249,20 +269,23 @@ describe("BrowserBasicsBridge permission prompt handling", () => {
 
     bridge.activePermissionPrompt = notification;
 
-    await expect(bridge.resolvePermissionPrompt("allow")).resolves.toBe(true);
+    await expect(bridge.resolvePermissionPrompt("allow")).resolves.toBe(false);
 
-    expect(notification.mainAction.callback).toHaveBeenCalledWith({
-      checkboxChecked: false,
-      source: "nodely"
-    });
-    expect(windowRef.PopupNotifications._remove).toHaveBeenCalledWith(notification);
-    expect(onPermissionPromptChanged).toHaveBeenLastCalledWith({
+    expect(notification.mainAction.callback).not.toHaveBeenCalled();
+    expect(windowRef.PopupNotifications._remove).not.toHaveBeenCalled();
+    expect(onPermissionPromptChanged).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        open: true,
+        kind: "media-devices"
+      })
+    );
+    expect(onPermissionPromptChanged).not.toHaveBeenCalledWith({
       open: false,
       kind: "media-devices"
     });
   });
 
-  it("routes mirrored WebRTC allow through Gecko's live primary button when present", async () => {
+  it("resolves mirrored WebRTC allow through Gecko's live prompt callback when the picker is present", async () => {
     const { notification, panel, windowRef } = makeWebRTCPromptHarness();
     const onPermissionPromptChanged = vi.fn();
     const primaryButton = {
@@ -286,9 +309,12 @@ describe("BrowserBasicsBridge permission prompt handling", () => {
 
     await expect(bridge.resolvePermissionPrompt("allow")).resolves.toBe(true);
 
-    expect(primaryButton.doCommand).toHaveBeenCalledTimes(1);
-    expect(notification.mainAction.callback).not.toHaveBeenCalled();
-    expect(windowRef.PopupNotifications._remove).not.toHaveBeenCalled();
+    expect(primaryButton.doCommand).not.toHaveBeenCalled();
+    expect(notification.mainAction.callback).toHaveBeenCalledWith({
+      checkboxChecked: false,
+      source: "nodely"
+    });
+    expect(windowRef.PopupNotifications._remove).toHaveBeenCalledWith(notification);
     expect(onPermissionPromptChanged).toHaveBeenLastCalledWith({
       open: false,
       kind: "media-devices"

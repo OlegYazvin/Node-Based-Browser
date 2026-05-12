@@ -3,6 +3,8 @@
 set -euo pipefail
 
 check_env_only=0
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repository_root="$(cd "$script_dir/.." && pwd)"
 
 if [[ "${1:-}" == "--check-env-only" ]]; then
   check_env_only=1
@@ -164,6 +166,7 @@ for dmg in "${dmgs[@]}"; do
     app_name="$(basename "$app_bundle")"
     signed_app="$payload_dir/$app_name"
     /usr/bin/ditto "$app_bundle" "$signed_app"
+    node "$repository_root/scripts/materialize-macos-app-symlinks.mjs" "$signed_app"
 
     hdiutil detach "$mount_dir" -force >/dev/null
     mounted=0

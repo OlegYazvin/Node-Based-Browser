@@ -15,6 +15,8 @@ const SESSION_CLOSED_OBJECTS_TOPIC = "sessionstore-closed-objects-changed";
 const SESSION_LAST_CLEARED_TOPIC = "sessionstore-last-session-cleared";
 const SESSION_LAST_ENABLED_TOPIC = "sessionstore-last-session-re-enable";
 const MIRRORED_PERMISSION_NOTIFICATION_IDS = ["webRTC-shareDevices", "persistent-storage"];
+const NATIVE_WEBRTC_PROMPT_SUPPRESSED_ATTR = "nodely-native-webrtc-prompt-suppressed";
+const POPUP_NOTIFICATION_SECURITY_DELAY_PREF = "security.notification_enable_delay";
 
 const lazy = {};
 const ServicesRef = globalThis.Services ?? null;
@@ -337,22 +339,45 @@ function popupNotificationButton(popupNotification, action = "allow") {
   );
 }
 
-function activatePopupNotificationButton(button) {
-  if (!button || button.disabled) {
-    return false;
+function popupNotificationSecurityDelayRemaining(notification) {
+  const chromeUtils = globalThis.Cu ?? null;
+
+  const delayStartedAt = Number.isFinite(notification?.timeShown)
+    ? notification.timeShown
+    : notification?.timeCreated;
+
+  if (!Number.isFinite(delayStartedAt) || typeof chromeUtils?.now !== "function") {
+    return 0;
   }
 
-  if (typeof button.doCommand === "function") {
-    button.doCommand();
-    return true;
+  const delayMs =
+    ServicesRef?.prefs?.getIntPref?.(POPUP_NOTIFICATION_SECURITY_DELAY_PREF, 0) ?? 0;
+
+  if (!Number.isFinite(delayMs) || delayMs <= 0) {
+    return 0;
   }
 
-  if (typeof button.click === "function") {
-    button.click();
-    return true;
+  return Math.max(0, delayMs - (chromeUtils.now() - delayStartedAt));
+}
+
+async function waitForPopupNotificationSecurityDelay(windowRef, notification) {
+  const remainingMs = popupNotificationSecurityDelayRemaining(notification);
+
+  if (remainingMs <= 0) {
+    return;
   }
 
-  return false;
+  await new Promise((resolve) => {
+    const setTimer = windowRef?.setTimeout?.bind?.(windowRef) ?? globalThis.setTimeout;
+    setTimer(resolve, remainingMs + 25);
+  });
+}
+
+async function nextChromeTick(windowRef) {
+  await new Promise((resolve) => {
+    const setTimer = windowRef?.setTimeout?.bind?.(windowRef) ?? globalThis.setTimeout;
+    setTimer(resolve, 0);
+  });
 }
 
 function snapshotPermissionPrompt(notification, browser, nodeId = null, popupNotification = null) {
@@ -943,6 +968,20 @@ export class BrowserBasicsBridge {
     return null;
   }
 
+  setNativeWebRTCPromptSuppressed(suppressed) {
+    const root = this.window.document?.documentElement;
+
+    if (!root) {
+      return;
+    }
+
+    if (suppressed) {
+      root.setAttribute(NATIVE_WEBRTC_PROMPT_SUPPRESSED_ATTR, "true");
+    } else {
+      root.removeAttribute(NATIVE_WEBRTC_PROMPT_SUPPRESSED_ATTR);
+    }
+  }
+
   syncPermissionPromptState({ hideNative = false } = {}) {
     const browser = this.window.gBrowser?.selectedBrowser ?? null;
     const notification = this.getActivePermissionNotification();
@@ -958,6 +997,8 @@ export class BrowserBasicsBridge {
     );
 
     if (!promptSnapshot) {
+      this.setNativeWebRTCPromptSuppressed(false);
+
       if (this.activePermissionPrompt) {
         const closedKind = permissionPromptKindForNotificationId(this.activePermissionPrompt.id);
         this.activePermissionPrompt = null;
@@ -969,6 +1010,7 @@ export class BrowserBasicsBridge {
     }
 
     this.activePermissionPrompt = notification;
+    this.setNativeWebRTCPromptSuppressed(notification.id === "webRTC-shareDevices");
     const snapshotKey = JSON.stringify(promptSnapshot);
     if (snapshotKey !== this.activePermissionPromptSnapshotKey) {
       this.activePermissionPromptSnapshotKey = snapshotKey;
@@ -1097,17 +1139,50 @@ export class BrowserBasicsBridge {
       return false;
     }
 
-    const popupNotification = popupNotificationElementForNotification(
+    let popupNotification = popupNotificationElementForNotification(
       this.window.PopupNotifications?.panel,
       notification
     );
-    const popupButton = popupNotificationButton(popupNotification, action);
+    let popupButton = popupNotificationButton(popupNotification, action);
 
-    if (notification.id === "webRTC-shareDevices" && popupButton) {
-      if (!activatePopupNotificationButton(popupButton)) {
+    if (notification.id === "webRTC-shareDevices") {
+      if (!popupNotification || !popupButton) {
+        const anchor = notification.anchorElement ?? null;
+        const browser = this.window.gBrowser?.selectedBrowser ?? null;
+        this.window.PopupNotifications?._reshowNotifications?.(anchor, browser);
+        this.syncPermissionPromptState();
         return false;
       }
 
+      const callback =
+        action === "block"
+          ? notification.secondaryActions?.[0]?.callback
+          : notification.mainAction?.callback;
+
+      if (typeof callback !== "function") {
+        return false;
+      }
+
+      this.window.focus?.();
+      await waitForPopupNotificationSecurityDelay(this.window, notification);
+      await nextChromeTick(this.window);
+      popupNotification = popupNotificationElementForNotification(
+        this.window.PopupNotifications?.panel,
+        notification
+      );
+      popupButton = popupNotificationButton(popupNotification, action);
+
+      if (!popupNotification || !popupButton || popupButton.disabled) {
+        this.syncPermissionPromptState();
+        return false;
+      }
+
+      await callback({
+        checkboxChecked: Boolean(popupNotification?.checkbox?.checked),
+        source: "nodely"
+      });
+      this.window.PopupNotifications?._remove?.(notification);
+      this.setNativeWebRTCPromptSuppressed(false);
       this.activePermissionPrompt = null;
       this.activePermissionPromptSnapshotKey = "";
       this.callbacks.onPermissionPromptChanged?.({
@@ -1131,6 +1206,7 @@ export class BrowserBasicsBridge {
       source: "nodely"
     });
     this.window.PopupNotifications?._remove?.(notification);
+    this.setNativeWebRTCPromptSuppressed(false);
     this.activePermissionPrompt = null;
     this.activePermissionPromptSnapshotKey = "";
     this.callbacks.onPermissionPromptChanged?.({
@@ -1149,6 +1225,7 @@ export class BrowserBasicsBridge {
 
     this.window.PopupNotifications?.panel?.hidePopup?.();
     this.window.PopupNotifications?._remove?.(notification);
+    this.setNativeWebRTCPromptSuppressed(false);
     this.activePermissionPrompt = null;
     this.activePermissionPromptSnapshotKey = "";
     this.callbacks.onPermissionPromptChanged?.({
