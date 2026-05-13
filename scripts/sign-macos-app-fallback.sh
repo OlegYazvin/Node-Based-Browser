@@ -50,6 +50,32 @@ while IFS= read -r -d '' signing_path; do
   codesign --remove-signature "$signing_path" >/dev/null 2>&1 || true
 done < <(find "$app_bundle" -print0)
 
+run_logged() {
+  local label="$1"
+  shift
+
+  local output=""
+  local status=0
+
+  set +e
+  output="$("$@" 2>&1)"
+  status=$?
+  set -e
+
+  if [[ -n "$output" ]]; then
+    printf '%s\n' "$output"
+  fi
+
+  if [[ "$status" -ne 0 ]]; then
+    local message="${output:-Command exited with status $status.}"
+    message="${message//'%'/'%25'}"
+    message="${message//$'\r'/'%0D'}"
+    message="${message//$'\n'/'%0A'}"
+    echo "::error title=$label failed::$message"
+    return "$status"
+  fi
+}
+
 sign_existing_paths() {
   local label="$1"
   shift
@@ -79,13 +105,15 @@ sign_existing_paths() {
 
   echo "Ad-hoc signing $label (${#paths[@]} path(s))."
 
-  local codesign_command=(codesign --sign - --force --options runtime)
+  local codesign_command=(codesign --sign - --force --timestamp=none --options runtime)
   if [[ -n "$entitlement_file" ]]; then
     codesign_command+=(--entitlements "$entitlement_file")
   fi
 
-  codesign_command+=("${paths[@]}")
-  "${codesign_command[@]}"
+  local path_to_sign=""
+  for path_to_sign in "${paths[@]}"; do
+    run_logged "codesign $label" "${codesign_command[@]}" "$path_to_sign"
+  done
 }
 
 sign_existing_paths "plugin container" \
@@ -101,10 +129,16 @@ sign_existing_paths "utility helpers" \
   "$app_bundle/Contents/MacOS/crashhelper" \
   "$app_bundle/Contents/MacOS/crashreporter.app" \
   "$app_bundle/Contents/MacOS/updater.app/Contents/Frameworks/UpdateSettings.framework" \
+  "$app_bundle/Contents/MacOS/updater.app/Contents/MacOS/org.mozilla.updater" \
   "$app_bundle/Contents/MacOS/updater.app" \
   "$app_bundle/Contents/Library/LaunchServices/org.mozilla.updater" \
   "$app_bundle/Contents/MacOS/pingsender" \
   "$app_bundle/Contents/MacOS/nmhproxy" \
+  "$app_bundle/Contents/MacOS/http3server" \
+  "$app_bundle/Contents/MacOS/xpcshell" \
+  "$app_bundle/Contents/MacOS/pk12util" \
+  "$app_bundle/Contents/MacOS/certutil" \
+  "$app_bundle/Contents/MacOS/ssltunnel" \
   "$app_bundle/Contents/Frameworks/ChannelPrefs.framework"
 
 sign_existing_paths "browser libraries" \
@@ -116,5 +150,13 @@ sign_existing_paths "browser app bundle" \
   --entitlements "$entitlements_dir/browser.xml" \
   "$app_bundle"
 
-codesign --verify --deep --strict --verbose=2 "$app_bundle"
-codesign --display --verbose=2 "$app_bundle"
+if ! run_logged "codesign strict verify" codesign --verify --deep --strict --verbose=2 "$app_bundle"; then
+  echo "::warning title=Retrying macOS ad-hoc app signing::Strict verification failed after targeted signing; retrying with codesign --deep for the fallback ZIP."
+  run_logged "deep codesign browser app bundle" \
+    codesign --sign - --force --deep --timestamp=none --options runtime \
+    --entitlements "$entitlements_dir/browser.xml" \
+    "$app_bundle"
+  run_logged "codesign strict verify after deep retry" codesign --verify --deep --strict --verbose=2 "$app_bundle"
+fi
+
+run_logged "codesign display" codesign --display --verbose=2 "$app_bundle"
