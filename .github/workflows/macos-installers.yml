@@ -171,8 +171,6 @@ jobs:
 
       - name: Ad-hoc sign macOS ZIP fallback app
         if: steps.macos_signing_mode.outputs.mode == 'adhoc'
-        env:
-          MACOS_SIGNING_CHANNEL: release
         run: bash scripts/sign-macos-app-fallback.sh
 
       - name: Sign and notarize macOS DMG

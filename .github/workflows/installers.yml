@@ -402,8 +402,6 @@ jobs:
 
       - name: Ad-hoc sign macOS ZIP fallback app
         if: matrix.platform == 'darwin' && steps.macos_signing_mode.outputs.mode == 'adhoc'
-        env:
-          MACOS_SIGNING_CHANNEL: release
         run: bash scripts/sign-macos-app-fallback.sh
 
       - name: Repair Windows installer payload from official ESR base
