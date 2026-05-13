@@ -1,34 +1,23 @@
 # Latest Release Notes
 
-Generated automatically at 2026-05-12T20:55:25Z.
+Generated automatically at 2026-05-13T04:39:30Z.
 
 - Ref: `main`
-- Range: `96efbc7 -> a4f6a7d`
-- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25759942989
+- Range: `bc97c3f -> ee295f6`
+- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25777381095
 - Nodely version: `0.1`
-- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/96efbc7dd45b687a5e942cfecc219340943a7c8b...a4f6a7d8e72bffd16e8722d80c6c3633bc9f9fd1
+- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/bc97c3f20f9ddb816526a6517e64bfd0767aa81c...ee295f6d6f168611e05dbc0a1035b9d1459c35ec
 
 ## Highlights
 
 - Commits included: 1
-- Files changed: 9
-- GitHub Actions: 2
-- Gecko overlay/runtime: 3
-- Build and packaging scripts: 2
-- Tests: 2
+- Files changed: 1
+- Build and packaging scripts: 1
 
 ## Commits
 
-- `a4f6a7d` Fixed Mac installers (Codex)
+- `ee295f6` Remove macOS build metadata before signing (Codex)
 
 ## Changed Files
 
-- `.github/workflows/installers.yml`
-- `.github/workflows/macos-installers.yml`
-- `gecko/overlay/browser/base/content/nodely/browser-basics-bridge.mjs`
-- `gecko/overlay/browser/base/content/nodely/nodely-bootstrap.mjs`
-- `gecko/overlay/browser/base/content/nodely/nodely-shell.css`
-- `scripts/materialize-macos-app-symlinks.mjs`
-- `scripts/sign-and-notarize-macos-release.sh`
-- `tests/gecko/browserBasicsBridge.test.ts`
-- `tests/scripts/materializeMacosAppSymlinks.test.ts`
+- `scripts/sign-macos-app-fallback.sh`
