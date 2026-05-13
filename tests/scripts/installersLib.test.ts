@@ -294,7 +294,7 @@ describe("installers-lib", () => {
         "payload",
         "utf8"
       );
-      await writeFile(path.join(outputDirectory, "public-release-ready.txt"), "validated unsigned ZIP fallback\n", "utf8");
+      await writeFile(path.join(outputDirectory, "public-release-ready.txt"), "validated ad-hoc ZIP fallback\n", "utf8");
 
       const manifest = await syncInstallers({
         platform: "darwin",

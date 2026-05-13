@@ -363,7 +363,7 @@ describe("build-installers wrappers", () => {
     ).resolves.toEqual([path.join(outDirectory, "darwin", "arm64", `Nodely-Browser-${currentNodelyVersion}-macos-arm64.pkg`)]);
   });
 
-  it("accepts unsigned macOS app archives as native installer outputs", async () => {
+  it("accepts macOS app archives as native installer outputs", async () => {
     const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "nodely-build-installers-macos-zip-"));
     tempDirectories.push(tempDirectory);
 

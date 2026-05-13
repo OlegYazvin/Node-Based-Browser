@@ -67,8 +67,8 @@ jobs:
             echo "mode=notarized" >> "$GITHUB_OUTPUT"
           else
             summary="$(tail -n 20 macos-signing-preflight.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
-            echo "::warning title=Unsigned macOS fallback::$summary"
-            echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Ad-hoc signed macOS ZIP fallback::$summary"
+            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up Node.js
@@ -400,6 +400,12 @@ jobs:
         if: matrix.platform == 'darwin'
         run: node scripts/materialize-macos-app-symlinks.mjs "$GECKO_CHECKOUT_DIR/obj-nodely/dist"
 
+      - name: Ad-hoc sign macOS ZIP fallback app
+        if: matrix.platform == 'darwin' && steps.macos_signing_mode.outputs.mode == 'adhoc'
+        env:
+          MACOS_SIGNING_CHANNEL: release
+        run: bash scripts/sign-macos-app-fallback.sh
+
       - name: Repair Windows installer payload from official ESR base
         if: matrix.platform == 'win32'
         run: |
@@ -429,9 +435,9 @@ jobs:
             exit 1
           fi
 
-      - name: Build unsigned macOS app archive
-        if: matrix.platform == 'darwin' && steps.macos_signing_mode.outputs.mode == 'unsigned'
-        id: unsigned_macos_archive
+      - name: Build ad-hoc signed macOS app archive
+        if: matrix.platform == 'darwin' && steps.macos_signing_mode.outputs.mode == 'adhoc'
+        id: adhoc_macos_archive
         run: |
           set -o pipefail
           dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
@@ -446,13 +452,13 @@ jobs:
             exit 1
           fi
 
-          archive_dir="$RUNNER_TEMP/nodely-unsigned-macos"
+          archive_dir="$RUNNER_TEMP/nodely-adhoc-macos"
           mkdir -p "$archive_dir"
           archive_path="$archive_dir/nodely-${FIREFOX_ESR_VERSION}.en-US.mac.zip"
 
-          if ! /usr/bin/ditto -c -k --keepParent "${app_bundles[0]}" "$archive_path" 2>&1 | tee macos-unsigned-archive.log; then
-            summary="$(tail -n 20 macos-unsigned-archive.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
-            echo "::error title=Unsigned macOS archive build failed::$summary"
+          if ! /usr/bin/ditto -c -k --keepParent "${app_bundles[0]}" "$archive_path" 2>&1 | tee macos-adhoc-archive.log; then
+            summary="$(tail -n 20 macos-adhoc-archive.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
+            echo "::error title=Ad-hoc signed macOS archive build failed::$summary"
             exit 1
           fi
 
@@ -462,8 +468,8 @@ jobs:
         run: |
           set -o pipefail
 
-          if [[ "${{ matrix.platform }}" == "darwin" && "${{ steps.macos_signing_mode.outputs.mode }}" == "unsigned" ]]; then
-            echo "Skipping Gecko release staging for unsigned macOS archive fallback."
+          if [[ "${{ matrix.platform }}" == "darwin" && "${{ steps.macos_signing_mode.outputs.mode }}" == "adhoc" ]]; then
+            echo "Skipping Gecko release staging for ad-hoc signed macOS ZIP fallback."
             exit 0
           fi
 
@@ -487,8 +493,8 @@ jobs:
             installer_args+=(--strict)
           fi
 
-          if [[ "${{ matrix.platform }}" == "darwin" && "${{ steps.macos_signing_mode.outputs.mode }}" == "unsigned" ]]; then
-            installer_args+=(--artifact "${{ steps.unsigned_macos_archive.outputs.artifact }}")
+          if [[ "${{ matrix.platform }}" == "darwin" && "${{ steps.macos_signing_mode.outputs.mode }}" == "adhoc" ]]; then
+            installer_args+=(--artifact "${{ steps.adhoc_macos_archive.outputs.artifact }}")
           fi
 
           if ! npm run installers -- "${installer_args[@]}" 2>&1 | tee installer-build.log; then
@@ -590,8 +596,8 @@ jobs:
             )
           done
 
-      - name: Validate unsigned macOS app archive
-        if: matrix.platform == 'darwin' && steps.macos_signing_mode.outputs.mode == 'unsigned'
+      - name: Validate ad-hoc signed macOS app archive
+        if: matrix.platform == 'darwin' && steps.macos_signing_mode.outputs.mode == 'adhoc'
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -649,6 +655,8 @@ jobs:
               fi
 
               node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
+              codesign --verify --deep --strict --verbose=2 "$app_bundle"
+              codesign --display --verbose=2 "$app_bundle"
             )
           done
 
@@ -710,9 +718,11 @@ jobs:
                 fi
 
                 node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
+                codesign --verify --deep --strict --verbose=2 "$app_bundle"
+                codesign --display --verbose=2 "$app_bundle"
               )
 
-              echo "::warning title=Unsigned macOS archive published::$(basename "$artifact") will require Privacy & Security -> Open Anyway on the destination Mac."
+              echo "::warning title=Ad-hoc signed macOS archive published::$(basename "$artifact") will require Privacy & Security -> Open Anyway on the destination Mac."
             elif [[ "$extension" == "pkg" ]]; then
               if assessment_output="$(spctl --assess --type install --verbose=4 "$artifact" 2>&1)"; then
                 printf '%s\n' "$assessment_output"
@@ -778,7 +788,7 @@ jobs:
 
           if [[ "$publish_ready" -eq 1 ]]; then
             touch "$marker"
-            printf 'macOS public release gate passed for %s (signed/notarized or validated unsigned ZIP fallback).\n' "${{ matrix.arch }}" > "$artifact_marker"
+            printf 'macOS public release gate passed for %s (signed/notarized or validated ad-hoc ZIP fallback).\n' "${{ matrix.arch }}" > "$artifact_marker"
             echo "publish_ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish_ready=false" >> "$GITHUB_OUTPUT"
@@ -843,7 +853,7 @@ jobs:
             gecko-sync.log
             gecko-package.log
             gecko-repair-windows-installer.log
-            macos-unsigned-archive.log
+            macos-adhoc-archive.log
             macos-sign-and-notarize.log
             gecko-stage-release.log
             installer-build.log

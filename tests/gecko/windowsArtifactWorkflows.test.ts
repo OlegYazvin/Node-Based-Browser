@@ -77,7 +77,10 @@ describe("Gecko and installer workflows", () => {
     expect(readinessStep).toContain('rm -f "$marker" "$artifact_marker"');
     expect(readinessStep).toContain('touch "$marker"');
     expect(readinessStep).toContain('> "$artifact_marker"');
-    expect(readinessStep).toContain("Unsigned macOS archive published");
+    expect(readinessStep).toContain("Ad-hoc signed macOS archive published");
+    expect(workflow).toContain("Ad-hoc sign macOS ZIP fallback app");
+    expect(workflow).toContain("scripts/sign-macos-app-fallback.sh");
+    expect(workflow).toContain('codesign --verify --deep --strict --verbose=2 "$app_bundle"');
 
     expect(syncStep).toContain('out/make/$platform/$arch/public-release-ready.txt');
     expect(syncStep).toContain('out/make/$platform/$arch/.public-release-ready');
@@ -94,6 +97,9 @@ describe("Gecko and installer workflows", () => {
     expect(readinessStep).toContain('rm -f "$marker" "$artifact_marker"');
     expect(readinessStep).toContain('touch "$marker"');
     expect(readinessStep).toContain('> "$artifact_marker"');
+    expect(workflow).toContain("Ad-hoc sign macOS ZIP fallback app");
+    expect(workflow).toContain("scripts/sign-macos-app-fallback.sh");
+    expect(workflow).toContain('codesign --verify --deep --strict --verbose=2 "$app_bundle"');
   });
 
   it("only deletes stale macOS release assets for architectures refreshed in the same installer promotion", async () => {
