@@ -44,6 +44,9 @@ entitlements_dir="$checkout_dir/security/mac/hardenedruntime/developer"
 
 node "$repository_root/scripts/materialize-macos-app-symlinks.mjs" "$app_bundle"
 
+echo "Removing Gecko build metadata files from $app_bundle"
+find "$app_bundle/Contents" -name moz.build -type f -print -delete
+
 echo "Stripping extended attributes and existing signatures from $app_bundle"
 xattr -cr "$app_bundle"
 while IFS= read -r -d '' signing_path; do
