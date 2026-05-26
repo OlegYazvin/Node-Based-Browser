@@ -148,9 +148,6 @@ jobs:
             echo "Validated $app_bundle"
           done < <(find "$dist_dir" -type d -name '*.app' | sort)
 
-      - name: Materialize macOS app bundle symlinks before packaging
-        run: node scripts/materialize-macos-app-symlinks.mjs "$GECKO_CHECKOUT_DIR/obj-nodely/dist"
-
       - name: Package Gecko build
         env:
           MOZCONFIG: mozconfig.nodely
@@ -166,12 +163,22 @@ jobs:
             exit 1
           fi
 
-      - name: Materialize macOS app bundle symlinks after packaging
-        run: node scripts/materialize-macos-app-symlinks.mjs "$GECKO_CHECKOUT_DIR/obj-nodely/dist"
-
-      - name: Ad-hoc sign macOS ZIP fallback app
+      - name: Build ad-hoc signed macOS app archive
         if: steps.macos_signing_mode.outputs.mode == 'adhoc'
-        run: bash scripts/sign-macos-app-fallback.sh
+        id: adhoc_macos_archive
+        run: |
+          set -o pipefail
+          archive_dir="$RUNNER_TEMP/nodely-adhoc-macos"
+          mkdir -p "$archive_dir"
+          archive_path="$archive_dir/nodely-${FIREFOX_ESR_VERSION}.en-US.mac.zip"
+
+          if ! bash scripts/build-macos-adhoc-archive.sh --output "$archive_path" 2>&1 | tee macos-adhoc-archive.log; then
+            summary="$(tail -n 20 macos-adhoc-archive.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
+            echo "::error title=Ad-hoc signed macOS archive build failed::$summary"
+            exit 1
+          fi
+
+          echo "artifact=$archive_path" >> "$GITHUB_OUTPUT"
 
       - name: Sign and notarize macOS DMG
         if: steps.macos_signing_mode.outputs.mode == 'notarized'
@@ -189,35 +196,6 @@ jobs:
             echo "::error title=macOS signing/notarization failed::$summary"
             exit 1
           fi
-
-      - name: Build ad-hoc signed macOS app archive
-        if: steps.macos_signing_mode.outputs.mode == 'adhoc'
-        id: adhoc_macos_archive
-        run: |
-          set -o pipefail
-          dist_dir="$GECKO_CHECKOUT_DIR/obj-nodely/dist"
-          app_bundles=()
-          while IFS= read -r app_bundle; do
-            app_bundles+=("$app_bundle")
-          done < <(find "$dist_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort)
-
-          if [[ ${#app_bundles[@]} -ne 1 ]]; then
-            echo "Expected exactly one macOS app bundle under $dist_dir, found ${#app_bundles[@]}." >&2
-            printf '  %s\n' "${app_bundles[@]}" >&2 || true
-            exit 1
-          fi
-
-          archive_dir="$RUNNER_TEMP/nodely-adhoc-macos"
-          mkdir -p "$archive_dir"
-          archive_path="$archive_dir/nodely-${FIREFOX_ESR_VERSION}.en-US.mac.zip"
-
-          if ! /usr/bin/ditto -c -k --keepParent "${app_bundles[0]}" "$archive_path" 2>&1 | tee macos-adhoc-archive.log; then
-            summary="$(tail -n 20 macos-adhoc-archive.log | tr '\n' ' ' | sed 's/[[:space:]]\\+/ /g' | cut -c1-400)"
-            echo "::error title=Ad-hoc signed macOS archive build failed::$summary"
-            exit 1
-          fi
-
-          echo "artifact=$archive_path" >> "$GITHUB_OUTPUT"
 
       - name: Stage Gecko release artifact
         if: steps.macos_signing_mode.outputs.mode == 'notarized'
@@ -314,6 +292,7 @@ jobs:
               fi
 
               node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
+              node scripts/verify-macos-packaged-app.mjs "$app_bundle"
 
               if codesign_output="$(codesign --display --verbose=2 "$app_bundle" 2>&1)"; then
                 printf '%s\n' "$codesign_output"
@@ -378,6 +357,7 @@ jobs:
               fi
 
               node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
+              node scripts/verify-macos-packaged-app.mjs "$app_bundle"
               codesign --verify --deep --strict --verbose=2 "$app_bundle"
               codesign --display --verbose=2 "$app_bundle"
             )
@@ -440,6 +420,7 @@ jobs:
                 fi
 
                 node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
+                node scripts/verify-macos-packaged-app.mjs "$app_bundle"
                 codesign --verify --deep --strict --verbose=2 "$app_bundle"
                 codesign --display --verbose=2 "$app_bundle"
               )
@@ -483,6 +464,7 @@ jobs:
                 fi
 
                 node scripts/materialize-macos-app-symlinks.mjs --check "$app_bundle"
+                node scripts/verify-macos-packaged-app.mjs "$app_bundle"
 
                 if app_assessment="$(spctl --assess --type execute --verbose=4 "$app_bundle" 2>&1)"; then
                   printf '%s\n' "$app_assessment"

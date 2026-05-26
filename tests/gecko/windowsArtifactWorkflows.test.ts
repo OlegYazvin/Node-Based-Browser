@@ -78,9 +78,12 @@ describe("Gecko and installer workflows", () => {
     expect(readinessStep).toContain('touch "$marker"');
     expect(readinessStep).toContain('> "$artifact_marker"');
     expect(readinessStep).toContain("Ad-hoc signed macOS archive published");
-    expect(workflow).toContain("Ad-hoc sign macOS ZIP fallback app");
-    expect(workflow).toContain("scripts/sign-macos-app-fallback.sh");
+    expect(workflow).toContain("Build ad-hoc signed macOS app archive");
+    expect(workflow).toContain("scripts/build-macos-adhoc-archive.sh");
+    expect(workflow).toContain("scripts/verify-macos-packaged-app.mjs");
     expect(workflow).toContain('codesign --verify --deep --strict --verbose=2 "$app_bundle"');
+    expect(workflow).not.toContain("Materialize macOS app bundle symlinks before packaging");
+    expect(workflow).not.toContain("Materialize macOS app bundle symlinks after packaging");
 
     expect(syncStep).toContain('out/make/$platform/$arch/public-release-ready.txt');
     expect(syncStep).toContain('out/make/$platform/$arch/.public-release-ready');
@@ -97,9 +100,12 @@ describe("Gecko and installer workflows", () => {
     expect(readinessStep).toContain('rm -f "$marker" "$artifact_marker"');
     expect(readinessStep).toContain('touch "$marker"');
     expect(readinessStep).toContain('> "$artifact_marker"');
-    expect(workflow).toContain("Ad-hoc sign macOS ZIP fallback app");
-    expect(workflow).toContain("scripts/sign-macos-app-fallback.sh");
+    expect(workflow).toContain("Build ad-hoc signed macOS app archive");
+    expect(workflow).toContain("scripts/build-macos-adhoc-archive.sh");
+    expect(workflow).toContain("scripts/verify-macos-packaged-app.mjs");
     expect(workflow).toContain('codesign --verify --deep --strict --verbose=2 "$app_bundle"');
+    expect(workflow).not.toContain("Materialize macOS app bundle symlinks before packaging");
+    expect(workflow).not.toContain("Materialize macOS app bundle symlinks after packaging");
   });
 
   it("only deletes stale macOS release assets for architectures refreshed in the same installer promotion", async () => {

@@ -5,15 +5,39 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(cd "$script_dir/.." && pwd)"
 
-if [[ "${1:-}" == "--help" ]]; then
+app_bundle_override=""
+symlink_mode="materialize"
+
+usage() {
   cat <<'EOF'
-Usage: GECKO_CHECKOUT_DIR=/path/to/firefox-esr bash scripts/sign-macos-app-fallback.sh
+Usage: GECKO_CHECKOUT_DIR=/path/to/firefox-esr bash scripts/sign-macos-app-fallback.sh [--app <Nodely.app>] [--check-symlinks]
 
 Ad-hoc signs the packaged macOS .app with Mozilla's developer entitlements.
 Use this only for the non-notarized macOS ZIP fallback.
 EOF
-  exit 0
-fi
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --app)
+      app_bundle_override="$2"
+      shift 2
+      ;;
+    --check-symlinks)
+      symlink_mode="check"
+      shift
+      ;;
+    --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [[ -z "${GECKO_CHECKOUT_DIR:-}" ]]; then
   echo "GECKO_CHECKOUT_DIR is required." >&2
@@ -28,21 +52,35 @@ if [[ ! -d "$dist_dir" ]]; then
   exit 1
 fi
 
-app_bundles=()
-while IFS= read -r app_bundle; do
-  app_bundles+=("$app_bundle")
-done < <(find "$dist_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort)
+if [[ -n "$app_bundle_override" ]]; then
+  app_bundle="$app_bundle_override"
 
-if [[ ${#app_bundles[@]} -ne 1 ]]; then
-  echo "Expected exactly one macOS app bundle under $dist_dir, found ${#app_bundles[@]}." >&2
-  printf '  %s\n' "${app_bundles[@]}" >&2 || true
-  exit 1
+  if [[ ! -d "$app_bundle" ]]; then
+    echo "macOS app bundle not found: $app_bundle" >&2
+    exit 1
+  fi
+else
+  app_bundles=()
+  while IFS= read -r app_bundle; do
+    app_bundles+=("$app_bundle")
+  done < <(find "$dist_dir" -mindepth 1 -maxdepth 1 -type d -name '*.app' | sort)
+
+  if [[ ${#app_bundles[@]} -ne 1 ]]; then
+    echo "Expected exactly one macOS app bundle under $dist_dir, found ${#app_bundles[@]}." >&2
+    printf '  %s\n' "${app_bundles[@]}" >&2 || true
+    exit 1
+  fi
+
+  app_bundle="${app_bundles[0]}"
 fi
 
-app_bundle="${app_bundles[0]}"
 entitlements_dir="$checkout_dir/security/mac/hardenedruntime/developer"
 
-node "$repository_root/scripts/materialize-macos-app-symlinks.mjs" "$app_bundle"
+if [[ "$symlink_mode" == "check" ]]; then
+  node "$repository_root/scripts/materialize-macos-app-symlinks.mjs" --check "$app_bundle"
+else
+  node "$repository_root/scripts/materialize-macos-app-symlinks.mjs" "$app_bundle"
+fi
 
 echo "Removing Gecko build metadata files from $app_bundle"
 find "$app_bundle/Contents" -name moz.build -type f -print -delete
