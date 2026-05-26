@@ -17,7 +17,7 @@ This directory contains the installers that actually exist in this repo right no
 - When Apple signing credentials are unavailable, GitHub Actions may stage a macOS app archive (`.zip`) instead. That fallback requires the person installing Nodely to use macOS Privacy & Security -> Open Anyway the first time they launch it.
 - Current Nodely version: `0.1`
 
-Generated from `Installer/manifest.json` at 2026-05-13T04:39:30.820Z.
+Generated from `Installer/manifest.json` at 2026-05-26T21:20:27.143Z.
 
 ## Windows 10 and 11
 
@@ -25,7 +25,7 @@ Use this on most Windows 10 or Windows 11 PCs. This installer is x64, so it does
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |
-| [Nodely-Browser-0.1-windows-x64.installer.exe](./windows/Nodely-Browser-0.1-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25777381095) (`installers.yml`) |
+| [Nodely-Browser-0.1-windows-x64.installer.exe](./windows/Nodely-Browser-0.1-windows-x64.installer.exe) | Windows installer (`.exe`) | Windows 10, Windows 11; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26474197120) (`installers.yml`) |
 
 ## macOS Intel
 
@@ -45,11 +45,11 @@ Use this on most Linux Mint, Ubuntu, Debian, and Fedora desktop PCs with Intel/A
 
 | File | Type | Supported systems | Built by |
 | --- | --- | --- | --- |
-| [Nodely-Browser-0.1-debian-x64.deb](./linux/Nodely-Browser-0.1-debian-x64.deb) | Debian DEB package | Debian; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25777381095) (`installers.yml`) |
-| [Nodely-Browser-0.1-fedora-x64.rpm](./linux/Nodely-Browser-0.1-fedora-x64.rpm) | Fedora RPM package | Fedora; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25777381095) (`installers.yml`) |
-| [Nodely-Browser-0.1-linux-x64.flatpak](./linux/Nodely-Browser-0.1-linux-x64.flatpak) | Flatpak bundle | Linux Mint, Fedora, Ubuntu, Debian, other Flatpak-enabled Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25777381095) (`installers.yml`) |
-| [Nodely-Browser-0.1-linux-x64.run](./linux/Nodely-Browser-0.1-linux-x64.run) | Self-extracting installer (`.run`) | Ubuntu, Debian, Fedora, Linux Mint, other common desktop Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25777381095) (`installers.yml`) |
-| [Nodely-Browser-0.1-ubuntu-x64.deb](./linux/Nodely-Browser-0.1-ubuntu-x64.deb) | Ubuntu DEB package | Ubuntu, Linux Mint; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25777381095) (`installers.yml`) |
+| [Nodely-Browser-0.1-debian-x64.deb](./linux/Nodely-Browser-0.1-debian-x64.deb) | Debian DEB package | Debian; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26474197120) (`installers.yml`) |
+| [Nodely-Browser-0.1-fedora-x64.rpm](./linux/Nodely-Browser-0.1-fedora-x64.rpm) | Fedora RPM package | Fedora; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26474197120) (`installers.yml`) |
+| [Nodely-Browser-0.1-linux-x64.flatpak](./linux/Nodely-Browser-0.1-linux-x64.flatpak) | Flatpak bundle | Linux Mint, Fedora, Ubuntu, Debian, other Flatpak-enabled Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26474197120) (`installers.yml`) |
+| [Nodely-Browser-0.1-linux-x64.run](./linux/Nodely-Browser-0.1-linux-x64.run) | Self-extracting installer (`.run`) | Ubuntu, Debian, Fedora, Linux Mint, other common desktop Linux distros; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26474197120) (`installers.yml`) |
+| [Nodely-Browser-0.1-ubuntu-x64.deb](./linux/Nodely-Browser-0.1-ubuntu-x64.deb) | Ubuntu DEB package | Ubuntu, Linux Mint; x64 only | [GitHub Actions](https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26474197120) (`installers.yml`) |
 
 ## Linux arm64
 

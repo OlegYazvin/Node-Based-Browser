@@ -1,23 +1,32 @@
 # Latest Release Notes
 
-Generated automatically at 2026-05-13T04:39:30Z.
+Generated automatically at 2026-05-26T21:20:27Z.
 
 - Ref: `main`
-- Range: `bc97c3f -> ee295f6`
-- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/25777381095
+- Range: `21d4216 -> b0cdc85`
+- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26474197120
 - Nodely version: `0.1`
-- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/bc97c3f20f9ddb816526a6517e64bfd0767aa81c...ee295f6d6f168611e05dbc0a1035b9d1459c35ec
+- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/21d421621fd7ba596793ab55e64f0892ef3b61d9...b0cdc855588bded197c687103b167b16b0c2bde9
 
 ## Highlights
 
 - Commits included: 1
-- Files changed: 1
-- Build and packaging scripts: 1
+- Files changed: 8
+- GitHub Actions: 2
+- Build and packaging scripts: 4
+- Tests: 2
 
 ## Commits
 
-- `ee295f6` Remove macOS build metadata before signing (Codex)
+- `b0cdc85` Fix macOS fallback app archive packaging (Codex)
 
 ## Changed Files
 
+- `.github/workflows/installers.yml`
+- `.github/workflows/macos-installers.yml`
+- `scripts/build-macos-adhoc-archive.sh`
+- `scripts/sign-and-notarize-macos-release.sh`
 - `scripts/sign-macos-app-fallback.sh`
+- `scripts/verify-macos-packaged-app.mjs`
+- `tests/gecko/windowsArtifactWorkflows.test.ts`
+- `tests/scripts/verifyMacosPackagedApp.test.ts`
