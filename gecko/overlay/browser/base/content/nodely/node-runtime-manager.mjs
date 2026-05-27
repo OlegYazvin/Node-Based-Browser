@@ -673,6 +673,17 @@ export class NodeRuntimeManager {
     if (nodeId) {
       this.syncNodeMetadataFromTab(tab);
       this.callbacks.onNodeSelected?.(nodeId);
+      return;
+    }
+
+    const browser = tab?.linkedBrowser ?? null;
+    const url = browser?.currentURI?.spec ?? null;
+
+    if (browser && url && !isTransientStartupUrl(url)) {
+      this.callbacks.onUnownedSelectedTabNavigated?.(tab, {
+        url,
+        title: tab?.label || browser?.contentTitle || null
+      });
     }
   }
 

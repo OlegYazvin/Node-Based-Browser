@@ -216,6 +216,28 @@ describe("NodeRuntimeManager Gecko tab ownership", () => {
     );
   });
 
+  it("reports a selected unowned URL tab whose location committed before selection", () => {
+    const windowRef = makeWindow();
+    const onUnownedSelectedTabNavigated = vi.fn();
+    const manager = new NodeRuntimeManager(windowRef, {
+      onUnownedSelectedTabNavigated
+    });
+    const externalTab = makeTab("external-linkedin");
+    externalTab.linkedBrowser.currentURI.spec = "https://www.linkedin.com/";
+    windowRef.browserToTab.set(externalTab.linkedBrowser, externalTab);
+    windowRef.gBrowser.selectedTab = externalTab;
+
+    manager.handleTabSelect({ target: externalTab });
+
+    expect(onUnownedSelectedTabNavigated).toHaveBeenCalledWith(
+      externalTab,
+      expect.objectContaining({
+        url: "https://www.linkedin.com/",
+        title: "Tab external-linkedin"
+      })
+    );
+  });
+
   it("classifies opener-owned OAuth tabs as transient auth flows instead of child graph nodes", () => {
     const windowRef = makeWindow();
     const onForeignTabOpen = vi.fn();

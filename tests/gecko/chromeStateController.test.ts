@@ -470,6 +470,85 @@ describe("ChromeStateController Gecko startup/runtime flow", () => {
     expect(runtimeManager.loadNode).not.toHaveBeenCalled();
   });
 
+  it("adopts a macOS LaunchServices startup URL wrapped as an nsISupportsString", async () => {
+    let workspace = createRootNode(createEmptyWorkspace());
+    const existingRootId = workspace.selectedNodeId as string;
+    workspace = applyNodeNavigation(workspace, existingRootId, {
+      kind: "url",
+      url: "https://example.com/original",
+      input: "https://example.com/original",
+      query: null,
+      origin: "omnibox-url"
+    });
+
+    const workspaceStore = {
+      loadWorkspace: vi.fn(async () => workspace),
+      saveWorkspace: vi.fn(async (nextWorkspace) => {
+        workspace = nextWorkspace;
+        return nextWorkspace;
+      })
+    };
+    const favoritesStore = {
+      listFavorites: vi.fn(async () => [])
+    };
+    const runtimeManager = makeRuntimeManager();
+    const startupUrl = "https://www.linkedin.com/";
+    (runtimeManager.window as any).arguments = [
+      { data: startupUrl },
+      {
+        hasKey(name: string) {
+          return name === "fromExternal";
+        },
+        getPropertyAsBool(_name: string) {
+          return true;
+        }
+      }
+    ];
+    (runtimeManager.window.gBrowser as any).selectedTab = {
+      label: "LinkedIn",
+      linkedBrowser: {
+        currentURI: { spec: "about:blank" },
+        contentTitle: "",
+        canGoBack: false,
+        canGoForward: false,
+        isLoadingDocument: true
+      }
+    };
+    runtimeManager.adoptOpenedTab.mockImplementation((nodeId?: string, tab?: unknown, options?: any) => {
+      const adoptedTab = (tab as { id: string } | null) ?? { id: "macos-startup-tab" };
+      runtimeManager.tabForNode.mockImplementation((candidateNodeId?: string) =>
+        candidateNodeId === nodeId ? adoptedTab : null
+      );
+      runtimeManager.hasPendingNavigation.mockImplementation(
+        (candidateNodeId?: string, candidateUrl?: string) =>
+          candidateNodeId === nodeId && candidateUrl === options?.pendingUrl
+      );
+    });
+
+    const controller = new ChromeStateController({
+      workspaceStore,
+      favoritesStore,
+      compatExtensionsStore: null,
+      runtimeManager,
+      basicsBridge: makeBasicsBridge()
+    });
+
+    await controller.initialize();
+
+    expect(workspace.nodes).toHaveLength(2);
+    const newRoot = findNode(workspace, workspace.selectedNodeId);
+    expect(newRoot?.parentId).toBeNull();
+    expect(newRoot?.id).not.toBe(existingRootId);
+    expect(newRoot?.url).toBe(startupUrl);
+    expect(newRoot?.runtimeState).toBe("loading");
+    expect(runtimeManager.adoptOpenedTab).toHaveBeenCalledWith(
+      newRoot?.id,
+      runtimeManager.window.gBrowser.selectedTab,
+      { pendingUrl: startupUrl }
+    );
+    expect(runtimeManager.loadNode).not.toHaveBeenCalled();
+  });
+
   it("creates the first root from the inline composer input and loads it", async () => {
     let workspace = createEmptyWorkspace();
     const workspaceStore = {

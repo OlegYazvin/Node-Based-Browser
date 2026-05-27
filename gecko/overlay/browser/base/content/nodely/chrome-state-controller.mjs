@@ -1688,17 +1688,7 @@ function resolveRuntimeTarget(workspace, selectedNode) {
 
 function readStartupNavigationRequest(windowRef) {
   const uriToLoad = windowRef?.arguments?.[0] ?? null;
-  let url = null;
-
-  if (typeof uriToLoad === "string") {
-    url = uriToLoad.trim() || null;
-  } else if (
-    Array.isArray(uriToLoad) &&
-    uriToLoad.length === 1 &&
-    typeof uriToLoad[0] === "string"
-  ) {
-    url = uriToLoad[0].trim() || null;
-  }
+  const url = readStartupUrl(uriToLoad);
 
   let fromExternal = false;
   const extraOptions = windowRef?.arguments?.[1] ?? null;
@@ -1713,6 +1703,79 @@ function readStartupNavigationRequest(windowRef) {
     url,
     fromExternal
   };
+}
+
+function readStartupUrl(value) {
+  const directUrl = readStringLikeStartupUrl(value);
+
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const urls = readStartupUrlList(value);
+  return urls[0] ?? null;
+}
+
+function readStringLikeStartupUrl(value) {
+  if (typeof value === "string") {
+    return value.trim() || null;
+  }
+
+  if (typeof value?.data === "string") {
+    return value.data.trim() || null;
+  }
+
+  if (typeof value?.spec === "string") {
+    return value.spec.trim() || null;
+  }
+
+  return null;
+}
+
+function readStartupUrlList(value) {
+  if (Array.isArray(value)) {
+    return value.map(readStringLikeStartupUrl).filter(Boolean);
+  }
+
+  const enumerator = createStartupUrlEnumerator(value);
+
+  if (!enumerator) {
+    return [];
+  }
+
+  try {
+    if (typeof enumerator[Symbol.iterator] === "function") {
+      return Array.from(enumerator, readStringLikeStartupUrl).filter(Boolean);
+    }
+  } catch {}
+
+  const urls = [];
+
+  try {
+    while (enumerator.hasMoreElements?.()) {
+      urls.push(readStringLikeStartupUrl(enumerator.getNext?.()));
+    }
+  } catch {}
+
+  return urls.filter(Boolean);
+}
+
+function createStartupUrlEnumerator(value) {
+  if (typeof value?.enumerate !== "function") {
+    return null;
+  }
+
+  try {
+    if (typeof Ci !== "undefined" && Ci.nsISupportsString) {
+      return value.enumerate(Ci.nsISupportsString);
+    }
+  } catch {}
+
+  try {
+    return value.enumerate();
+  } catch {}
+
+  return null;
 }
 
 function normalizeUrlForRuntime(url) {
