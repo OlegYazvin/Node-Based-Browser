@@ -1,32 +1,27 @@
 # Latest Release Notes
 
-Generated automatically at 2026-05-26T21:20:27Z.
+Generated automatically at 2026-05-27T21:48:17Z.
 
 - Ref: `main`
-- Range: `21d4216 -> b0cdc85`
-- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26474197120
+- Range: `a0fcc1e -> 4cafa65`
+- Workflow run: https://github.com/OlegYazvin/Node-Based-Browser/actions/runs/26539087698
 - Nodely version: `0.1`
-- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/21d421621fd7ba596793ab55e64f0892ef3b61d9...b0cdc855588bded197c687103b167b16b0c2bde9
+- Compare: https://github.com/OlegYazvin/Node-Based-Browser/compare/a0fcc1e8df02de93f02d24380588c037d6f97d10...4cafa652ee84ab63f70a393feea4348de80f9cda
 
 ## Highlights
 
 - Commits included: 1
-- Files changed: 8
-- GitHub Actions: 2
-- Build and packaging scripts: 4
+- Files changed: 4
+- Gecko overlay/runtime: 2
 - Tests: 2
 
 ## Commits
 
-- `b0cdc85` Fix macOS fallback app archive packaging (Codex)
+- `4cafa65` Fix macOS external URL adoption (Codex)
 
 ## Changed Files
 
-- `.github/workflows/installers.yml`
-- `.github/workflows/macos-installers.yml`
-- `scripts/build-macos-adhoc-archive.sh`
-- `scripts/sign-and-notarize-macos-release.sh`
-- `scripts/sign-macos-app-fallback.sh`
-- `scripts/verify-macos-packaged-app.mjs`
-- `tests/gecko/windowsArtifactWorkflows.test.ts`
-- `tests/scripts/verifyMacosPackagedApp.test.ts`
+- `gecko/overlay/browser/base/content/nodely/chrome-state-controller.mjs`
+- `gecko/overlay/browser/base/content/nodely/node-runtime-manager.mjs`
+- `tests/gecko/chromeStateController.test.ts`
+- `tests/gecko/nodeRuntimeManager.test.ts`
